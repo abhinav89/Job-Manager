@@ -1,8 +1,10 @@
 """User-scoped conversations, application drafts, and career agent runs."""
 from datetime import datetime, timezone
+import asyncio
+import json
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import inspect
@@ -13,6 +15,7 @@ from dependencies import get_current_user_id
 from limiter import limiter
 from models import database_models as models
 from services.career_agent import CareerToolContext, run_career_agent, serialize_draft
+from services.agent_activity import activity_sink
 from services.pdf_service import PDFCompilationError, compile_latex_to_pdf, pdf_page_count
 
 router = APIRouter(prefix="/assistant", tags=["assistant"])
@@ -172,11 +175,20 @@ async def send_message(conversation_id: int, data: SendMessage, request: Request
     db.add(models.AssistantMessage(conversation_id=conversation.id, role="user", content=content,
                                    request_key=data.request_id))
     ctx = CareerToolContext(db, user_id, conversation, job, profile, evidence)
+    activity = []
+    sink = activity_sink.get()
+    def record_activity(item):
+        activity.append(item)
+        if sink:
+            sink(item)
+    ctx.activity_callback = record_activity
     try:
         # Claim the request ID before the model or any paid tools run. A unique
         # constraint makes concurrent retries wait for the first transaction.
         db.flush()
         reply = await run_career_agent(ctx, transcript)
+        if activity:
+            ctx.save_draft("agent_activity", json.dumps(activity, ensure_ascii=False))
         assistant_message = models.AssistantMessage(conversation_id=conversation.id, role="assistant", content=reply)
         db.add(assistant_message)
         db.flush()
@@ -199,10 +211,53 @@ async def send_message(conversation_id: int, data: SendMessage, request: Request
     return _detail(conversation, db)
 
 
+@router.post("/conversations/{conversation_id}/messages/stream")
+@limiter.limit("10/minute")
+async def stream_message(conversation_id: int, data: SendMessage, request: Request, db: Session = Depends(get_db)):
+    # Validate access before beginning the streaming response.
+    _conversation(db, get_current_user_id(request), conversation_id)
+    if not data.content.strip():
+        raise HTTPException(status_code=422, detail="Enter a message.")
+
+    async def stream():
+        queue = asyncio.Queue()
+        token = activity_sink.set(lambda item: queue.put_nowait({"type": "activity", "activity": item}))
+
+        async def run():
+            try:
+                result = await send_message.__wrapped__(conversation_id, data, request, db)
+                await queue.put({"type": "complete", "conversation": result})
+            except HTTPException as exc:
+                await queue.put({"type": "error", "message": str(exc.detail)})
+            except Exception:
+                await queue.put({"type": "error", "message": "The agent could not respond. Please try again."})
+
+        task = asyncio.create_task(run())
+        activity_sink.reset(token)
+        try:
+            while True:
+                event = await queue.get()
+                yield json.dumps(event, ensure_ascii=False) + "\n"
+                if event["type"] in {"complete", "error"}:
+                    break
+        finally:
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    db.rollback()
+
+    return StreamingResponse(stream(), media_type="application/x-ndjson",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
 @router.post("/conversations/{conversation_id}/drafts/{draft_id}/revise")
 def revise_draft(conversation_id: int, draft_id: int, data: ReviseDraft, request: Request, db: Session = Depends(get_db)):
     conversation = _conversation(db, get_current_user_id(request), conversation_id)
     original = _draft(db, conversation.id, draft_id)
+    if original.type in {"job_search", "agent_activity"}:
+        raise HTTPException(status_code=422, detail="This item cannot be edited as a draft.")
     details = {key: value for key, value in (original.details or {}).items() if key != "assistant_message_id"}
     draft = models.AssistantDraft(conversation_id=conversation.id, type=original.type,
                                   content=data.content, details=details)

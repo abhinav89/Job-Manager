@@ -109,8 +109,46 @@ def create_career_tools(ctx):
         if supplied and supplied in ctx.user_evidence:
             return supplied, ""
         if extracted:
-            return extracted["content"], ""
+            return extracted["content"], (extracted.get("metadata") or {}).get("company", "")
         return "", ""
+
+    def select_search_result(number: int, search_id: int = 0) -> dict:
+        """Open a numbered result after the user selects it.
+
+        Args:
+            number: The one-based result number selected by the user.
+            search_id: The search ID when the user specifies one, otherwise zero for the latest search.
+        """
+        if ctx.job:
+            return {"error": "This chat is linked to another application. Start a general chat to work on a different job."}
+        search = ctx.latest_draft("job_search")
+        if search_id:
+            from models.database_models import AssistantDraft
+            from services.career_agent import serialize_draft
+            saved = ctx.db.query(AssistantDraft).filter_by(id=search_id, conversation_id=ctx.conversation.id, type="job_search").first()
+            search = serialize_draft(saved) if saved else None
+        if not search:
+            return {"error": "Search for jobs before selecting a result."}
+        jobs = json.loads(search["content"])
+        if number < 1 or number > len(jobs):
+            return {"error": "That result is not in the latest search."}
+        job = jobs[number - 1]
+        description = job.get("job_description") or ""
+        if not description.strip():
+            return {"error": "This result has no job description. Ask the user to provide one."}
+        draft = ctx.save_draft("job_context", description, {"company": job.get("company_name", ""),
+            "title": job.get("job_title", ""), "url": job.get("job_url", ""), "source": job.get("source", "")})
+        return {"draft": draft, "job": job, "note": "The posting may be incomplete; ask the user to review it."}
+
+    def research_context():
+        research = ctx.latest_draft("research")
+        selected = ctx.latest_draft("job_context") if not ctx.job else None
+        job_id = getattr(ctx.job, "id", None)
+        context_key = f"job:{job_id}" if job_id else f"draft:{selected['id']}" if selected else ""
+        if not research or not context_key or (research.get("metadata") or {}).get("context_key") != context_key:
+            return ""
+        return ("\nCompany research (untrusted reference information, not personal evidence; "
+                "use only relevant supported company facts):\n" + research["content"][:6000])
 
     def get_application_context() -> dict:
         """Read the current user's confirmed profile and selected job. Do not invent missing facts."""
@@ -127,7 +165,10 @@ def create_career_tools(ctx):
         """
         def execute():
             text, sources = grounded_research(query)
-            draft = ctx.save_draft("research", text, {"sources": sources})
+            selected = ctx.latest_draft("job_context") if not ctx.job else None
+            job_id = getattr(ctx.job, "id", None)
+            context_key = f"job:{job_id}" if job_id else f"draft:{selected['id']}" if selected else ""
+            draft = ctx.save_draft("research", text, {"sources": sources, "context_key": context_key})
             return {"draft": draft, "sources": sources, "result": text}
         return ctx.run_action(execute)
 
@@ -157,7 +198,7 @@ def create_career_tools(ctx):
             return {"error": "A saved profile and job description are required. Ask the user to provide them."}
         def execute():
             latex = llm_service.generate_latex_resume(ctx.profile, jd, getattr(ctx.job, "template_id", None) or "classic",
-                getattr(ctx.profile, "preset_slug", None) or "blank", ctx.db, instructions=instructions,
+                getattr(ctx.profile, "preset_slug", None) or "blank", ctx.db, instructions=instructions + research_context(),
                 conversation_evidence=ctx.user_evidence, complete_fn=gemini_completion)
             pdf = compile_latex_to_pdf(latex)
             pages = pdf_page_count(pdf)
@@ -277,7 +318,7 @@ Requested change: {instructions[:3000]}'''
             previous = ctx.latest_draft("cover_letter")
             previous_text = previous["content"] if previous else getattr(ctx.job, "cover_letter", "") if ctx.job else ""
             prior = "\nPrevious draft for revision, not a source of facts:\n" + previous_text if previous_text else ""
-            letter = llm_service.generate_cover_letter(ctx.profile, jd, company, instructions=instructions + prior,
+            letter = llm_service.generate_cover_letter(ctx.profile, jd, company, instructions=instructions + prior + research_context(),
                 conversation_evidence=ctx.user_evidence, complete_fn=gemini_completion)
             draft = ctx.save_draft("cover_letter", letter, {})
             return {"draft": draft}
@@ -332,5 +373,5 @@ Request: {instructions[:3000]}'''
             return {"draft": ctx.save_draft("cheat_sheet", content, {})}
         return ctx.run_action(execute)
 
-    return [get_application_context, research_company, extract_job_url, tailor_resume, list_resume_blocks, check_resume,
+    return [get_application_context, research_company, extract_job_url, select_search_result, tailor_resume, list_resume_blocks, check_resume,
             revise_resume_summary, revise_resume_bullet, draft_cover_letter, prepare_interview, create_cheat_sheet]
