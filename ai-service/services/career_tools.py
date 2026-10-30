@@ -155,6 +155,12 @@ def create_career_tools(ctx):
         profile = json.loads(_profile_json(ctx.profile)) if ctx.profile else None
         job = {"company": ctx.job.company_name, "title": ctx.job.job_title,
                "description": ctx.job.job_description or ""} if ctx.job else None
+        if not job:
+            selected = ctx.latest_draft("job_context")
+            if selected:
+                details = selected.get("metadata") or {}
+                job = {"company": details.get("company", ""), "title": details.get("title", ""),
+                       "description": selected["content"], "url": details.get("url", "")}
         return {"profile": profile, "job": job}
 
     def research_company(query: str) -> dict:
