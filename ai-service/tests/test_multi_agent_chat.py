@@ -20,6 +20,8 @@ from services.job_search_agent import create_job_search_tools
 
 class MultiAgentChatTests(unittest.TestCase):
     def setUp(self):
+        self.env = patch.dict("os.environ", {"JEV_API_KEY": "", "TYPESAFE_API_KEY": ""})
+        self.env.start()
         self.engine = create_engine("sqlite:///:memory:")
         Base.metadata.create_all(self.engine)
         self.db = Session(self.engine)
@@ -31,6 +33,7 @@ class MultiAgentChatTests(unittest.TestCase):
         self.ctx = CareerToolContext(self.db, 1, self.conversation, None, None, "")
 
     def tearDown(self):
+        self.env.stop()
         self.db.close()
         self.engine.dispose()
 

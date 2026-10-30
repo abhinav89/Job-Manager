@@ -13,7 +13,7 @@ type Source = { title: string; url: string };
 type DraftType = "resume" | "cover_letter" | "interview_plan" | "cheat_sheet" | "research" | "job_context" | "job_search" | "agent_activity";
 type Draft = { id: number; type: DraftType; content: string; metadata?: { sources?: Source[]; assistant_message_id?: number; [key: string]: unknown } | null; created_at: string };
 type Activity = { tool: string; label: string; status: "started" | "completed" | "failed"; details?: { keyword?: string; results?: number; source_status?: Record<string, string>; sources?: Source[] } };
-type SearchJob = { job_title?: string; company_name?: string; job_url?: string; source?: string; location?: string; job_description?: string };
+type SearchJob = { job_title?: string; company_name?: string; job_url?: string; source?: string; location?: string; job_description?: string; jev_match?: { role?: string; experience?: string; preferences?: string } };
 type Message = { id: number; role: "user" | "assistant"; content: string; created_at: string };
 type ConversationSummary = { id: number; job_id: number | null; title: string; updated_at: string };
 type Conversation = ConversationSummary & { messages: Message[]; drafts: Draft[] };
@@ -35,6 +35,12 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 function safeSource(url: string) {
   try { const parsed = new URL(url); return parsed.protocol === "https:" || parsed.protocol === "http:"; } catch { return false; }
 }
+
+const matchLabels: Record<string, string> = {
+  related: "Related", possibly_related: "Possibly related", different: "Different", unknown: "Unknown",
+  supported: "Relevant experience found", some_overlap: "Some overlap", unclear: "Not enough detail",
+  consistent: "Consistent", conflict: "Possible conflict",
+};
 
 function ActivityLog({ events }: { events: Activity[] }) {
   if (!events.length) return null;
@@ -281,7 +287,13 @@ export default function AssistantPage() {
     if (draft.type === "job_search") {
       let found: SearchJob[] = [];
       try { found = JSON.parse(draft.content) as SearchJob[]; } catch { return null; }
-      return <div key={draft.id} className="mt-4 space-y-2"><p className="text-xs font-semibold text-[#66755f]">Search results · select one to continue</p>{found.map((job, index) => <div key={`${job.job_url}-${index}`} className="rounded-xl border border-[#d8e3d3] bg-white p-4"><p className="text-sm font-semibold">{index + 1}. {job.job_title || "Job"}</p><p className="mt-1 text-xs text-[#71816b]">{job.company_name || "Company not listed"} · {job.location || "Location not listed"} · {job.source || "Source unknown"}</p><div className="mt-3 flex flex-wrap gap-3 text-xs font-semibold text-[#557442]">{job.job_url && safeSource(job.job_url) && <a href={job.job_url} target="_blank" rel="noopener noreferrer" className="underline">View posting ↗</a>}<button disabled={busy} onClick={() => setInput(`Use job ${index + 1} from search ${draft.id}. Please review the job details with me.`)} className="underline disabled:opacity-40">Choose this job</button></div></div>)}</div>;
+      const status = draft.metadata?.matching_status;
+      return <div key={draft.id} className="mt-4 space-y-2"><p className="text-xs font-semibold text-[#66755f]">Search results · select one to continue</p>
+        {status === "completed" && <p className="text-xs leading-5 text-[#71816b]">Ordered using Jev estimates. Check the posting and your experience before deciding.</p>}
+        {(status === "unavailable" || status === "not_configured") && <p className="text-xs leading-5 text-[#8b6c42]">{status === "unavailable" ? "Jev matching was unavailable" : "Jev matching is not configured"}; showing the original search order.</p>}
+        {found.map((job, index) => <div key={`${job.job_url}-${index}`} className="rounded-xl border border-[#d8e3d3] bg-white p-4"><p className="text-sm font-semibold">{index + 1}. {job.job_title || "Job"}</p><p className="mt-1 text-xs text-[#71816b]">{job.company_name || "Company not listed"} · {job.location || "Location not listed"} · {job.source || "Source unknown"}</p>
+          {job.jev_match && <dl aria-label="Jev match estimates" className="mt-3 grid gap-2 rounded-lg bg-[#f3f7f0] p-3 text-xs sm:grid-cols-3">{([["Role", job.jev_match.role], ["Experience", job.jev_match.experience], ["Preferences", job.jev_match.preferences]] as const).map(([label, value]) => <div key={label}><dt className="font-semibold text-[#66755f]">{label}</dt><dd className="mt-1 text-[#4c5948]">{matchLabels[value || ""] || "Unknown"}</dd></div>)}</dl>}
+          <div className="mt-3 flex flex-wrap gap-3 text-xs font-semibold text-[#557442]">{job.job_url && safeSource(job.job_url) && <a href={job.job_url} target="_blank" rel="noopener noreferrer" className="underline">View posting ↗</a>}<button disabled={busy} onClick={() => setInput(`Use job ${index + 1} from search ${draft.id}. Please review the job details with me.`)} className="underline disabled:opacity-40">Choose this job</button></div></div>)}</div>;
     }
     const editing = editingDraftId === draft.id;
     const sources = draft.metadata?.sources?.filter(source => safeSource(source.url)) || [];
