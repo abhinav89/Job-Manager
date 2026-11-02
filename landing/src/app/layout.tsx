@@ -14,5 +14,12 @@ export const metadata: Metadata = {
 };
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  return <html lang="en"><body>{children}</body></html>;
+  return <html lang="en" suppressHydrationWarning><head><script dangerouslySetInnerHTML={{ __html: `
+    (() => {
+      let saved;
+      try { saved = localStorage.getItem("cv-tailor-theme"); } catch {}
+      document.documentElement.dataset.theme = saved === "dark" || saved === "light"
+        ? saved : window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    })();
+  ` }} /></head><body>{children}</body></html>;
 }
