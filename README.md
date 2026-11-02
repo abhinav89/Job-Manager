@@ -148,3 +148,7 @@ npm --prefix landing run build
 ```
 
 The local dashboard build is `frontend/out`; `cv-tailor dashboard install` packages it with the Python app. Never deploy the login-free local API as a public backend.
+
+## License
+
+CV Tailor is open source under the [MIT license](LICENSE).

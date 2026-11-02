@@ -89,8 +89,12 @@ svg { flex-shrink: 0; }
 .section { max-width: 1248px; margin-inline: auto; padding-inline: 40px; }
 .eyebrow { display: block; color: var(--green); font-size: 10px; font-weight: 500; line-height: 1.6; letter-spacing: .18em; }
 .button { display: inline-flex; min-height: 46px; align-items: center; justify-content: center; gap: 18px; padding: 14px 19px; border: 1px solid var(--ink); border-radius: 4px; font-size: 10px; font-weight: 700; line-height: 1.6; letter-spacing: .09em; text-transform: uppercase; transition: background .18s, transform .18s; }
-.button-primary { background: var(--ink); color: var(--paper); }
-.button-primary:hover { background: var(--primary-hover); transform: translateY(-2px); }
+.button-secondary { background: transparent; color: var(--ink); border-color: var(--line-strong); }
+.button-secondary:hover { background: var(--hover); }
+.github-star { display: inline-flex; align-items: center; justify-content: center; gap: 9px; background: var(--lime); color: #1a2410; border: 1px solid transparent; border-radius: 4px; font-weight: 600; white-space: nowrap; transition: background .18s, transform .18s; }
+.github-star:hover { background: #b9df57; transform: translateY(-2px); }
+.github-star.button { text-transform: none; letter-spacing: 0; gap: 10px; }
+.header-star { min-height: 40px; padding: 10px 13px; font-size: 10px; }
 .text-link { display: inline-flex; align-items: center; gap: 10px; font-size: 11px; text-decoration: underline; text-underline-offset: 4px; }
 .text-link:hover { color: var(--green); }
 .skip-link { position: fixed; top: -90px; left: 20px; z-index: 100; padding: 15px; background: var(--ink); color: var(--paper); }
@@ -103,12 +107,9 @@ svg { flex-shrink: 0; }
 .brand-mark { display: grid; place-items: center; width: 32px; height: 35px; border-radius: 4px; background: var(--ink); color: var(--paper); }
 .brand-dot { color: var(--green); }
 .desktop-nav { display: flex; align-items: center; gap: 30px; margin-left: 50px; }
-.desktop-nav a, .github-link { font-size: 10px; letter-spacing: .025em; color: var(--muted); }
-.desktop-nav a:hover, .github-link:hover { color: var(--ink); }
+.desktop-nav a { font-size: 10px; letter-spacing: .025em; color: var(--muted); }
+.desktop-nav a:hover { color: var(--ink); }
 .header-actions { display: flex; align-items: center; gap: 26px; }
-.github-link { display: inline-flex; align-items: center; gap: 6px; }
-.header-install { display: flex; align-items: center; gap: 15px; background: var(--ink); color: var(--paper); padding: 11px 15px; border-radius: 4px; font-size: 10px; font-weight: 600; }
-.header-install:hover { background: var(--primary-hover); }
 .menu-toggle { display: none; color: inherit; background: none; border: 1px solid var(--line); border-radius: 4px; padding: 10px; }
 .mobile-nav, .mobile-nav[hidden] { display: none; }
 
@@ -127,8 +128,6 @@ h1 { font-family: var(--display); font-size: clamp(42px, 4.4vw, 61px); line-heig
 h1 em { font-weight: 400; color: var(--sage); }
 .hero-description { max-width: 430px; margin-top: 24px; font-size: 13px; line-height: 1.95; color: var(--secondary); }
 .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 23px; margin-top: 30px; }
-.hero-explore { display: flex; align-items: center; gap: 8px; font-size: 10px; padding-block: 12px; }
-.hero-explore:hover { color: var(--green); }
 .hero-note { display: flex; align-items: flex-start; gap: 7px; color: var(--muted); font-size: 9px; line-height: 1.7; margin-top: 23px; }
 .hero-note svg { margin-top: 1px; color: var(--green); }
 .workspace-preview { position: relative; align-self: center; border: 1px solid var(--line-strong); background: var(--white); border-radius: 9px; box-shadow: 0 12px 35px -14px var(--preview-shadow), 0 1px 3px var(--small-shadow); }
@@ -310,8 +309,14 @@ h2 { font-family: var(--display); font-size: clamp(31px,3.2vw,43px); font-weight
 .closing-mark { width: 49px; height: 52px; display: grid; place-items: center; margin: 0 auto 23px; border-radius: 6px; background: var(--lime); color: #354a10; box-shadow: 3px 3px 0 var(--selected-line); transform: rotate(-5deg); }
 .closing-section .eyebrow { font-size: 8px; }
 .closing-section h2 { font-size: 47px; margin-top: 13px; }
-.closing-section > p { font-size: 10px; color: var(--muted); margin-top: 16px; }
-.closing-section .button { margin-top: 24px; }
+.closing-section > p { font-size: 12px; color: var(--muted); margin-top: 16px; line-height: 1.9; }
+.license-badge { display: inline-flex; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid var(--selected-line); border-radius: 4px; background: var(--selected); color: var(--selected-text); font-size: 8px; letter-spacing: .1em; }
+.license-badge > span { width: 5px; height: 5px; border-radius: 50%; background: var(--green); }
+.license-badge:hover { text-decoration: underline; text-underline-offset: 3px; }
+.community-actions { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+.community-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px 24px; margin-top: 25px; }
+.community-links a { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 10px; line-height: 1.8; }
+.community-links a:hover { color: var(--green); text-decoration: underline; text-underline-offset: 4px; }
 .site-footer { border-top: 1px solid var(--line); padding-block: 29px; display: flex; align-items: center; justify-content: space-between; gap: 25px; }
 .site-footer .brand { font-size: 13px; gap: 8px; }
 .site-footer .brand-mark { width: 24px; height: 26px; }
@@ -328,7 +333,6 @@ h2 { font-family: var(--display); font-size: clamp(31px,3.2vw,43px); font-weight
   .section, .header-inner { padding-inline: 28px; }
   .hero { gap: 28px; padding-top: 78px; }
   .hero-actions { gap: 15px; }
-  .hero-explore { font-size: 9px; }
   .hero-note { font-size: 8px; }
   .hero .button { font-size: 8px; gap: 10px; padding-inline: 14px; }
   .demo-workspace { grid-template-columns: 100px minmax(0,1fr); }
@@ -362,7 +366,6 @@ h2 { font-family: var(--display); font-size: clamp(31px,3.2vw,43px); font-weight
   h1 { font-size: 60px; }
   .hero-description { max-width: 500px; }
   .hero .button { font-size: 10px; padding-inline: 19px; gap: 18px; }
-  .hero-explore { font-size: 10px; }
   .hero-note { font-size: 9px; }
   .workspace-preview { max-width: 670px; width: 100%; margin-inline: auto; }
   .demo-workspace { grid-template-columns: 140px minmax(0,1fr); min-height: 380px; }
@@ -425,9 +428,10 @@ h2 { font-family: var(--display); font-size: clamp(31px,3.2vw,43px); font-weight
   .header-inner { height: 67px; gap: 10px; }
   .brand { font-size: 15px; gap: 8px; }
   .brand-mark { width: 28px; height: 31px; }
-  .desktop-nav, .github-link { display: none; }
+  .desktop-nav { display: none; }
   .header-actions { gap: 10px; }
-  .header-install { padding: 10px 11px; font-size: 9px; gap: 9px; }
+  .header-star { padding: 10px; font-size: 9px; gap: 7px; }
+  .header-star .star-external { display: none; }
   .menu-toggle { display: flex; padding: 9px; }
   .mobile-nav { display: grid; padding: 12px 21px 20px; border-top: 1px solid var(--line); }
   .mobile-nav a { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; font-size: 12px; }
@@ -437,7 +441,6 @@ h2 { font-family: var(--display); font-size: clamp(31px,3.2vw,43px); font-weight
   .hero-description { font-size: 12px; line-height: 1.95; margin-top: 22px; }
   .hero-actions { gap: 18px; margin-top: 25px; }
   .hero .button { min-height: 45px; padding: 13px 14px; font-size: 9px; gap: 13px; }
-  .hero-explore { font-size: 9px; }
   .hero-note { font-size: 8px; margin-top: 19px; max-width: 290px; }
   .window-bar { height: 32px; font-size: 7px; gap: 5px; padding-inline: 10px; }
   .window-local { font-size: 0; }
@@ -543,10 +546,13 @@ h2 { font-family: var(--display); font-size: clamp(31px,3.2vw,43px); font-weight
   .site-footer nav { gap: 25px; }
 }
 @media (max-width: 360px) {
-  .header-install { display: none; }
+  .header-star .star-full-label { display: none; }
+  .header-star { padding-inline: 8px; gap: 6px; }
+  .header-actions { gap: 6px; }
+  .theme-toggle { width: 36px; }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
-  .feature-card:hover, .button-primary:hover { transform: none; }
+  .feature-card:hover, .github-star:hover { transform: none; }
 }
