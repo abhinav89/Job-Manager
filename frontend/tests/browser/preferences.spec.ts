@@ -21,7 +21,12 @@ test("saved defaults survive reload and a scoped application keeps its own templ
   await page.goto(`/generate?job_id=${job.id}`);
   await expect(page.getByRole("button", { name: "Compact resume preview Compact", exact: false })).toHaveAttribute("aria-pressed", "true");
   expect((await (await request.get(`/api/tracker/${job.id}/details`)).json()).template_id).toBe("compact");
+  let releaseWorkspace!: () => void;
+  const pendingWorkspace = new Promise<void>(resolve => { releaseWorkspace = resolve; });
+  await page.route("**/api/workspace", async route => { await pendingWorkspace; await route.continue(); });
   await page.goto("/tracker");
-  await page.getByRole("button", { name: "Add Application", exact: true }).first().click();
+  const create = page.getByRole("button", { name: "Add Application", exact: true }).first();
+  try { await expect(create).toBeDisabled(); } finally { releaseWorkspace(); }
+  await create.click();
   await expect(page.getByLabel("Resume Template", { exact: true })).toHaveValue("minimal");
 });
