@@ -86,6 +86,8 @@ cv-tailor resume blocks 1
 cv-tailor resume check 1
 cv-tailor drafts export 1 --format pdf --output resume.pdf
 cv-tailor drafts apply 1 --revision 1
+cv-tailor forms prepare --application 1 --resume 1
+cv-tailor forms check 2
 ```
 
 Commands accept `--json` anywhere and file/stdin JSON (`--input -`). Errors return a nonzero exit code and structured JSON in JSON mode. Run `cv-tailor GROUP --help` for subcommands and `schema KIND` for accepted content.
@@ -98,9 +100,17 @@ Resumes are assembled from structured plain-text content, compiled with Tectonic
 
 ## Included skills
 
-`cv-tailor`, `cv-profile`, `cv-jobs`, `cv-job-fit`, `cv-company-research`, `cv-resume`, `cv-resume-edit`, `cv-cover-letter`, `cv-tracker`, `cv-interview`, `cv-code-practice`, `cv-connect`.
+`cv-tailor`, `cv-profile`, `cv-jobs`, `cv-job-fit`, `cv-company-research`, `cv-resume`, `cv-resume-edit`, `cv-cover-letter`, `cv-tracker`, `cv-apply`, `cv-interview`, `cv-code-practice`, `cv-connect`.
 
 Canonical skills live in `.agents/skills`, with Claude entrypoints in `.claude/skills`. They share the same CLI and output schemas. Company research uses the harness's browsing tools, or user-provided sources when browsing is unavailable. Factual grounding guidance and deterministic checks help catch unsupported claims; review generated documents.
+
+## Application form assistance
+
+Ask your local agent: **“Use cv-apply for application #42. Fill the employer form using my selected CV and cover letter, then stop for my review.”** The optional dashboard's **Work with your CLI agent → Assist with application** copies a prompt for this workflow.
+
+The agent uses its own supported browser/computer tools to inspect and fill the form. CV Tailor saves versioned answer checkpoints, validates reported readbacks and field limits, and pins selected documents by draft ID and file fingerprint. Browser access is a host capability, not provided by the CLI or dashboard. Without it, the agent can prepare copyable answers and save a draft. Portal support depends on the host and controls; unreadable controls and attachments remain unverified.
+
+You review and submit in the employer's form. After you explicitly confirm submission, `forms confirm-submission` records the actual date and marks the application Applied; it does not send the form. `drafts apply` still only selects a current CV or cover letter. See [the workflow and commands](docs/application_forms.md).
 
 ## Optional built-in AI
 

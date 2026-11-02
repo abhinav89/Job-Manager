@@ -8,6 +8,7 @@ const tasks = [
   ["resume", "Tailor a resume", "cv-resume"],
   ["resume_edit", "Edit resume blocks", "cv-resume-edit"],
   ["cover_letter", "Write a cover letter", "cv-cover-letter"],
+  ["application_form", "Assist with application", "cv-apply"],
   ["job_fit", "Assess job fit", "cv-job-fit"],
   ["research", "Research the company", "cv-company-research"],
   ["interview_plan", "Prepare for an interview", "cv-interview"],
@@ -26,7 +27,8 @@ export default function AgentHandoff() {
   const copy = async () => {
     const selected = tasks.find(item => item[0] === task)!;
     const target = application ? ` --application ${application}` : "";
-    const prompt = `Use the ${selected[2]} skill in this CV Tailor checkout. Every command must target the workspace directory ${JSON.stringify(workspace?.data_dir)} using --data-dir with platform-appropriate quoting. ${selected[1]}.\nRun: cv-tailor --json context export --task ${task}${target}\nUse only confirmed profile facts and my explicit statements as personal evidence. Ask for missing information. Follow the output schema and the skill's save commands. Save the result to my local workspace so I can review it in the dashboard. Applying a document is a separate action.\nAdditional instructions: `;
+    const formInstructions = task === "application_form" ? "\nUse your supported browser/computer tools to inspect and fill the employer form. Let me select the resume and cover-letter drafts if they are not already specified. Preserve my existing values, save form checkpoints, verify values read back from the live form, and leave final submission to me. If browser access is unavailable, prepare copyable answers and report that nothing was filled. Do not mark Applied until I explicitly confirm submission." : "";
+    const prompt = `Use the ${selected[2]} skill in this CV Tailor checkout. Every command must target the workspace directory ${JSON.stringify(workspace?.data_dir)} using --data-dir with platform-appropriate quoting. ${selected[1]}.\nRun: cv-tailor --json context export --task ${task}${target}\nUse only confirmed profile facts and my explicit statements as personal evidence. Ask for missing information. Follow the output schema and the skill's save commands. Save the result to my local workspace so I can review it in the dashboard. Applying a document is a separate action.${formInstructions}\nAdditional instructions: `;
     try {
       await navigator.clipboard.writeText(prompt);
       toast.success("Prompt copied. Paste it into your CLI agent in the CV Tailor repository.");
@@ -49,8 +51,8 @@ export default function AgentHandoff() {
           <option value="">General workspace</option>
           {applications.map(job => <option key={job.id} value={job.id}>{job.job_title} · {job.company_name}</option>)}
         </select></label>
-        <button onClick={() => void copy()} className="rounded bg-stone-900 px-4 py-2 text-white">Copy agent prompt</button>
-        <p className="w-full text-stone-600">Paste the prompt into your agent. Saved drafts appear here automatically. Review them before applying.</p>
+        <button disabled={task === "application_form" && !application} onClick={() => void copy()} className="rounded bg-stone-900 px-4 py-2 text-white disabled:opacity-40">Copy agent prompt</button>
+        <p className="w-full text-stone-600">{task === "application_form" ? "Choose an application, then paste the prompt into your browser-capable local agent. It helps fill the form; you review and submit." : "Paste the prompt into your agent. Saved drafts appear here automatically. Review them before applying."}</p>
       </div>
     </details>
   );

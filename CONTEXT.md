@@ -44,6 +44,9 @@ A cover letter that relates a user's actual experience and confirmed skills to a
 **Application Draft**:
 A reviewable version of a CV, cover letter, interview preparation plan, or interview cheat sheet associated with an Application Conversation. Earlier versions remain available; applying a CV or cover letter draft makes it the current application document without discarding earlier versions.
 
+**Application Form Checkpoint**:
+A versioned `application_form` draft holding a live form's questions, proposed answers, reported observations, field constraints and selected document fingerprints. It belongs to one tracked application and one form session. Its derived state is drafted, partially filled, verified for review, or submission confirmed. The user's local agent supplies browser access; the CLI validates reported observations without independently controlling a browser. A checkpoint is never sent to an employer by CV Tailor. Only the user's explicit submission confirmation records Applied.
+
 **Personal Evidence**:
 Personal facts supported by the user's saved profile or Conversation Evidence. Earlier resumes may inform context or phrasing but do not independently establish Personal Evidence.
 
