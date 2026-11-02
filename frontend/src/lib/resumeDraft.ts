@@ -30,6 +30,8 @@ const LATEX_ESCAPES: { literal: string; escaped: RegExp; sentinel: string }[] = 
   { literal: "$", escaped: /\\\$/g, sentinel: "\uE005" },
   { literal: "#", escaped: /\\#/g, sentinel: "\uE006" },
   { literal: "_", escaped: /\\_/g, sentinel: "\uE007" },
+  { literal: "{", escaped: /\\\{/g, sentinel: "\uE008" },
+  { literal: "}", escaped: /\\\}/g, sentinel: "\uE009" },
 ];
 
 function protectEscapes(value: string): string {
@@ -42,12 +44,9 @@ function restoreEscapes(value: string): string {
 
 /** Turns plain user text into LaTeX-safe text. Mirrors `_escape_latex` in latex_assembly.py. */
 export function escapeLatexText(value: string): string {
-  return value
-    .replace(/[{}]/g, "")
-    .replace(/\\/g, "\\textbackslash{}")
-    .replace(/([%&$#_])/g, "\\$1")
-    .replace(/~/g, "\\textasciitilde{}")
-    .replace(/\^/g, "\\^{}");
+  const escapes: Record<string, string> = { "\\": "\\textbackslash{}", "{": "\\{", "}": "\\}",
+    "%": "\\%", "&": "\\&", "$": "\\$", "#": "\\#", "_": "\\_", "~": "\\textasciitilde{}", "^": "\\^{}" };
+  return value.replace(/[\\{}%&$#_~^]/g, char => escapes[char]);
 }
 
 function latexText(value: string | undefined | null): string {
@@ -86,6 +85,7 @@ function commandArguments(code: string, command: string) {
       let depth = 0;
       const start = cursor + 1;
       for (; cursor < code.length; cursor += 1) {
+        if (code[cursor] === "\\") { cursor += 1; continue; }
         if (code[cursor] === "{") depth += 1;
         if (code[cursor] === "}") depth -= 1;
         if (depth === 0) break;
@@ -119,6 +119,7 @@ function replaceParsedCommandArgument(
     let depth = 1;
     cursor += 1;
     while (depth > 0 && cursor < code.length) {
+      if (code[cursor] === "\\") { cursor += 2; continue; }
       if (code[cursor] === "{") depth += 1;
       if (code[cursor] === "}") depth -= 1;
       cursor += 1;
@@ -134,8 +135,13 @@ export function replaceCommandArgument(code: string, command: string, occurrence
   return replaceParsedCommandArgument(code, command, occurrence, argIndex, value);
 }
 
+export function replaceProjectHeading(code: string, occurrence: number, title: string, subtitle: string): string {
+  return replaceParsedCommandArgument(code, "resumeProjectHeading", occurrence, 0,
+    `\\textbf{${escapeLatexText(title)}} $|$ \\emph{${escapeLatexText(subtitle)}}`, false);
+}
+
 export function parseResumeDraft(code: string): ResumeDraft {
-  const nameMatch = code.match(/\\textcolor\{[^}]+\}\{([^{}]+)\}/) || code.match(/\\Huge\s*\{?([^{}\\]+)\}?/i);
+  const nameMatch = protectEscapes(code).match(/\\textcolor\{[^}]+\}\{([^{}]+)\}/) || code.match(/\\Huge\s*\{?([^{}\\]+)\}?/i);
   const summaryMatch = code.match(/\\section\*?\{[^{}]*(?:Summary|Profile|Objective)[^{}]*\}([\s\S]*?)(?=\\section|\\end\{document\})/i);
   const bulletMatches = commandArguments(code, "resumeItem");
   const bullets = bulletMatches.map(match => latexText(match.args[0]));
@@ -207,7 +213,7 @@ export function parseResumeDraft(code: string): ResumeDraft {
       };
     });
   return {
-    name: nameMatch?.[1] || "Your name",
+    name: nameMatch ? latexText(nameMatch[1]) : "Your name",
     summary: summaryMatch ? latexText(summaryMatch[1]) : "",
     bullets,
     sections,
@@ -257,10 +263,10 @@ export function replaceSummary(code: string, value: string) {
 }
 
 export function replaceResumeName(code: string, value: string) {
-  const escaped = escapeLatexText(value);
-  if (/\\textcolor\{[^}]+\}\{([^{}]+)\}/.test(code)) {
-    return code.replace(/\\textcolor\{([^}]+)\}\{([^{}]+)\}/, (_full, color: string) => `\\textcolor{${color}}{${escaped}}`);
+  if (commandArguments(code, "textcolor").length) {
+    return replaceParsedCommandArgument(code, "textcolor", 0, 1, value);
   }
+  const escaped = escapeLatexText(value);
   return code.replace(/(\\Huge\s*\{?)[^{}\\]+(\}?)/i, (_full, before: string, after: string) => `${before}${escaped}${after}`);
 }
 

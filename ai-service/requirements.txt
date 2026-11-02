@@ -1,21 +1,2 @@
-fastapi[standard]
-openai
-google-genai
-google-adk>=2.12,<2.13
-reportlab
-itsdangerous
-psycopg2-binary
-python-dotenv
-requests
-sqlalchemy
-tecto
-scrapling
-camoufox
-curl_cffi
-pypdf
-python-multipart
-argon2-cffi
-slowapi
-python-docx
-beautifulsoup4
-psycopg[binary]
+-e .
+# Optional: pip install -e ".[dashboard]" or -e ".[ai]"

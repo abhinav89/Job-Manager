@@ -1,5 +1,3 @@
-// Force the frontend to ALWAYS use the local "/api" proxy so that 
-// cookies are never blocked by third-party cookie restrictions.
 export const API_URL = "/api";
 
 export async function getApiError(response: Response, fallback: string): Promise<string> {

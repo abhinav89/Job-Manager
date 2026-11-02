@@ -1,0 +1,6 @@
+*
+!sandbox/
+!sandbox/**
+!services/
+!services/templates/
+!services/templates/*.py

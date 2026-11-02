@@ -7,12 +7,40 @@ import {
   parseResumeBlocks,
   parseResumeDraft,
   replaceCommandArgument,
+  replaceProjectHeading,
   replaceResumeItem,
   replaceResumeName,
   replaceSectionDetail,
   replaceSummary,
   resolveSelectionToBlocks,
 } from "../src/lib/resumeDraft.ts";
+
+test("literal unmatched braces survive repeated bullet edits", () => {
+  const source = String.raw`\section{Experience}\resumeItem{Original}\resumeItem{Untouched}\end{document}`;
+  const first = replaceResumeItem(source, 0, "Keep {this literal");
+  assert.equal(parseResumeDraft(first).bullets[0], "Keep {this literal");
+  const second = replaceResumeItem(first, 0, "Keep this} literal");
+  assert.equal(parseResumeDraft(second).bullets[0], "Keep this} literal");
+  assert.ok(second.includes(String.raw`\resumeItem{Untouched}`));
+});
+
+test("project title and stack edits preserve heading markup and metadata", () => {
+  const source = String.raw`\section{Projects}\resumeProjectHeading{\textbf{Old} $|$ \emph{Python}}{2026}\resumeItem{Unchanged}\end{document}`;
+  const updated = replaceProjectHeading(source, 0, "App {One}", "Python & SQL");
+  assert.ok(updated.includes(String.raw`\textbf{App \{One\}} $|$ \emph{Python \& SQL}`));
+  const entry = parseResumeDraft(updated).sections[0].entries[0];
+  assert.equal(entry.title, "App {One}");
+  assert.equal(entry.subtitle, "Python & SQL");
+  assert.equal(entry.meta, "2026");
+  assert.ok(updated.includes(String.raw`\resumeItem{Unchanged}`));
+});
+
+test("names with literal braces survive repeated edits", () => {
+  const source = String.raw`\textcolor{NavyBlue}{JANE DOE}\end{document}`;
+  const updated = replaceResumeName(source, "Jane {Doe}");
+  assert.equal(parseResumeDraft(updated).name, "Jane {Doe}");
+  assert.equal(parseResumeDraft(replaceResumeName(updated, "Jane Doe}")).name, "Jane Doe}");
+});
 
 const multilineEducation = String.raw`\section{Education}
 \resumeSubheading

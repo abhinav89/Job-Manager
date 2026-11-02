@@ -7,7 +7,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from sqlalchemy import text
 
-from database import SessionLocal
+from cv_tailor.database import SessionLocal
 
 
 if __name__ == "__main__":

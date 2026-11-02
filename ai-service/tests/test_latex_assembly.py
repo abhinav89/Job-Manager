@@ -4,8 +4,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from services.latex_assembly import assemble_latex
-from models.schemas import UserProfile
+from cv_tailor.services.latex_assembly import assemble_latex
+from cv_tailor.models.schemas import UserProfile
 
 
 def make_profile(**overrides):
@@ -64,7 +64,7 @@ class AssembleLatexTests(unittest.TestCase):
         doc = assemble_latex(make_profile(education=[]), EMPTY_AI_CONTENT, "classic")
         self.assertIn("No education history provided", doc)
         self.assertIn("No experience entries provided", doc)
-        self.assertIn("No projects provided", doc)
+        self.assertNotIn(r"\section{Projects}", doc)
 
     def test_blank_certifications_omit_the_section_entirely(self):
         doc = assemble_latex(make_profile(), EMPTY_AI_CONTENT, "classic")
