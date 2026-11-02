@@ -1,4 +1,5 @@
 "use client";
+import { RESUME_TEMPLATES, type ResumeTemplate } from "@/lib/resumeTemplates";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -29,7 +30,7 @@ const API = API_URL;
 // ── Types ────────────────────────────────────────────────────────
 type Status = "Saved" | "Applied" | "Interview" | "Tech Test" | "Offer" | "Rejected" | "Ghosted";
 type Priority = "High" | "Medium" | "Low";
-type TemplateId = "classic" | "modern";
+type TemplateId = ResumeTemplate;
 
 type Job = JobDetails;
 
@@ -1108,7 +1109,7 @@ export default function TrackerPage() {
                 <SelectField label="Job Type" value={form.job_type} onChange={v => setField("job_type", v)} options={["", "Remote", "Hybrid", "On-site"]} />
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <SelectField label="Resume Template" value={form.template_id} onChange={v => setField("template_id", v as TemplateId)} options={["classic", "modern"]} />
+                <SelectField label="Resume Template" value={form.template_id} onChange={v => setField("template_id", v as TemplateId)} options={RESUME_TEMPLATES.map(template => template.id)} />
                 <div className="flex items-end pb-2 text-[10px] leading-4" style={{ color: "#7a7570" }}>
                   This template will be used when you generate a CV for this job.
                 </div>

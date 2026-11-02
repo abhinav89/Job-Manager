@@ -1,3 +1,4 @@
+import type { ResumeTemplate } from "./resumeTemplates";
 import { queryOptions, useQuery, type QueryClient } from "@tanstack/react-query";
 import { API_URL, getApiError } from "@/lib/api";
 
@@ -5,7 +6,7 @@ export type Workspace = { name: string; email: string; profile_exists: boolean; 
 
 export type ApplicationStatus = "Saved" | "Applied" | "Interview" | "Tech Test" | "Offer" | "Rejected" | "Ghosted";
 export type ApplicationPriority = "High" | "Medium" | "Low";
-export type ResumeTemplate = "classic" | "modern";
+export type { ResumeTemplate } from "./resumeTemplates";
 
 export type Education = { school_name: string; course: string; location: string; description?: string; date_range?: string };
 export type Experience = { job_title: string; company: string; location: string; description?: string; date_range?: string };

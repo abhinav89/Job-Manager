@@ -2,8 +2,10 @@
 
 import { useState, type ReactNode } from "react";
 import ThemeToggle from "./theme-toggle";
+import CopyButton from "./copy-button";
+import ResumeGallery from "./resume-gallery";
 import {
-  ArrowRight, ArrowUpRight, Check, ChevronDown, Code2, Copy, FileText,
+  ArrowRight, ArrowUpRight, Check, ChevronDown, Code2, FileText,
   FolderOpen, GitBranch, Layers, LayoutDashboard, Menu, MessageSquare,
   Search, Star, Terminal, UserRound, X, type LucideIcon,
 } from "lucide-react";
@@ -56,18 +58,6 @@ function StarLink({ className = "" }: { className?: string }) {
   return <a className={`github-star ${className}`} href={REPO} target="_blank" rel="noreferrer" aria-label="Star CV Tailor on GitHub"><Star size={16} aria-hidden="true" /><span>Star<span className="star-full-label"> on GitHub</span></span><ArrowUpRight size={14} className="star-external" aria-hidden="true" /></a>;
 }
 
-function CopyButton({ text, label }: { text: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-  const [failed, setFailed] = useState(false);
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true); setFailed(false);
-      window.setTimeout(() => setCopied(false), 2200);
-    } catch { setFailed(true); }
-  }
-  return <div className="copy-control"><button type="button" className="copy-button" aria-label={label} onClick={() => void copy()}>{copied ? <Check size={14} /> : <Copy size={14} />}{copied ? "Copied" : "Copy"}</button><span className="sr-only" role="status">{copied ? "Copied to clipboard." : failed ? "Clipboard unavailable. Select and copy the text below." : ""}</span>{failed && <span className="copy-error">Select the text below to copy.</span>}</div>;
-}
 
 function TrackerPreview() {
   return <div className="demo-tracker">
@@ -125,7 +115,7 @@ export default function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   return <>
     <a className="skip-link" href="#main">Skip to content</a>
-    <header className="site-header"><div className="header-inner"><a href="#" aria-label="CV Tailor home"><Brand /></a><nav className="desktop-nav" aria-label="Main navigation"><a href="#workflow">How it works</a><a href="#features">Features</a><a href="#skills">The skills</a></nav><div className="header-actions"><ThemeToggle /><StarLink className="header-star" /><button className="menu-toggle" type="button" aria-label={menuOpen ? "Close menu" : "Open menu"} aria-expanded={menuOpen} aria-controls="mobile-navigation" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X size={20} /> : <Menu size={20} />}</button></div></div><nav hidden={!menuOpen} id="mobile-navigation" className="mobile-nav" aria-label="Mobile navigation">{[["#workflow", "How it works"], ["#features", "Features"], ["#skills", "The skills"], ["#install", "Get started"]].map(([href, label]) => <a key={href} href={href} onClick={() => setMenuOpen(false)}>{label}<ArrowUpRight size={15} /></a>)}</nav></header>
+    <header className="site-header"><div className="header-inner"><a href="#" aria-label="CV Tailor home"><Brand /></a><nav className="desktop-nav" aria-label="Main navigation"><a href="#workflow">How it works</a><a href="#features">Features</a><a href="#templates">Templates</a><a href="#skills">The skills</a></nav><div className="header-actions"><ThemeToggle /><StarLink className="header-star" /><button className="menu-toggle" type="button" aria-label={menuOpen ? "Close menu" : "Open menu"} aria-expanded={menuOpen} aria-controls="mobile-navigation" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X size={20} /> : <Menu size={20} />}</button></div></div><nav hidden={!menuOpen} id="mobile-navigation" className="mobile-nav" aria-label="Mobile navigation">{[["#workflow", "How it works"], ["#features", "Features"], ["#templates", "Templates"], ["#skills", "The skills"], ["#install", "Get started"]].map(([href, label]) => <a key={href} href={href} onClick={() => setMenuOpen(false)}>{label}<ArrowUpRight size={15} /></a>)}</nav></header>
     <main id="main">
       <section className="hero section" aria-labelledby="hero-title"><div className="hero-copy"><span className="hero-eyebrow"><span />YOUR AGENT. YOUR MACHINE.</span><h1 id="hero-title">Your career workspace,<br /><em>open source.</em></h1><p className="hero-description">Tailor CVs, track applications, and prepare for interviews with the AI agent you already use. Run it locally in your terminal or add the dashboard.</p><div className="hero-actions"><StarLink className="button" /><ArrowLink href="#install">Get started</ArrowLink></div><div className="hero-note"><Check size={13} /><span>MIT licensed. Local data. No CV Tailor account.</span></div></div><WorkspacePreview /></section>
       <div className="agent-strip section"><span>AT HOME IN YOUR AGENT</span><div><span><Terminal size={15} />Claude Code</span><span><Terminal size={15} />Codex</span><span><Terminal size={15} />OpenCode</span><span><Terminal size={15} />Antigravity</span></div><p>Your agent. Your choice.</p></div>
@@ -136,6 +126,7 @@ export default function LandingPage() {
         ["04", "Keep moving", "Track the application, prepare for interviews, and return with your work intact."],
       ].map(([number, title, text]) => <article key={number}><span className="step-number">{number}</span><h3>{title}</h3><p>{text}</p></article>)}</div></section>
       <section className="features-section section" id="features" aria-labelledby="features-title"><div className="section-heading"><div><span className="eyebrow">THE TOOLS FOR YOUR NEXT STEP</span><h2 id="features-title">A place for every part<br />of the application.</h2></div><p>The writing, research, documents, and preparation all connect to the same profile and application history.</p></div><div className="feature-grid">{features.map(({ icon: Icon, title, description, detail }) => <article className="feature-card" key={title}><span className="feature-icon"><Icon size={20} strokeWidth={1.5} /></span><h3>{title}</h3><p>{description}</p><span className="feature-detail">{detail}</span></article>)}</div><div className="workspace-foundation"><div><UserRound size={19} /><span><strong>One reusable profile</strong><small>Your experience and confirmed skills.</small></span></div><div><Layers size={19} /><span><strong>Room to revise</strong><small>Keep drafts and earlier document versions.</small></span></div><div><FolderOpen size={19} /><span><strong>Local, lasting storage</strong><small>SQLite data that stays between sessions.</small></span></div></div></section>
+      <ResumeGallery />
       <section className="skills-section section" id="skills" aria-labelledby="skills-title"><div className="section-heading"><div><span className="eyebrow">11 SKILLS. ONE SHARED WORKSPACE.</span><h2 id="skills-title">Tell your agent<br />what you need.</h2></div><p>Each skill teaches your agent a CV Tailor workflow. It handles the reasoning and writing; CV Tailor gives the result a place to live.</p></div><SkillDesk /><div className="skills-footnote"><GitBranch size={15} /><p>Switch agents and keep your saved work. Enable built-in API-powered AI separately when you want it.</p><a href={`${REPO}#included-skills`} target="_blank" rel="noreferrer">Explore the skills<ArrowUpRight size={13} /></a></div></section>
       <Installation />
       <section className="faq-section section" aria-labelledby="faq-title"><div><span className="eyebrow">A FEW THINGS TO KNOW</span><h2 id="faq-title">Before you<br />make yourself at home.</h2><p>CLI-friendly. Dashboard-ready.<br />Built around your own workspace.</p></div><div className="faq-list">{questions.map(question => <details key={question.title}><summary>{question.title}<ChevronDown size={16} /></summary><p>{question.answer}</p></details>)}</div></section>

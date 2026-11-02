@@ -3,6 +3,8 @@ from typing import List, Optional, Literal
 from datetime import date as DateType, datetime
 from typing import Optional
 
+ResumeTemplate = Literal["classic", "modern", "minimal", "serif", "executive", "technical", "compact", "sidebar"]
+
 class Education(BaseModel):
     school_name: str = Field(max_length=150)
     course: str = Field(max_length=150)
@@ -48,12 +50,12 @@ class UserProfile(BaseModel):
     skills: List[SkillItem]
     certifications: List[Certification] = []
     preset_slug: Optional[str] = Field(default="blank", max_length=50)
-    preferred_template: Optional[Literal["classic", "modern"]] = None
+    preferred_template: Optional[ResumeTemplate] = None
 
 class GenerateRequest(BaseModel):
     email: str
     jd: str
-    template_id: str = "classic"
+    template_id: ResumeTemplate = "classic"
     preset_slug: str = "blank"
 
     @field_validator("jd")
@@ -133,7 +135,7 @@ class JobApplicationCreate(BaseModel):
     priority: Literal["High", "Medium", "Low"] = "Medium"
     notes: Optional[str] = None
     cover_letter: Optional[str] = None
-    template_id: Literal["classic", "modern"] = "classic"
+    template_id: ResumeTemplate = "classic"
 
 class JobApplicationUpdate(BaseModel):
     revision: Optional[int] = Field(default=None, ge=1)
@@ -153,7 +155,7 @@ class JobApplicationUpdate(BaseModel):
     priority: Optional[Literal["High", "Medium", "Low"]] = None
     notes: Optional[str] = None
     cover_letter: Optional[str] = None
-    template_id: Optional[Literal["classic", "modern"]] = None
+    template_id: Optional[ResumeTemplate] = None
 
 class JobApplicationResponse(BaseModel):
     id: int
@@ -173,7 +175,7 @@ class JobApplicationResponse(BaseModel):
     priority: str
     notes: Optional[str] = None
     cover_letter: Optional[str] = None
-    template_id: Literal["classic", "modern"] = "classic"
+    template_id: ResumeTemplate = "classic"
 
     class Config:
         from_attributes = True

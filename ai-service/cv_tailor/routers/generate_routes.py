@@ -61,18 +61,8 @@ async def _generate_resume(profile, data: GenerateRequest, preset, history):
 
 @router.get("/templates")
 async def get_templates():
-    return [
-        {
-            "id": "classic",
-            "name": "Classic Professional",
-            "description": "A traditional, single-column layout perfect for corporate and finance roles."
-        },
-        {
-            "id": "modern",
-            "name": "Modern Tech",
-            "description": "A sleek, contemporary layout with subtle color accents and clean typography."
-        }
-    ]
+    from cv_tailor.services.templates import TEMPLATE_CATALOG
+    return TEMPLATE_CATALOG
 
 
 class CompileLatexRequest(BaseModel):

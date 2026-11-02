@@ -3,6 +3,8 @@ import { Suspense, useState, useCallback, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
+import { RESUME_TEMPLATES } from "@/lib/resumeTemplates";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import "react-pdf/dist/Page/AnnotationLayer.css";
@@ -1338,9 +1340,8 @@ function GeneratePageContent() {
                   const val = e.target.value;
                   setPresetSlug(val || 'blank');
                   const p = presets.find(x => x.display_name.toLowerCase() === val.toLowerCase());
-                   if (p?.recommended_template === "classic" || p?.recommended_template === "modern") {
-                     setSelectedTemplate(p.recommended_template);
-                   }
+                   const recommended = RESUME_TEMPLATES.find(template => template.id === p?.recommended_template);
+                   if (recommended) setSelectedTemplate(recommended.id);
                 }}
                 placeholder="e.g. Full Stack Developer, Marketing Manager..."
               />
@@ -1352,26 +1353,18 @@ function GeneratePageContent() {
 
               <label className="block text-[10px] tracking-[0.25em] uppercase mb-3" style={{ color: C.textMuted }}>Select Template</label>
               <div className="grid grid-cols-2 gap-4">
-                {[
-                  {id: "classic", name: "Classic Professional", desc: "Traditional single-column layout"}, 
-                  {id: "modern", name: "Modern Tech", desc: "Sleek layout with clean typography and subtle color accents"}
-                ].map(tpl => (
-                  <div 
-                    key={tpl.id} 
-                    onClick={() => setSelectedTemplate(tpl.id as "classic" | "modern")}
-                    className="cursor-pointer rounded-sm p-3 transition-all"
-                    style={{ 
-                      background: selectedTemplate === tpl.id ? C.greenLight : C.bgCard, 
-                      border: `1px solid ${selectedTemplate === tpl.id ? C.greenBorder : C.border}` 
-                    }}
+                {RESUME_TEMPLATES.map(tpl => (
+                  <button
+                    type="button"
+                    key={tpl.id}
+                    onClick={() => setSelectedTemplate(tpl.id)}
+                    aria-pressed={selectedTemplate === tpl.id}
+                    className="cursor-pointer rounded-sm p-3 text-left transition-all"
+                    style={{ background: selectedTemplate === tpl.id ? C.greenLight : C.bgCard, border: `1px solid ${selectedTemplate === tpl.id ? C.greenBorder : C.border}` }}
                   >
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[12px] font-bold" style={{ color: selectedTemplate === tpl.id ? C.green : C.text }}>{tpl.name}</span>
-                      {selectedTemplate === tpl.id && <span className="text-[10px]" style={{ color: C.green }}>✓</span>}
-                    </div>
-                    <p className="text-[10px] leading-relaxed" style={{ color: C.textMuted }}>{tpl.desc}</p>
-                    {/* The user will add images later: <img src={`/templates/${tpl.id}.png`} className="w-full mt-2 rounded border" style={{ borderColor: C.border }} /> */}
-                  </div>
+                    <Image src={`/resume-templates/${tpl.id}.png`} alt={`${tpl.name} resume preview`} width={850} height={1100} className="mb-3 h-auto w-full rounded-sm" />
+                    <span className="text-[12px] font-bold" style={{ color: selectedTemplate === tpl.id ? C.green : C.text }}>{tpl.name}{selectedTemplate === tpl.id ? " ✓" : ""}</span>
+                  </button>
                 ))}
               </div>
             </div>

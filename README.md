@@ -152,3 +152,9 @@ The local dashboard build is `frontend/out`; `cv-tailor dashboard install` packa
 ## License
 
 CV Tailor is open source under the [MIT license](LICENSE).
+
+## Resume formats
+
+Eight visual formats are available through the CLI and optional dashboard: Classic, Modern, Minimal, Serif, Executive, Technical, Compact, and Sidebar. Run `cv-tailor --json templates list` to see their IDs. Save the chosen `template_id` on an application before importing its resume draft.
+
+The landing page gallery uses actual one-page PDFs with fictional sample data. Its cards provide Copy prompt and an enlarged PDF modal. Rebuild both applications' sample assets and generated template catalogs with `python scripts/build_resume_gallery.py` (backend dependencies, Tectonic, and Poppler required). This does not invoke an AI provider.

@@ -1,5 +1,6 @@
 from cv_tailor.models.schemas import UserProfile
 from cv_tailor.services.templates import TEMPLATES
+from cv_tailor.services.templates.layouts import LAYOUT_STYLES, DEFAULT_SECTION_ORDER
 
 _HEADING_STYLES = {
     "classic": {"name_color": "NavyBlue", "name_vspace": "2pt", "small_prefix": r"\small ", "block_vspace": "-12pt"},
@@ -41,6 +42,16 @@ def _build_contact_line(profile: UserProfile) -> tuple[str, str]:
 def _build_heading(profile: UserProfile, template_id: str = "classic") -> str:
     name = _escape_latex(f"{profile.first_name or ''} {profile.last_name or ''}".upper())
     contact_line, portfolio_line = _build_contact_line(profile)
+    if template_id in LAYOUT_STYLES:
+        layout = LAYOUT_STYLES[template_id]
+        align = "center" if layout["centered"] else "flushleft"
+        size = layout["name_size"]
+        return (
+            f"\\begin{{{align}}}\n"
+            + rf"{{\fontsize{{{size}}}{{{size + 3}}}\selectfont\bfseries\textcolor{{accent}}{{{name}}}}}"
+            + r"\\[6pt] {\footnotesize " + contact_line + portfolio_line + "}\n"
+            + f"\\end{{{align}}}\n"
+        )
     style = _HEADING_STYLES.get(template_id, _HEADING_STYLES["classic"])
     return (
         r"\begin{center}" + "\n"
@@ -118,6 +129,8 @@ def _build_certifications(cert_line: str) -> str:
 
 def assemble_latex(profile: UserProfile, ai_content: dict, template_id: str = "classic", section_order: list[str] | None = None) -> str:
     doc = TEMPLATES.get(template_id, TEMPLATES["classic"])
+    if template_id in LAYOUT_STYLES:
+        return _assemble_layout(doc, profile, ai_content, template_id, section_order)
 
     num_exp = len(ai_content.get("experience", []))
     num_proj = len(ai_content.get("projects", []))
@@ -151,3 +164,36 @@ def assemble_latex(profile: UserProfile, ai_content: dict, template_id: str = "c
         order = list(dict.fromkeys([*order, *sections]))
         doc = doc[:matches[0].start()] + "\n".join(sections[name] for name in order if name in sections) + doc[end:]
     return doc
+
+
+def _assemble_layout(doc, profile, content, template_id, section_order):
+    def section(name, body, listing=False):
+        if listing:
+            body = r"\resumeSubHeadingListStart" + "\n" + body + "\n" + r"\resumeSubHeadingListEnd"
+        return "\\section{" + name + "}\n" + body
+
+    blocks = {}
+    if content.get("summary"):
+        blocks["Summary"] = section("Summary", _escape_latex(content["summary"]))
+    if content.get("experience"):
+        blocks["Experience"] = section("Experience", _build_experience(content["experience"]), True)
+    if content.get("projects"):
+        projects = _build_projects(content["projects"]).replace(r"\vspace{-13pt}", r"\vspace{0pt}")
+        blocks["Projects"] = section("Projects", projects, True)
+    if profile.education:
+        blocks["Education"] = section("Education", _build_education(profile), True)
+    if content.get("skills"):
+        skills = r"\begin{itemize}[leftmargin=0pt,label={}]\item " + _build_skills(content["skills"]) + r"\end{itemize}"
+        blocks["Technical Skills"] = section("Technical Skills", skills)
+    if content.get("certifications", "").strip():
+        blocks["Certifications"] = _build_certifications(content["certifications"])
+    aliases = {"skills": "Technical Skills", "work experience": "Experience", "professional summary": "Summary"}
+    requested = [aliases.get(name.lower(), name) for name in (section_order or DEFAULT_SECTION_ORDER[template_id])]
+    order = list(dict.fromkeys([*requested, *blocks]))
+    if template_id == "sidebar":
+        left = {"Technical Skills", "Education", "Certifications"}
+        doc = doc.replace("<<LEFT>>", "\n".join(blocks[n] for n in order if n in blocks and n in left))
+        doc = doc.replace("<<RIGHT>>", "\n".join(blocks[n] for n in order if n in blocks and n not in left))
+    else:
+        doc = doc.replace("<<BODY>>", "\n".join(blocks[n] for n in order if n in blocks))
+    return doc.replace("<<HEADING>>", _build_heading(profile, template_id))
