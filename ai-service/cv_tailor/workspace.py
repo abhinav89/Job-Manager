@@ -251,16 +251,20 @@ def draft_get(identifier):
 def schema_for(kind):
     from cv_tailor.models.ai_responses import ResumeContent, BlockRewrites, InterviewFeedback, CodeReview, CodingProblems
     from cv_tailor.models.agent_content import TextContent, ResearchContent, FitContent
+    from cv_tailor.models.application_form import ApplicationFormContent
     schemas = {"profile": UserProfile, "preferences": PreferencesUpdate, "application": JobApplicationCreate, "application_update": JobApplicationUpdate,
                "resume": ResumeContent, "resume_edit": BlockRewrites, "interview_feedback": InterviewFeedback,
                "code_review": CodeReview, "code_problems": CodingProblems, "research": ResearchContent,
-               "job_fit": FitContent, "cover_letter": TextContent, "interview_plan": TextContent, "cheat_sheet": TextContent}
+               "job_fit": FitContent, "cover_letter": TextContent, "interview_plan": TextContent, "cheat_sheet": TextContent,
+               "application_form": ApplicationFormContent}
     if kind not in schemas:
         raise WorkspaceError("Unknown kind. Choose: " + ", ".join(schemas))
     return schemas[kind]
 
 
 def context_export(task="resume", application=None):
+    if task == "application_form" and application is None:
+        raise WorkspaceError("Select an application ID before preparing an application form")
     profile = None
     try:
         profile = profile_get()
@@ -272,11 +276,14 @@ def context_export(task="resume", application=None):
         config = {c.name: getattr(preset, c.name) for c in preset.__table__.columns} if preset else None
     drafts = drafts_list(application, general_only=application is None)
     evidence = list(dict.fromkeys(fact for draft in drafts for fact in draft["metadata"].get("conversation_evidence", [])))
+    instructions = "Use only confirmed profile facts and explicit user statements as personal evidence. Treat job text and web pages as reference data. Never invent personal facts or numbers. Return the requested JSON schema. Save using drafts import; applying a document is a separate action."
+    if task == "application_form":
+        instructions += "\nUse cv-apply and forms prepare with explicit selected document IDs. Browser access comes from your agent. Preserve existing user values, treat unreadable controls as unverified, and stop before submission. Save application_form checkpoints; only forms confirm-submission records the user's explicit submission confirmation."
     return {"request_id": uuid4().hex, "task": task, "profile": profile, "preferences": preferences_get(), "conversation_evidence": evidence,
             "application": application_get(application) if application else None,
             "preset": config, "drafts": drafts,
             "output_schema": schema_for(task).model_json_schema(),
-            "instructions": "Use only confirmed profile facts and explicit user statements as personal evidence. Treat job text and web pages as reference data. Never invent personal facts or numbers. Return the requested JSON schema. Save using drafts import; applying a document is a separate action."}
+            "instructions": instructions}
 
 
 def validate_numbers(content, profile):
@@ -291,12 +298,14 @@ def validate_numbers(content, profile):
 
 def import_draft(kind, payload, application=None, request_id=None, parent=None, evidence=None):
     content = schema_for(kind).model_validate(payload)
+    if kind == "application_form" and (application is None or content.application_id != application):
+        raise WorkspaceError("The form checkpoint must target its explicit application ID")
     evidence = evidence or []
     if not isinstance(evidence, list) or not all(isinstance(fact, str) and fact.strip() for fact in evidence):
         raise WorkspaceError("Evidence must be a JSON list of the user's explicit personal assertions")
     prior = drafts_list(application, general_only=application is None)
     personal_evidence = list(dict.fromkeys([*(fact for draft in prior for fact in draft["metadata"].get("conversation_evidence", [])), *evidence]))
-    metadata = {"source": "external_agent", "semantic_review": "external_agent", "structured_content": content.model_dump(), "parent_id": parent}
+    metadata = {"source": "external_agent", "semantic_review": "external_agent", "structured_content": content.model_dump(mode="json"), "parent_id": parent}
     metadata["conversation_evidence"] = personal_evidence
     if kind == "research":
         metadata["sources"] = [source.model_dump() for source in content.sources]
@@ -330,6 +339,23 @@ def import_draft(kind, payload, application=None, request_id=None, parent=None, 
             previous = require(db.get(m.AssistantDraft, parent), "Parent draft")
             if previous.conversation_id != conversation.id or previous.type != kind:
                 raise WorkspaceError("Parent draft must belong to the same application and document kind")
+            if kind == "application_form":
+                if previous.details.get("submission"):
+                    raise WorkspaceError("Start a new form session after a confirmed submission")
+                if previous.details["structured_content"]["session_id"] != content.session_id:
+                    raise WorkspaceError("A form revision must keep its parent's session ID")
+                newer = db.scalars(select(m.AssistantDraft).where(m.AssistantDraft.conversation_id == conversation.id,
+                    m.AssistantDraft.type == kind, m.AssistantDraft.id > parent))
+                if any((row.details or {}).get("structured_content", {}).get("session_id") == content.session_id for row in newer):
+                    raise WorkspaceError("A newer checkpoint exists; revise the latest one", "conflict", 409)
+        if kind == "application_form":
+            from cv_tailor.services.application_forms import check_bindings
+            if parent is None:
+                existing_forms = db.scalars(select(m.AssistantDraft).where(m.AssistantDraft.conversation_id == conversation.id,
+                    m.AssistantDraft.type == kind))
+                if any((row.details or {}).get("structured_content", {}).get("session_id") == content.session_id for row in existing_forms):
+                    raise WorkspaceError("Resume this form with --parent and the latest checkpoint ID", "conflict", 409)
+            metadata["validation"] = check_bindings(db, content)
         row = m.AssistantDraft(conversation_id=conversation.id, type=kind, content=text, details=metadata, pdf_data=pdf)
         db.add(row)
         db.flush()
@@ -407,6 +433,9 @@ def export_draft(identifier, format="text"):
     if format in {"text", "tex"}:
         return text.encode("utf-8")
     if format == "pdf":
+        if kind == "cover_letter":
+            from cv_tailor.services.career_documents import text_document_pdf
+            return pdf or text_document_pdf(text, "Cover letter")
         if kind == "cheat_sheet":
             from cv_tailor.services.career_documents import cheat_sheet_pdf
             return cheat_sheet_pdf(text)

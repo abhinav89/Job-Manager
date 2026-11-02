@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Acme · Engineer application fixture</title></head>
+<body>
+<h1>Engineer at Acme</h1>
+<form onsubmit="event.preventDefault(); document.body.dataset.submitted = 'yes'">
+  <label>Name <input name="name" value="Alex" required maxlength="40"></label>
+  <label>Email <input name="email" type="email"></label>
+  <label>Why this role? <textarea name="motivation" required maxlength="12"></textarea></label>
+  <label>Project <textarea name="project" aria-describedby="project-limit"></textarea></label>
+  <small id="project-limit">Maximum 3 words</small>
+  <fieldset><legend>Experience</legend><label>Employer <input name="employer-1" value="First company"></label><label>Role description * <textarea name="description-1" required></textarea></label></fieldset>
+  <fieldset><legend>Experience</legend><label>Employer <input name="employer-2" value="Second company"></label><label>Role description * <textarea name="description-2" required></textarea></label></fieldset>
+  <button type="button" id="add" onclick="const f=document.querySelector('fieldset').cloneNode(true); f.querySelector('input').value=''; document.querySelector('form').append(f)">Add experience</button>
+  <label>Need sponsorship? <select name="sponsorship" required onchange="document.getElementById('visa-details').hidden=this.value!=='yes'"><option value="">Choose</option><option value="yes">Yes</option><option value="no">No</option></select></label>
+  <div id="visa-details" hidden><label>Visa details <input name="visa-details" required></label></div>
+  <fieldset><legend>Work preference</legend><label><input type="radio" name="work" value="remote" required>Remote</label><label><input type="radio" name="work" value="hybrid">Hybrid</label></fieldset>
+  <label>I consent <input type="checkbox" name="consent" required></label>
+  <label>Resume <input type="file" name="resume" required></label>
+  <label>Custom country <input role="combobox" name="country" value="Search text only"></label>
+  <button type="submit">Submit application</button>
+</form>
+</body></html>

@@ -88,6 +88,18 @@ def parser():
     search = jobs.add_parser("search")
     search.add_argument("keyword")
     search.add_argument("--sources", help="Comma-separated source names")
+    forms = groups.add_parser("forms", help="Prepare, check and recover agent-assisted application forms").add_subparsers(dest="action", required=True)
+    prepare = forms.add_parser("prepare")
+    prepare.add_argument("--application", required=True, type=int)
+    prepare.add_argument("--resume", type=int, help="Explicit resume draft ID")
+    prepare.add_argument("--cover-letter", type=int, help="Explicit cover-letter draft ID")
+    forms.add_parser("check").add_argument("id", type=int)
+    confirm = forms.add_parser("confirm-submission", help="Record the user's confirmation; never sends a form")
+    confirm.add_argument("id", type=int)
+    confirm.add_argument("--revision", required=True, type=int)
+    confirm.add_argument("--on", required=True, help="Actual submission date, YYYY-MM-DD")
+    confirm.add_argument("--user-confirmed", action="store_true")
+    confirm.add_argument("--request-id", required=True)
     practice = groups.add_parser("practice").add_subparsers(dest="action", required=True)
     problems = practice.add_parser("problems")
     problems.add_argument("--id", type=int)
@@ -168,6 +180,13 @@ def dispatch(a):
         return w.application_update(a.id, payload, a.revision, a.request_id)
     if a.group == "context":
         return w.context_export(a.task, a.application)
+    if a.group == "forms":
+        from cv_tailor.services.application_forms import prepare_form, check_saved_form, confirm_submission
+        if a.action == "prepare":
+            return prepare_form(a.application, a.resume, a.cover_letter)
+        if a.action == "check":
+            return check_saved_form(a.id)
+        return confirm_submission(a.id, a.revision, a.on, a.user_confirmed, a.request_id)
     if a.group == "drafts":
         if a.action == "list":
             return w.drafts_list(a.application)

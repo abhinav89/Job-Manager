@@ -360,7 +360,7 @@ def revise_draft(conversation_id: int, draft_id: int, data: ReviseDraft, request
     conversation = _conversation(db, get_workspace_id(request), conversation_id)
     original = _draft(db, conversation.id, draft_id)
     draft_type = original.type
-    if draft_type in {"tracker_action", "job_search", "agent_activity"}:
+    if draft_type in {"tracker_action", "job_search", "agent_activity", "application_form"}:
         raise HTTPException(status_code=422, detail="This item cannot be edited as a draft.")
     details = {key: value for key, value in (original.details or {}).items() if key != "assistant_message_id"}
     if draft_type == "resume":
