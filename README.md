@@ -98,7 +98,7 @@ Resumes are assembled from structured plain-text content, compiled with Tectonic
 
 ## Included skills
 
-`cv-tailor`, `cv-profile`, `cv-jobs`, `cv-job-fit`, `cv-company-research`, `cv-resume`, `cv-resume-edit`, `cv-cover-letter`, `cv-tracker`, `cv-interview`, `cv-code-practice`.
+`cv-tailor`, `cv-profile`, `cv-jobs`, `cv-job-fit`, `cv-company-research`, `cv-resume`, `cv-resume-edit`, `cv-cover-letter`, `cv-tracker`, `cv-interview`, `cv-code-practice`, `cv-connect`.
 
 Canonical skills live in `.agents/skills`, with Claude entrypoints in `.claude/skills`. They share the same CLI and output schemas. Company research uses the harness's browsing tools, or user-provided sources when browsing is unavailable. Factual grounding guidance and deterministic checks help catch unsupported claims; review generated documents.
 
@@ -158,3 +158,11 @@ CV Tailor is open source under the [MIT license](LICENSE).
 Eight visual formats are available through the CLI and optional dashboard: Classic, Modern, Minimal, Serif, Executive, Technical, Compact, and Sidebar. Run `cv-tailor --json templates list` to see their IDs. Save the chosen `template_id` on an application before importing its resume draft.
 
 The landing page gallery uses actual one-page PDFs with fictional sample data. Its cards provide Copy prompt and an enlarged PDF modal. Rebuild both applications' sample assets and generated template catalogs with `python scripts/build_resume_gallery.py` (backend dependencies, Tectonic, and Poppler required). This does not invoke an AI provider.
+
+## Guided tracking connections
+
+Copy an Obsidian, Notion, Google Sheets, or Markdown connection prompt from the landing page into your coding agent in this checkout. The `cv-connect` skill guides setup and prepares reusable local setup/publishing scripts; these are agent-configured connections, not a preconfigured background sync service. SQLite remains primary, publishing is one-way and manual, and personal notes/custom fields are preserved.
+
+Any needed credentials are entered in your own terminal and saved in the Git-ignored `.env.integrations` file. Do not paste credentials into agent chat. For example, run `python scripts/integration_env.py set CV_TAILOR_NOTION_TOKEN` yourself for hidden token entry; `python scripts/integration_env.py status` reports configured key names only. OAuth setup scripts can call `save_env_values` from that helper directly in memory. The helper refuses to write a tracked or unignored environment file. Load values with `dotenv_values(path, interpolate=False)`.
+
+Nonsecret configuration and generated scripts live under the Git-ignored `.cv-tailor-integrations/`. Review a dry run before your first publish. Provider authorization may be required for cloud tools; Obsidian/Markdown folder publishing needs no provider token. Integration logos are from Simple Icons under CC0; notices accompany the assets.

@@ -66,3 +66,6 @@ frontend/.next-remediation/
 # Browser test artifacts
 landing/test-results/
 landing/playwright-report/
+
+# Local agent-generated integration scripts and destination configuration
+.cv-tailor-integrations/

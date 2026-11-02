@@ -14,6 +14,7 @@ Load the saved profile using `profile get`; gather missing facts through convers
 - Resume creation/editing: cv-resume, cv-resume-edit
 - Cover letters: cv-cover-letter
 - Application management: cv-tracker
+- Optional tracking connections and publishing setup: cv-connect
 - Interview preparation/practice: cv-interview
 - Coding exercises/review: cv-code-practice
 For a multi-step request, save the application when requested, export its context, produce the requested documents, and save each as a draft. Report real command results and document IDs. Applying drafts is a separate operation. The CLI and optional dashboard use the same local SQLite data; no account or CV Tailor AI API key is required.
