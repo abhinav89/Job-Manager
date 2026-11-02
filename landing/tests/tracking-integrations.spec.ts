@@ -11,7 +11,7 @@ test("each destination copies its setup wizard and local credential instructions
   for (const name of ["Obsidian", "Notion", "Google Sheets", "Markdown", "Airtable", "HubSpot", "GoHighLevel"]) {
     const card = section.getByRole("article").filter({ has: page.getByRole("heading", { name, exact: true }) });
     await expect(card.getByRole("img", { name: `${name} logo` })).toBeVisible();
-    expect(await card.locator("img").evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
+    await expect.poll(() => card.locator("img").evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
     await card.getByRole("button", { name: `Copy ${name} connection prompt`, exact: true }).click();
     await expect(card.getByRole("status")).toHaveText("Copied to clipboard.");
     const prompt = await page.evaluate(() => (window as Window & { copiedPrompt?: string }).copiedPrompt);

@@ -627,3 +627,37 @@ html:has(.pdf-preview-dialog[open]) { overflow: hidden; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .feature-card:hover, .github-star:hover { transform: none; }
 }
+
+.apply-section { padding-bottom: 88px; }
+.apply-workflow { display: grid; grid-template-columns: 1fr 1.05fr; gap: 64px; align-items: start; }
+.apply-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 29px; }
+.apply-steps li { display: flex; align-items: flex-start; gap: 18px; }
+.apply-steps .step-number { flex-shrink: 0; margin: 0; }
+.apply-steps h3 { font-size: 12px; line-height: 1.6; margin-bottom: 7px; }
+.apply-steps p { color: var(--muted); font-size: 11px; line-height: 1.9; max-width: 380px; }
+.apply-prompt-panel { min-width: 0; }
+.apply-prompt-panel .prompt-window { margin-top: 0; }
+.apply-prompt-panel .prompt-window-header:has(.copy-fallback) { flex-wrap: wrap; }
+.apply-prompt-panel .copy-control:has(.copy-fallback) { flex-basis: 100%; min-width: 0; }
+.apply-prompt-panel blockquote { overflow-wrap: anywhere; }
+.apply-dashboard-path { margin-top: 18px; color: var(--muted); font-size: 10px; line-height: 1.9; }
+.apply-dashboard-path strong { color: var(--ink); font-weight: 500; }
+.apply-notes { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 34px; padding-top: 22px; border-top: 1px solid var(--line); }
+.apply-notes p { max-width: 700px; color: var(--muted); font-size: 10px; line-height: 1.9; }
+.apply-notes .text-link { flex-shrink: 0; }
+@media (max-width: 900px) {
+  .apply-workflow { grid-template-columns: 1fr; gap: 30px; }
+  .apply-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
+  .apply-steps li { flex-direction: column; gap: 12px; }
+  .apply-notes { align-items: flex-start; flex-direction: column; gap: 16px; }
+}
+@media (max-width: 600px) {
+  .apply-section { padding-bottom: 61px; }
+  .apply-steps { grid-template-columns: 1fr; gap: 23px; }
+  .apply-steps li { flex-direction: row; gap: 14px; }
+  .apply-steps h3 { font-size: 11px; }
+  .apply-steps p { font-size: 10px; }
+  .apply-dashboard-path { font-size: 9px; }
+  .apply-notes { margin-top: 26px; }
+  .apply-notes p, .apply-notes .text-link { font-size: 9px; }
+}
