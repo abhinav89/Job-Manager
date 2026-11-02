@@ -9,6 +9,9 @@ const destinations = [
   { id: "notion", name: "Notion", instruction: "Connect to a Notion application tracker. Help me choose or create a dedicated destination, authorize access, and map its properties while preserving my personal page content." },
   { id: "googlesheets", name: "Google Sheets", instruction: "Connect to a Google Sheets application tracker. Guide local browser authorization, choose a spreadsheet and tracker tab, and map columns while preserving custom columns and formulas." },
   { id: "markdown", name: "Markdown", instruction: "Connect to a local Markdown notes folder I choose. Create application notes and an overview, preserving content outside the CV Tailor managed blocks." },
+  { id: "airtable", name: "Airtable", instruction: "Connect to an Airtable application tracker. Help me select a base and editable table, authorize only the needed access, and map fields while preserving formulas, linked records, and custom fields." },
+  { id: "hubspot", name: "HubSpot", instruction: "Connect to a HubSpot application tracker. Verify my account's supported objects and API access, help me select a dedicated deal pipeline or an approved available object, and map application stages while preserving existing CRM records. Do not assume paid custom objects are available or trigger outreach and sales automations." },
+  { id: "gohighlevel", name: "GoHighLevel", logo: "gohighlevel.png", wide: true, instruction: "Connect to GoHighLevel (GHL) for application tracking. Guide me through the correct sub-account and scoped authorization, choose a dedicated opportunity pipeline, and map stages and required contact associations. Never invent contacts, merge applications that share a contact, or trigger messaging, campaigns, and outreach automations." },
 ];
 
 function setupPrompt(instruction: string) {
@@ -17,10 +20,10 @@ function setupPrompt(instruction: string) {
 
 export default function TrackingIntegrations() {
   return <section className="tracking-integrations section" id="integrations" aria-labelledby="integrations-title">
-    <div className="section-heading"><div><span className="eyebrow">YOUR DATA. YOUR TOOLS.</span><h2 id="integrations-title">Connect it anywhere.</h2></div><p>Keep tracking locally. Copy a prompt and let your AI agent guide the connection to the tools you already use.</p></div>
+    <div className="section-heading"><div><span className="eyebrow">YOUR DATA. YOUR TOOLS.</span><h2 id="integrations-title">Connect it anywhere.</h2></div><p>Keep tracking locally. Copy a prompt and let your AI agent guide the connection to your notes, spreadsheets, or CRM.</p></div>
     <div className="integration-grid">
       {destinations.map(destination => <article className="integration-card" key={destination.id}>
-        <div className="integration-logo"><Image src={`/integrations/${destination.id}.svg`} alt={`${destination.name} logo`} width={49} height={49} /></div>
+        <div className={`integration-logo${destination.wide ? " integration-logo-wide" : ""}`}><Image src={`/integrations/${destination.logo || `${destination.id}.svg`}`} alt={`${destination.name} logo`} width={destination.wide ? 132 : 49} height={destination.wide ? 30 : 49} /></div>
         <h3>{destination.name}</h3>
         <CopyButton text={setupPrompt(destination.instruction)} label={`Copy ${destination.name} connection prompt`} caption="Copy prompt" />
       </article>)}
