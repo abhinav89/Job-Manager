@@ -13,6 +13,7 @@ A single-user, local career workspace: an agent-friendly Python CLI, SQLite, and
 - The optional dashboard is a static export served by FastAPI; HTTP endpoints are under `/api`. The server accepts local connections and same-origin browser requests only.
 - Public landing assets are built independently from `landing/`; the application is not hosted.
 - Fresh workspaces are supported; legacy PostgreSQL/account migration is deferred.
+- SQLite workspace preferences store a default resume template, preferred tracking provider and nonsecret setup-file reference, revision, and stable workspace UUID. CLI status/context and the local dashboard load them. Changing a default does not rewrite existing applications; credentials remain in the Git-ignored environment file. Existing profile template defaults remain compatible.
 
 ## Language
 

@@ -13,7 +13,18 @@ def workspace_status():
     except w.WorkspaceError:
         profile = None
     return {"name": "Local workspace", "email": (profile or {}).get("email", ""),
-            "data_dir": str(data_dir()), "profile_exists": profile is not None, "ai": capabilities()}
+            "data_dir": str(data_dir()), "profile_exists": profile is not None, "preferences": w.preferences_get(), "ai": capabilities()}
+
+
+@router.get("/preferences")
+def preferences():
+    return w.preferences_get()
+
+
+@router.patch("/preferences")
+def save_preferences(data: dict):
+    # Shared validation omits rejected input values from credential-related errors.
+    return w.preferences_update(data)
 
 
 @router.get("/context")

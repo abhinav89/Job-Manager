@@ -131,7 +131,7 @@ function SelectField({ label, value, onChange, options }: {
   return (
     <div>
       <label className="block text-[10px] tracking-[0.2em] uppercase mb-1.5" style={{ color: "#7a7570" }}>{label}</label>
-      <select value={value} onChange={e => onChange(e.target.value)}
+      <select aria-label={label} value={value} onChange={e => onChange(e.target.value)}
         className="w-full text-sm p-2.5 rounded-sm outline-none appearance-none font-mono"
         style={{ background: "#e8e4dd", color: "#1a1814", border: "1px solid #d4cfc7" }}>
         {options.map(o => <option key={o} value={o}>{o || "— Select —"}</option>)}
@@ -302,7 +302,8 @@ export default function TrackerPage() {
   const queryClient = useQueryClient();
   const dispatch = useDispatch();
   const trackerUi = useSelector((state: RootState) => state.trackerUi);
-  const { isError: userError } = useWorkspace();
+  const workspaceQuery = useWorkspace();
+  const userError = workspaceQuery.isError;
   const jobsQuery = useTrackerJobs(!userError);
   const expandedJob = trackerUi.expandedJob;
   const detailsQuery = useTrackerDetails(expandedJob);
@@ -486,7 +487,7 @@ export default function TrackerPage() {
     },
   });
 
-  const openCreate = () => { setEditingJob(null); setForm(EMPTY); setJobDescriptionOpen(false); setShowModal(true); };
+  const openCreate = () => { setEditingJob(null); setForm({ ...EMPTY, template_id: workspaceQuery.data?.preferences?.resume_template || "classic" }); setJobDescriptionOpen(false); setShowModal(true); };
   const openEdit = (job: Job) => {
     const editableJob = detailsQuery.data?.id === job.id ? { ...job, ...detailsQuery.data } : job;
     setEditingJob(editableJob);
@@ -655,7 +656,7 @@ export default function TrackerPage() {
                 </svg>
                 Discover Jobs
               </Link>
-              <button onClick={openCreate}
+              <button onClick={openCreate} disabled={workspaceQuery.isPending || workspaceQuery.isError}
                 className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold tracking-[0.15em] uppercase rounded-sm transition-colors"
                 style={{ background: "#1a1814", color: "#f5f2ed" }}
                 onMouseEnter={e => e.currentTarget.style.background = "#2a2520"}
@@ -750,7 +751,7 @@ export default function TrackerPage() {
                 {searchQuery || filterStatus !== "All" ? "No jobs match your filter" : "No applications yet"}
               </p>
               {!searchQuery && filterStatus === "All" && (
-                <button onClick={openCreate} className="text-xs px-4 py-2 rounded-sm"
+                <button onClick={openCreate} disabled={workspaceQuery.isPending || workspaceQuery.isError} className="text-xs px-4 py-2 rounded-sm"
                   style={{ background: "#e8f5c0", color: "#3d6600", border: "1px solid #8ab030" }}>
                   Add your first application →
                 </button>

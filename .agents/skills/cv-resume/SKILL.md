@@ -6,6 +6,7 @@ description: Tailor and render a one-page resume from confirmed profile facts an
 # cv-resume
 
 Run `cv-tailor --json templates list` to discover the supported visual layouts: classic, modern, minimal, serif, executive, technical, compact, and sidebar. When a user chooses a layout, save `{ "template_id": "CHOSEN_ID" }` through `applications update ID --revision CURRENT_REVISION --input template.json` before exporting application context. Do not silently fall back to another layout.
+Load `preferences get` and reuse its `resume_template` when no application-specific choice exists. When the user asks to remember a format or make it their default, save `{ "resume_template": "CHOSEN_ID" }` through `preferences set --revision CURRENT_PREFERENCES_REVISION --input preferences.json`. Preserve their tracking choice. An application-only change must not change the default or other applications.
 
 Export `cv-tailor --json context export --task resume --application ID`. Use its profile, preset, chosen visual template, job, and ResumeContent JSON schema. The AI supplies plain text in structured fields; CV Tailor builds LaTeX deterministically.
 Select and reword relevant experience without inventing facts, skills, accomplishments, or numbers. Prior generated wording and job requirements are not personal evidence. Review the result against confirmed facts before saving.

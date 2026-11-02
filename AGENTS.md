@@ -7,4 +7,6 @@ Activate `.venv` before using `cv-tailor`. Without activation use `.venv/Scripts
 
 Run `cv-tailor --json status` at the start of a session, then load the saved profile and relevant application. Storage defaults to `~/.cv-tailor`; pass `--data-dir` consistently for a different workspace. No CV Tailor account or AI API key is required. Write using CLI commands, not raw SQLite or code edits. Preserve the user's confirmed facts and distinguish drafts from current application documents.
 
+Status includes saved SQLite preferences. Use `preferences get` to load the default resume template and preferred tracking connection; reuse them unless the user changes them. Save explicit preference choices with `preferences set --revision N --input preferences.json`. Application-specific template choices override the default. Credentials stay in the Git-ignored environment file, never preferences or SQLite.
+
 For engineering changes read CONTEXT.md and applicable nested AGENTS.md files. Backend: `python -m pytest ai-service/tests`. Frontend: `npm --prefix frontend run build`. Never modify another agent's global configuration.

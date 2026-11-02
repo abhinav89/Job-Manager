@@ -10,11 +10,12 @@ import json
 import re
 from pathlib import Path
 from uuid import uuid4
+from pydantic import ValidationError
 
 from sqlalchemy import select, func
 from cv_tailor.database import SessionLocal
 from cv_tailor.models import database_models as m
-from cv_tailor.models.schemas import UserProfile, JobApplicationCreate, JobApplicationUpdate
+from cv_tailor.models.schemas import UserProfile, JobApplicationCreate, JobApplicationUpdate, PreferencesUpdate
 from cv_tailor.services.profile_service import PROFILE_LOAD_OPTIONS, serialize_profile, save_profile_data
 
 
@@ -67,6 +68,50 @@ def mutation(operation, payload, action, request_id=None):
         return result
 
 
+def preferences_dict(db):
+    row = db.get(m.WorkspacePreferences, 1)
+    profile = db.scalar(select(m.Profile).where(m.Profile.workspace_id == 1))
+    return {"revision": row.revision if row else 1, "workspace_uuid": row.workspace_uuid if row else None,
+            "resume_template": (row.resume_template if row else None) or (profile.preferred_template if profile else None) or "classic",
+            "tracking_connection": row.tracking_connection if row else None}
+
+
+def preferences_get():
+    with SessionLocal() as db:
+        return preferences_dict(db)
+
+
+def preferences_update(payload, revision=None):
+    try:
+        validated = PreferencesUpdate.model_validate(payload)
+        values = validated.model_dump(exclude_unset=True)
+        if validated.tracking_connection is not None:
+            values["tracking_connection"] = validated.tracking_connection.model_dump()
+    except ValidationError:
+        raise WorkspaceError("Use a supported resume_template and tracking_connection (provider and absolute nonsecret JSON config_path only). Credentials belong in the Git-ignored environment file.") from None
+    revision = revision if revision is not None else values.pop("revision", None)
+    values.pop("revision", None)
+    def save(db):
+        row = db.get(m.WorkspacePreferences, 1)
+        if row is None:
+            row = m.WorkspacePreferences(workspace_id=1)
+            db.add(row)
+            db.flush()
+        check_revision(row, revision)
+        if "resume_template" in values:
+            profile = db.scalar(select(m.Profile).where(m.Profile.workspace_id == 1))
+            if profile and profile.preferred_template != values["resume_template"]:
+                profile.preferred_template = values["resume_template"]
+                profile.revision += 1
+        for key, value in values.items():
+            setattr(row, key, value)
+        if values:
+            row.revision += 1
+        db.flush()
+        return preferences_dict(db)
+    return mutation("preferences.update", [values, revision], save)
+
+
 def profile_get():
     with SessionLocal() as db:
         row = db.scalar(select(m.Profile).options(*PROFILE_LOAD_OPTIONS).where(m.Profile.workspace_id == 1))
@@ -80,7 +125,16 @@ def profile_save(payload, revision=None):
         current = db.scalar(select(m.Profile).where(m.Profile.workspace_id == 1))
         if current:
             check_revision(current, revision)
-        save_profile_data(db, 1, data)
+        preferences = db.get(m.WorkspacePreferences, 1)
+        previous_template = preferences_dict(db)["resume_template"]
+        profile_data = data
+        if data.preferred_template is None and preferences and preferences.resume_template:
+            profile_data = data.model_copy(update={"preferred_template": preferences.resume_template})
+        save_profile_data(db, 1, profile_data)
+        if data.preferred_template is not None and preferences:
+            preferences.resume_template = data.preferred_template
+            if data.preferred_template != previous_template:
+                preferences.revision += 1
         row = db.scalar(select(m.Profile).options(*PROFILE_LOAD_OPTIONS).where(m.Profile.workspace_id == 1))
         if current:
             row.revision += 1
@@ -119,8 +173,7 @@ def application_add(payload, request_id=None):
     values = JobApplicationCreate.model_validate(payload).model_dump()
     def add(db):
         if "template_id" not in payload:
-            profile = db.scalar(select(m.Profile).where(m.Profile.workspace_id == 1))
-            values["template_id"] = profile.preferred_template if profile and profile.preferred_template else "classic"
+            values["template_id"] = preferences_dict(db)["resume_template"]
         row = m.JobApplication(workspace_id=1, **values)
         db.add(row)
         db.flush()
@@ -198,7 +251,7 @@ def draft_get(identifier):
 def schema_for(kind):
     from cv_tailor.models.ai_responses import ResumeContent, BlockRewrites, InterviewFeedback, CodeReview, CodingProblems
     from cv_tailor.models.agent_content import TextContent, ResearchContent, FitContent
-    schemas = {"profile": UserProfile, "application": JobApplicationCreate, "application_update": JobApplicationUpdate,
+    schemas = {"profile": UserProfile, "preferences": PreferencesUpdate, "application": JobApplicationCreate, "application_update": JobApplicationUpdate,
                "resume": ResumeContent, "resume_edit": BlockRewrites, "interview_feedback": InterviewFeedback,
                "code_review": CodeReview, "code_problems": CodingProblems, "research": ResearchContent,
                "job_fit": FitContent, "cover_letter": TextContent, "interview_plan": TextContent, "cheat_sheet": TextContent}
@@ -219,7 +272,7 @@ def context_export(task="resume", application=None):
         config = {c.name: getattr(preset, c.name) for c in preset.__table__.columns} if preset else None
     drafts = drafts_list(application, general_only=application is None)
     evidence = list(dict.fromkeys(fact for draft in drafts for fact in draft["metadata"].get("conversation_evidence", [])))
-    return {"request_id": uuid4().hex, "task": task, "profile": profile, "conversation_evidence": evidence,
+    return {"request_id": uuid4().hex, "task": task, "profile": profile, "preferences": preferences_get(), "conversation_evidence": evidence,
             "application": application_get(application) if application else None,
             "preset": config, "drafts": drafts,
             "output_schema": schema_for(task).model_json_schema(),

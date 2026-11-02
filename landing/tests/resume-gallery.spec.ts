@@ -25,6 +25,7 @@ test("mobile cards copy the chosen template prompt and render the Sidebar PDF", 
   await page.goto("/#templates");
   await page.getByRole("button", { name: "Copy Sidebar resume prompt", exact: true }).click();
   await expect.poll(() => page.evaluate(() => (window as Window & { copiedPrompt?: string }).copiedPrompt)).toContain("template_id: sidebar");
+  await expect.poll(() => page.evaluate(() => (window as Window & { copiedPrompt?: string }).copiedPrompt)).toContain("Remember this as my default resume format");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole("button", { name: "Preview Sidebar PDF", exact: true }).click();
   await expect(page.getByRole("dialog").locator("canvas")).toBeVisible({ timeout: 20000 });

@@ -17,6 +17,8 @@ test("each destination copies its setup wizard and local credential instructions
     const prompt = await page.evaluate(() => (window as Window & { copiedPrompt?: string }).copiedPrompt);
     expect(prompt).toContain(name);
     expect(prompt).toContain("cv-connect");
+    expect(prompt).toContain("preferences get");
+    expect(prompt).toContain("preferences set");
     expect(prompt).toContain("SQLite as my primary");
     expect(prompt).toContain(".env.integrations");
     expect(prompt).toContain("untracked and ignored");
