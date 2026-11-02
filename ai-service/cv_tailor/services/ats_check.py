@@ -6,7 +6,7 @@ from pypdf import PdfReader
 def ats_check(pdf_bytes: bytes, preset_section_order: list[str] | None = None) -> dict:
     warnings = []
     extracted_text = ""
-    
+
     # Try pdftotext (poppler)
     has_pdftotext = shutil.which("pdftotext") is not None
     if has_pdftotext:
@@ -15,7 +15,7 @@ def ats_check(pdf_bytes: bytes, preset_section_order: list[str] | None = None) -
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
             tmp.write(pdf_bytes)
             tmp_path = tmp.name
-        
+
         try:
             result = subprocess.run(["pdftotext", "-layout", tmp_path, "-"], capture_output=True, text=True, check=True)
             extracted_text = result.stdout
@@ -25,7 +25,7 @@ def ats_check(pdf_bytes: bytes, preset_section_order: list[str] | None = None) -
         finally:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
-                
+
     if not has_pdftotext:
         if not warnings:
             warnings.append("pdftotext (poppler) not found; used pypdf fallback — order check less reliable.")
