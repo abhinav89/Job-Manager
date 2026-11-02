@@ -2,21 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Providers from "@/components/Providers";
 
-export const metadata: Metadata = {
-  title: "CV Tailor",
-  description: "AI-powered resume tailoring",
-  metadataBase: new URL("https://cvtailor.me"),
-  alternates: {
-    canonical: "/",
-  },
-  openGraph: {
-    title: "CV Tailor",
-    description: "AI-powered resume tailoring",
-    url: "https://cvtailor.me",
-    siteName: "CV Tailor",
-    type: "website",
-  },
-};
+export const metadata: Metadata = { title: "CV Tailor — Local workspace", description: "Your local career workspace", robots: {index: false, follow: false} };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

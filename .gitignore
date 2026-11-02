@@ -36,5 +36,29 @@ frontend/.vercel
 graphify-out/
 
 # --- Agent Configurations ---
-.agents/
-.claude/
+# Canonical product skills and Claude entrypoints are versioned.
+
+# Local runtime and build artifacts
+.venv/
+*.egg-info/
+.pytest_cache/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+ai-service/cv_tailor/static/dashboard/
+landing/node_modules/
+landing/.next/
+landing/out/
+landing/next-env.d.ts
+landing/*.tsbuildinfo
+frontend/.next-remediation/
+
+# Keep personal agent configuration private; ship only product skills.
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/cv-*/
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/cv-*/

@@ -11,7 +11,7 @@ async function fixtures(page: Page) {
   await page.route("**/api/**", async route => {
     const path = new URL(route.request().url()).pathname;
     let data: unknown = {};
-    if (path === "/api/auth/me") data = { user_id: 1, email: "jane@example.com", is_admin: false };
+    if (path === "/api/workspace") data = { name: "Local workspace", email: "jane@example.com", profile_exists: true, data_dir: "/test/workspace", ai: {mode: "external", generation: false, assistant: false, research: false, ranking: false} };
     else if (path === "/api/profile/me") data = { first_name: "Jane", last_name: "Doe", email: "jane@example.com", mobile_no: "", education: [], experience: [], projects: [], skills: [], certifications: [], preset_slug: "blank" };
     else if (path === "/api/presets") data = [];
     else if (path === "/api/tracker") data = [job];
@@ -156,7 +156,8 @@ test("leaving interview practice stops every acquired camera track", async ({ pa
   await page.goto("/interview?job_id=1");
   await expect(page.getByText("Ready to practice?", { exact: true })).toBeVisible();
   await expect.poll(() => page.evaluate(() => (window as unknown as { auditCameraTracks: MediaStreamTrack[] }).auditCameraTracks.length)).toBeGreaterThan(0);
-  await page.locator('a[href="/generate"]').first().click();
+  await page.getByRole("link", { name: "Generate CV", exact: true }).first().click();
+  await expect(page).toHaveURL(/\/generate\//, { timeout: 10000 });
   await expect.poll(() => page.evaluate(() => (window as unknown as { auditCameraTracks: MediaStreamTrack[] }).auditCameraTracks.every(track => track.readyState === "ended"))).toBe(true);
 });
 
@@ -186,4 +187,33 @@ test("cancelling an assistant reply aborts consumption and ignores late completi
   });
   await expect(page.getByRole("button", { name: "Cancel reply", exact: true })).toHaveCount(0);
   await expect(page.getByText("Late completion must be ignored", { exact: true })).toHaveCount(0);
+});
+
+
+test("external mode offers an application-specific agent prompt", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await fixtures(page);
+  await page.goto("/dashboard/");
+  await page.getByText("Work with your CLI agent", { exact: false }).click();
+  await page.getByLabel("Agent application").selectOption("1");
+  await page.getByRole("button", { name: "Copy agent prompt", exact: true }).click();
+  const prompt = await page.evaluate(() => navigator.clipboard.readText());
+  expect(prompt).toContain("context export --task resume --application 1");
+  expect(prompt).toContain("/test/workspace");
+  await expect(page.getByRole("button", { name: /sign in|logout/i })).toHaveCount(0);
+});
+
+test("CLI and the packaged dashboard share a real SQLite workspace", async ({ page, request }) => {
+  const { execFileSync } = await import("node:child_process");
+  const workspace = await (await request.get("/api/workspace")).json();
+  const command = ["-m", "cv_tailor", "--data-dir", workspace.data_dir, "--json"];
+  const job = JSON.parse(execFileSync("python", [...command, "applications", "add", "--input", "-", "--request-id", "browser-cli-create"], {
+    input: JSON.stringify({ company_name: "CLI smoke company", job_title: "CLI saved role" }), encoding: "utf8",
+  }));
+  await page.goto("/tracker/");
+  await expect(page.getByText("CLI smoke company", { exact: true })).toBeVisible();
+  const response = await request.patch(`/api/tracker/${job.id}`, { data: { status: "Interview", revision: job.revision } });
+  expect(response.ok()).toBeTruthy();
+  const saved = JSON.parse(execFileSync("python", [...command, "applications", "get", String(job.id)], { encoding: "utf8" }));
+  expect(saved.status).toBe("Interview");
 });

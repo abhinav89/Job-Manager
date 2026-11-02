@@ -1,15 +1,8 @@
 import { queryOptions, useQuery, type QueryClient } from "@tanstack/react-query";
 import { API_URL, getApiError } from "@/lib/api";
 
-export type CurrentUser = { user_id: number; email: string; is_admin: boolean };
+export type Workspace = { name: string; email: string; profile_exists: boolean; data_dir: string; ai: {mode: string; generation: boolean; assistant: boolean; research: boolean; ranking: boolean} };
 
-export type AdminUser = {
-  id: number;
-  email: string;
-  name: string;
-  is_admin: boolean;
-  tracker: { total: number; by_status: Partial<Record<ApplicationStatus, number>> };
-};
 export type ApplicationStatus = "Saved" | "Applied" | "Interview" | "Tech Test" | "Offer" | "Rejected" | "Ghosted";
 export type ApplicationPriority = "High" | "Medium" | "Low";
 export type ResumeTemplate = "classic" | "modern";
@@ -19,6 +12,7 @@ export type Experience = { job_title: string; company: string; location: string;
 export type Project = { name: string; description?: string; date_range?: string; link?: string | null };
 export type Certification = { name: string; issuer?: string; date_issued?: string };
 export type Profile = {
+  revision?: number;
   first_name: string;
   last_name: string;
   mobile_no: string;
@@ -42,6 +36,7 @@ export type PresetSummary = {
 };
 
 export type JobSummary = {
+  revision?: number;
   id: number;
   company_name: string;
   job_title: string;
@@ -83,20 +78,19 @@ export async function readJson<T>(path: string, fallback: string): Promise<T> {
 }
 
 export const queryKeys = {
-  authenticated: ["authenticated"] as const,
-  currentUser: ["authenticated", "current-user"] as const,
-  profile: ["authenticated", "profile", "me"] as const,
+  workspaceData: ["workspace-data"] as const,
+  workspace: ["workspace-data", "current-user"] as const,
+  profile: ["workspace-data", "profile", "me"] as const,
   presets: ["presets"] as const,
-  tracker: ["authenticated", "tracker"] as const,
-  trackerJobs: ["authenticated", "tracker", "jobs"] as const,
-  trackerStats: ["authenticated", "tracker", "stats"] as const,
-  trackerDetails: (id: number) => ["authenticated", "tracker", "details", id] as const,
-  adminUsers: ["authenticated", "admin", "users"] as const,
+  tracker: ["workspace-data", "tracker"] as const,
+  trackerJobs: ["workspace-data", "tracker", "jobs"] as const,
+  trackerStats: ["workspace-data", "tracker", "stats"] as const,
+  trackerDetails: (id: number) => ["workspace-data", "tracker", "details", id] as const,
 };
 
-export const currentUserQueryOptions = () => queryOptions({
-  queryKey: queryKeys.currentUser,
-  queryFn: () => readJson<CurrentUser>("/auth/me", "Unable to load your account."),
+export const workspaceQueryOptions = () => queryOptions({
+  queryKey: queryKeys.workspace,
+  queryFn: () => readJson<Workspace>("/workspace", "Unable to load your local workspace."),
   retry: false,
 });
 
@@ -127,18 +121,11 @@ export const trackerDetailsQueryOptions = (id: number) => queryOptions({
   queryFn: () => readJson<JobDetails>(`/tracker/${id}/details`, "Unable to load application details."),
 });
 
-export const adminUsersQueryOptions = () => queryOptions({
-  queryKey: queryKeys.adminUsers,
-  queryFn: () => readJson<AdminUser[]>("/admin/users", "Unable to load users."),
-});
 
-export function useCurrentUser() {
-  return useQuery(currentUserQueryOptions());
+export function useWorkspace() {
+  return useQuery(workspaceQueryOptions());
 }
 
-export function useAdminUsers(enabled = true) {
-  return useQuery({ ...adminUsersQueryOptions(), enabled });
-}
 
 export function useProfile() {
   return useQuery(profileQueryOptions());
@@ -158,15 +145,15 @@ export function useTrackerStats(enabled = true) {
 
 export function useTrackerDetails(id: number | null) {
   return useQuery<JobDetails>({
-    queryKey: id === null ? ["authenticated", "tracker", "details", "none"] : queryKeys.trackerDetails(id),
+    queryKey: id === null ? ["workspace-data", "tracker", "details", "none"] : queryKeys.trackerDetails(id),
     queryFn: () => readJson<JobDetails>(`/tracker/${id}/details`, "Unable to load application details."),
     enabled: id !== null,
   });
 }
 
-export function warmAuthenticatedData(queryClient: QueryClient) {
+export function warmWorkspaceData(queryClient: QueryClient) {
   return Promise.allSettled([
-    queryClient.prefetchQuery(currentUserQueryOptions()),
+    queryClient.prefetchQuery(workspaceQueryOptions()),
     queryClient.prefetchQuery(profileQueryOptions()),
     queryClient.prefetchQuery(presetsQueryOptions()),
     queryClient.prefetchQuery(trackerJobsQueryOptions()),

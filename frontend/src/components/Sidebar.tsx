@@ -3,12 +3,9 @@ import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useDispatch } from "react-redux";
-import { API_URL } from "@/lib/api";
-import { useCurrentUser, useTrackerJobs, type ApplicationStatus } from "@/lib/queries";
-import { queryClient } from "@/lib/queryClient";
+import { useWorkspace, useTrackerJobs, type ApplicationStatus } from "@/lib/queries";
 import { setExpandedJob } from "@/lib/store";
 
-const API = API_URL;
 
 // ── Icons ────────────────────────────────────────────────────────
 const IconDashboard = () => (
@@ -50,20 +47,7 @@ const IconDiscover = () => (
   </svg>
 );
 
-const IconAdmin = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-    <path d="M8 1.5l5 2v3.5c0 3.3-2.1 5.9-5 7-2.9-1.1-5-3.7-5-7V3.5l5-2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
-    <path d="M5.8 8l1.6 1.6L10.2 6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-);
 
-const IconLogout = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-    <path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-    <path d="M10.5 5L14 8l-3.5 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-    <line x1="14" y1="8" x2="6" y2="8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-  </svg>
-);
 
 const IconChevron = ({ collapsed }: { collapsed: boolean }) => (
   <svg width="12" height="12" viewBox="0 0 12 12" fill="none"
@@ -115,12 +99,10 @@ export default function Sidebar() {
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [trackerOpen, setTrackerOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { data: user } = useCurrentUser();
+  const { data: user } = useWorkspace();
   const { data: trackerJobs = [], isPending: trackerJobsLoading } = useTrackerJobs(trackerOpen);
   const userEmail = user?.email || "";
-  const navItems = user?.is_admin
-    ? [...NAV_ITEMS, { label: "Admin", href: "/admin", icon: <IconAdmin /> }]
-    : NAV_ITEMS;
+  const navItems = NAV_ITEMS;
 
   const closeMobile = () => setMobileOpen(false);
 
@@ -130,11 +112,6 @@ export default function Sidebar() {
     closeMobile();
   };
 
-  const handleLogout = async () => {
-    await fetch(`${API}/auth/logout`, { method: "POST", credentials: "include" });
-    queryClient.clear();
-    router.push("/login");
-  };
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
 
@@ -340,7 +317,7 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* ── Bottom: user + logout ── */}
+      {/* ── Bottom: local profile ── */}
       <div className="shrink-0 px-2 pb-4" style={{ borderTop: "1px solid #d4cfc7", paddingTop: "12px" }}>
         {/* User email */}
         {!collapsed && userEmail && (
@@ -350,7 +327,7 @@ export default function Sidebar() {
               {userEmail[0].toUpperCase()}
             </div>
             <div className="overflow-hidden">
-              <div className="text-[9px] tracking-[0.2em] uppercase" style={{ color: "#a8a39c" }}>Signed in</div>
+              <div className="text-[9px] tracking-[0.2em] uppercase" style={{ color: "#a8a39c" }}>Local workspace</div>
               <div className="text-[10px] truncate" style={{ color: "#7a7570" }}>{userEmail}</div>
             </div>
           </div>
@@ -364,29 +341,7 @@ export default function Sidebar() {
           </div>
         )}
 
-        {/* Logout */}
-        <button
-          onClick={handleLogout}
-          onMouseEnter={() => setHoveredItem("logout")}
-          onMouseLeave={() => setHoveredItem(null)}
-          className="flex items-center gap-3 w-full rounded-lg transition-all duration-150 relative"
-          style={{
-            padding: collapsed ? "8px 0" : "8px 10px",
-            justifyContent: collapsed ? "center" : "flex-start",
-            background: hoveredItem === "logout" ? "#ffeaea" : "transparent",
-            color: hoveredItem === "logout" ? "#b83030" : "#a8a39c",
-          }}>
-          <span className="shrink-0"><IconLogout /></span>
-          {!collapsed && (
-            <span className="text-[11px] tracking-[0.1em] uppercase font-medium">Logout</span>
-          )}
-          {collapsed && hoveredItem === "logout" && (
-            <div className="absolute left-full ml-2 px-2 py-1 rounded-sm text-[11px] whitespace-nowrap z-50 pointer-events-none"
-              style={{ background: "#1a1814", color: "#f5f2ed", border: "1px solid #2a2520" }}>
-              Logout
-            </div>
-          )}
-        </button>
+
       </div>
       </aside>
     </>

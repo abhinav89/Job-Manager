@@ -4,12 +4,12 @@ import time
 import unittest
 from unittest.mock import patch
 
-from services.sandbox import SandboxUnavailable, run_isolated
+from cv_tailor.services.sandbox import SandboxUnavailable, run_isolated
 
 
 class LocalExecutionTests(unittest.TestCase):
     def test_native_python_uses_stdin_without_docker_or_application_secrets(self):
-        with patch.dict(os.environ, {"EXECUTION_BACKEND": "local", "ENVIRONMENT": "development", "AUDIT_SECRET": "private"}), patch("services.sandbox.shutil.which", side_effect=AssertionError("Docker must not be consulted")):
+        with patch.dict(os.environ, {"EXECUTION_BACKEND": "local", "ENVIRONMENT": "development", "AUDIT_SECRET": "private"}), patch("cv_tailor.services.sandbox.shutil.which", side_effect=AssertionError("Docker must not be consulted")):
             result = run_isolated("python", {"code": "import os\nprint(input())\nprint(os.getenv('AUDIT_SECRET'))", "stdin": "hello"}, 5)
         self.assertEqual(result["stdout"].splitlines(), ["hello", "None"])
         self.assertFalse(result["timed_out"])
@@ -25,7 +25,7 @@ class LocalExecutionTests(unittest.TestCase):
             self.assertIn("output limit", result["stderr"])
 
     def test_local_mode_cannot_be_used_in_production(self):
-        with patch.dict(os.environ, {"EXECUTION_BACKEND": "local", "ENVIRONMENT": "production"}), patch("services.sandbox.subprocess.Popen") as start:
+        with patch.dict(os.environ, {"EXECUTION_BACKEND": "local", "ENVIRONMENT": "production"}), patch("cv_tailor.services.sandbox.subprocess.Popen") as start:
             with self.assertRaisesRegex(SandboxUnavailable, "development"):
                 run_isolated("python", {"code": "print(1)"}, 1)
         start.assert_not_called()
@@ -36,7 +36,7 @@ class LocalExecutionTests(unittest.TestCase):
                 run_isolated("python", {"code": "print(1)"}, 1)
 
     def test_missing_native_compiler_does_not_fall_back_to_docker(self):
-        with patch.dict(os.environ, {"EXECUTION_BACKEND": "local", "ENVIRONMENT": "development"}), patch("services.local_executor.Path.is_file", return_value=False), patch("services.local_executor.shutil.which", return_value=None), patch("services.sandbox.subprocess.Popen") as start:
+        with patch.dict(os.environ, {"EXECUTION_BACKEND": "local", "ENVIRONMENT": "development"}), patch("cv_tailor.services.local_executor.Path.is_file", return_value=False), patch("cv_tailor.services.local_executor.shutil.which", return_value=None), patch("cv_tailor.services.sandbox.subprocess.Popen") as start:
             with self.assertRaisesRegex(SandboxUnavailable, "Install xelatex"):
                 run_isolated("pdf", {"latex": "document", "engine": "xelatex"}, 1)
         start.assert_not_called()

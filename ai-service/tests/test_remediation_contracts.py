@@ -8,13 +8,13 @@ import sys
 from types import SimpleNamespace
 from unittest.mock import patch, Mock, AsyncMock
 
-from models.ai_responses import ClaimVerification
-from services import llm_service
-from services.conversation_evidence import LIMIT, select_user_evidence
-from services.latex_assembly import _escape_latex, assemble_latex
-from services.safe_fetch import UnsafeURL, public_addresses, fetch_job_text
-from services.spot_edit_service import _grounding, rewrite_blocks, verify_grounded_rewrite
-from services.ats_check import ats_check
+from cv_tailor.models.ai_responses import ClaimVerification
+from cv_tailor.services import llm_service
+from cv_tailor.services.conversation_evidence import LIMIT, select_user_evidence
+from cv_tailor.services.latex_assembly import _escape_latex, assemble_latex
+from cv_tailor.services.safe_fetch import UnsafeURL, public_addresses, fetch_job_text
+from cv_tailor.services.spot_edit_service import _grounding, rewrite_blocks, verify_grounded_rewrite
+from cv_tailor.services.ats_check import ats_check
 from test_latex_assembly import make_profile, EMPTY_AI_CONTENT
 from test_spot_edit_service import make_profile as spot_profile, make_request
 
@@ -22,7 +22,7 @@ from test_spot_edit_service import make_profile as spot_profile, make_request
 class WorkerAdmissionTests(unittest.TestCase):
     def test_cancelled_awaits_keep_capacity_until_the_work_finishes(self):
         from fastapi import HTTPException
-        from services.external_work import run_blocking
+        from cv_tailor.services.external_work import run_blocking
         release = threading.Event()
         all_started = threading.Event()
         guard = threading.Lock()
@@ -87,7 +87,7 @@ class FetchTests(unittest.TestCase):
         response.getheader.return_value = "http://127.0.0.1/metadata"
         connection = Mock()
         connection.getresponse.return_value = response
-        with patch("services.safe_fetch.public_addresses", side_effect=[["1.1.1.1"], UnsafeURL("private")]), patch("http.client.HTTPConnection", return_value=connection), patch("socket.create_connection") as connect:
+        with patch("cv_tailor.services.safe_fetch.public_addresses", side_effect=[["1.1.1.1"], UnsafeURL("private")]), patch("http.client.HTTPConnection", return_value=connection), patch("socket.create_connection") as connect:
             with self.assertRaisesRegex(UnsafeURL, "private"):
                 fetch_job_text("http://example.com")
             connect.assert_called_once_with(("1.1.1.1", 80), timeout=unittest.mock.ANY)
@@ -98,11 +98,11 @@ class FetchTests(unittest.TestCase):
         response.getheader.return_value = "identity"
         connection = Mock()
         connection.getresponse.return_value = response
-        with patch("services.safe_fetch.public_addresses", return_value=["1.1.1.1"]), patch("http.client.HTTPConnection", return_value=connection), patch("socket.create_connection"):
+        with patch("cv_tailor.services.safe_fetch.public_addresses", return_value=["1.1.1.1"]), patch("http.client.HTTPConnection", return_value=connection), patch("socket.create_connection"):
             response.read1.side_effect = [b"<script>secret instruction</script><main>Job details</main>", b""]
             self.assertEqual(fetch_job_text("http://example.com"), "Job details")
             response.read1.side_effect = [b"12345"]
-            with patch("services.safe_fetch.MAX_BYTES", 4), self.assertRaisesRegex(UnsafeURL, "size limit"):
+            with patch("cv_tailor.services.safe_fetch.MAX_BYTES", 4), self.assertRaisesRegex(UnsafeURL, "size limit"):
                 fetch_job_text("http://example.com")
 
 
@@ -138,7 +138,7 @@ class EvidenceTests(unittest.TestCase):
 
 class ScraperTests(unittest.TestCase):
     def test_search_encodes_reserved_characters_and_keeps_missing_description_empty(self):
-        from services import job_scraper_service as scraper
+        from cv_tailor.services import job_scraper_service as scraper
         html = '<div class="jobpost-cat-box"><h4>Remote engineer</h4><a href="/jobseekers/info/1">View</a></div>'
         with patch.object(scraper, "_httpx_get", new=AsyncMock(return_value=html)) as fetch:
             jobs, status = asyncio.run(scraper.fetch_onlinejobs_ph("C++ & Python"))
@@ -147,7 +147,7 @@ class ScraperTests(unittest.TestCase):
         self.assertEqual(jobs[0]["job_description"], "")
 
     def test_browser_fetches_respect_the_concurrency_bound(self):
-        from services import job_scraper_service as scraper
+        from cv_tailor.services import job_scraper_service as scraper
         async def execute():
             release, ready = asyncio.Event(), asyncio.Event()
             active = maximum = 0
@@ -207,7 +207,7 @@ class StagedAgentTests(unittest.TestCase):
         from google.adk.models.google_llm import Gemini
         from google.adk.models.llm_response import LlmResponse
         from google.genai import types
-        from services.career_agent import CareerToolContext, run_career_agent
+        from cv_tailor.services.career_agent import CareerToolContext, run_career_agent
         requests = []
         async def model(_, request, stream=False):
             requests.append(request)
@@ -215,7 +215,7 @@ class StagedAgentTests(unittest.TestCase):
             yield LlmResponse(content=types.Content(role="model", parts=[part]))
         context = CareerToolContext(None, 1, SimpleNamespace(id=1, job_id=None), None, None, "Research Acme", staged=True)
         history = [{"role": "user", "content": "Research Acme"}, {"role": "assistant", "content": "Which topic?"}, {"role": "user", "content": "Its product."}]
-        with patch.dict("os.environ", {"GEMINI_API_KEY": "fixture"}), patch.object(Gemini, "generate_content_async", model), patch("services.career_tools.grounded_research", return_value=("Acme builds tools.", [{"title": "Acme", "url": "https://example.com"}])):
+        with patch.dict("os.environ", {"AI_MODE": "api", "GEMINI_API_KEY": "fixture"}), patch.object(Gemini, "generate_content_async", model), patch("cv_tailor.services.career_tools.grounded_research", return_value=("Acme builds tools.", [{"title": "Acme", "url": "https://example.com"}])):
             result = asyncio.run(run_career_agent(context, history))
         self.assertEqual(result, "Company research is available.")
         self.assertEqual(context.created_drafts[0].type, "research")
@@ -227,7 +227,7 @@ class StagedAgentTests(unittest.TestCase):
     def test_failed_parallel_tools_only_discard_their_own_drafts(self):
         import time
         from concurrent.futures import ThreadPoolExecutor
-        from services.career_agent import CareerToolContext
+        from cv_tailor.services.career_agent import CareerToolContext
         ctx = CareerToolContext(None, 1, SimpleNamespace(id=1, job_id=None), None, None, "", staged=True)
         def execute(index):
             def action():
@@ -243,14 +243,14 @@ class StagedAgentTests(unittest.TestCase):
 class GroundingTests(unittest.TestCase):
     def test_nonnumeric_claims_and_reassigned_metrics_have_factual_gate(self):
         for claim in ("Led the engineering department", "Managed 20 employees"):
-            with patch("services.spot_edit_service.complete_structured", return_value=ClaimVerification(supported=False, unsupported=["Not supported by source"])) as verify:
+            with patch("cv_tailor.services.spot_edit_service.complete_structured", return_value=ClaimVerification(supported=False, unsupported=["Not supported by source"])) as verify:
                 with self.assertRaisesRegex(ValueError, "unsupported personal claims"):
                     verify_grounded_rewrite(claim, "Served 20 clients in a support role.")
                 self.assertIn("Served 20 clients", verify.call_args.args[0])
 
     def test_existing_block_is_not_numeric_evidence(self):
         request = make_request(instruction="Make concise", blocks=[{"id": "bullet:0", "kind": "bullet", "section": "Experience", "text": "Led 50 people", "entry_title": "AgentGenius AI", "entry_subtitle": "AI Engineer"}])
-        with patch("services.spot_edit_service.complete", return_value=json.dumps({"blocks": [{"id": "bullet:0", "text": "Managed 50 people", "note": ""}]})):
+        with patch("cv_tailor.services.spot_edit_service.complete", return_value=json.dumps({"blocks": [{"id": "bullet:0", "text": "Managed 50 people", "note": ""}]})):
             with self.assertRaisesRegex(ValueError, "unsupported number"):
                 rewrite_blocks(spot_profile(), request)
 
@@ -294,7 +294,7 @@ class LatexTests(unittest.TestCase):
         for y, line in enumerate(["Summary", "Experienced engineer building useful applications and reporting systems.", "Experience", "Worked on reliable tools and clear documentation.", "Technical Skills", "Python and SQL", "Education", "University"]):
             pdf.drawString(30, 750-y*20, line)
         pdf.save()
-        with patch("services.ats_check.shutil.which", return_value=None):
+        with patch("cv_tailor.services.ats_check.shutil.which", return_value=None):
             result = ats_check(out.getvalue(), ["Summary", "Experience", "Technical Skills", "Education", "Projects", "Certifications"])
             self.assertTrue(result["pass"], result["warnings"])
             wrong = ats_check(out.getvalue(), ["Education", "Experience", "Summary"])
@@ -304,7 +304,7 @@ class LatexTests(unittest.TestCase):
 class ExportTests(unittest.TestCase):
     def test_docx_contains_multiline_heading_values_without_color_names(self):
         from docx import Document
-        from services.docx_service import convert_latex_to_docx
+        from cv_tailor.services.docx_service import convert_latex_to_docx
         source = r"""\begin{document}
 \section{Experience}
 \resumeSubheading
@@ -319,7 +319,7 @@ class ExportTests(unittest.TestCase):
         self.assertNotIn("textColor", text)
 
     def test_cheat_sheet_pdf_removes_markdown_markers(self):
-        from services.career_documents import cheat_sheet_pdf
+        from cv_tailor.services.career_documents import cheat_sheet_pdf
         from pypdf import PdfReader
         pdf = cheat_sheet_pdf("# Preparation\n**Supported result**\n~~Old emphasis~~\n[Company](https://example.com)\n```text\nPlain notes\n```")
         text = PdfReader(io.BytesIO(pdf)).pages[0].extract_text()
@@ -333,15 +333,15 @@ class ProfilePersistenceTests(unittest.TestCase):
     def test_profile_id_template_and_education_dates_survive_older_client_save(self):
         from sqlalchemy import create_engine
         from sqlalchemy.orm import Session
-        from database import Base
-        from models import database_models as models
-        from models.schemas import UserProfile
-        from routers.database_routes import save_profile_data
+        from cv_tailor.database import Base
+        from cv_tailor.models import database_models as models
+        from cv_tailor.models.schemas import UserProfile
+        from cv_tailor.services.profile_service import save_profile_data
         engine = create_engine("sqlite://")
         Base.metadata.create_all(engine)
         with Session(engine) as db:
-            db.add(models.User(id=1, email="jane@example.com"))
-            profile = models.Profile(user_id=1, preferred_template="modern")
+            db.add(models.Workspace(id=1))
+            profile = models.Profile(workspace_id=1, preferred_template="modern")
             db.add(profile)
             db.flush()
             original_id = profile.id
@@ -349,9 +349,9 @@ class ProfilePersistenceTests(unittest.TestCase):
             db.commit()
             incoming = UserProfile(first_name="Jane", last_name="Doe", mobile_no="", email="jane@example.com",
                 education=[{"school_name": "University", "course": "Engineering", "location": "Remote"}], experience=[], projects=[], skills=[])
-            with patch("routers.database_routes.resolve_preset", return_value=None):
+            with patch("cv_tailor.services.profile_service.resolve_preset", return_value=None):
                 save_profile_data(db, 1, incoming)
-            stored = db.query(models.Profile).filter_by(user_id=1).one()
+            stored = db.query(models.Profile).filter_by(workspace_id=1).one()
             self.assertEqual(stored.id, original_id)
             self.assertEqual(stored.preferred_template, "modern")
             self.assertEqual(stored.education[0].date_range, "2020 - 2024")
@@ -360,14 +360,14 @@ class ProfilePersistenceTests(unittest.TestCase):
     def test_job_serializer_does_not_fetch_deferred_pdf_bytes(self):
         from sqlalchemy import create_engine, inspect, event
         from sqlalchemy.orm import Session
-        from database import Base
-        from models import database_models as models
-        from routers.tracker_routes import serialize_job
+        from cv_tailor.database import Base
+        from cv_tailor.models import database_models as models
+        from cv_tailor.routers.tracker_routes import serialize_job
         engine = create_engine("sqlite://")
         Base.metadata.create_all(engine)
         with Session(engine) as db:
-            db.add(models.User(id=1, email="jane@example.com"))
-            db.add(models.JobApplication(user_id=1, company_name="Acme", job_title="Engineer", pdf_data=b"PDF bytes"))
+            db.add(models.Workspace(id=1))
+            db.add(models.JobApplication(workspace_id=1, company_name="Acme", job_title="Engineer", pdf_data=b"PDF bytes"))
             db.commit()
             db.expunge_all()
             job = db.query(models.JobApplication).one()

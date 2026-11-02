@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cv-tailor"
+version = "0.2.0"
+description = "A local career workspace for AI CLI agents, with an optional dashboard"
+requires-python = ">=3.12"
+dependencies = ["sqlalchemy>=2.0,<3", "pydantic>=2,<3", "python-dotenv", "httpx", "pypdf", "tecto", "reportlab", "python-docx", "beautifulsoup4"]
+
+[project.optional-dependencies]
+dashboard = ["fastapi[standard]", "slowapi", "python-multipart"]
+ai = ["openai", "google-genai", "google-adk>=2.12,<2.13"]
+browser = ["scrapling", "camoufox", "curl_cffi"]
+test = ["pytest", "fastapi[standard]", "slowapi", "python-multipart"]
+
+[project.scripts]
+cv-tailor = "cv_tailor.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cv_tailor*"]
+
+[tool.setuptools.package-data]
+cv_tailor = ["static/dashboard/**/*", "sandbox/Dockerfile"]

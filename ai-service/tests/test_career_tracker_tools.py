@@ -8,11 +8,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
-from database import Base
-from models import database_models as models
-from routers import assistant_routes as routes
-from services.career_agent import CareerToolContext
-from services.career_tracker_tools import create_tracker_tools
+from cv_tailor.database import Base
+from cv_tailor.models import database_models as models
+from cv_tailor.routers import assistant_routes as routes
+from cv_tailor.services.career_agent import CareerToolContext
+from cv_tailor.services.career_tracker_tools import create_tracker_tools
 
 
 class CareerTrackerTests(unittest.TestCase):
@@ -20,11 +20,10 @@ class CareerTrackerTests(unittest.TestCase):
         self.engine = create_engine("sqlite:///:memory:")
         Base.metadata.create_all(self.engine)
         self.db = Session(self.engine)
-        self.db.add_all([models.User(id=1, email="one@example.com"), models.User(id=2, email="two@example.com"),
-                         models.JobApplication(id=7, user_id=1, company_name="A", job_title="Engineer", status="Interview"),
-                         models.JobApplication(id=8, user_id=2, company_name="B", job_title="Private")])
+        self.db.add_all([models.Workspace(id=1),
+                         models.JobApplication(id=7, workspace_id=1, company_name="A", job_title="Engineer", status="Interview")])
         self.db.commit()
-        self.request = SimpleNamespace(session={"user_id": 1})
+        self.request = SimpleNamespace(session={"workspace_id": 1})
         info = routes.create_conversation(routes.ConversationCreate(), self.request, self.db)
         self.conversation = self.db.get(models.AssistantConversation, info["id"])
         self.ctx = CareerToolContext(self.db, 1, self.conversation, None, None, "I built workflows")
@@ -35,13 +34,14 @@ class CareerTrackerTests(unittest.TestCase):
         self.engine.dispose()
 
     def confirm(self, draft):
+        self.db.commit()
         return routes.confirm_tracker_action(self.conversation.id, draft["id"], self.request, self.db)
 
     def test_add_requires_details_and_confirmation_and_links_conversation(self):
         add = self.tools["propose_add_application"]
         self.assertIn("error", add("A", "Engineer", "Details", ""))
         draft = add("A", "Engineer", "Details", "unknown")["draft"]
-        self.assertEqual(self.db.query(models.JobApplication).count(), 2)
+        self.assertEqual(self.db.query(models.JobApplication).count(), 1)
         result = self.confirm(draft)
         job = self.db.get(models.JobApplication, result["conversation"]["job_id"])
         self.assertEqual(job.job_source, "unknown")
@@ -59,11 +59,10 @@ class CareerTrackerTests(unittest.TestCase):
         self.confirm(propose(7, "restore")["draft"])
         self.assertFalse(self.db.get(models.JobApplication, 7).is_archived)
 
-    def test_foreign_user_cannot_confirm_proposal_and_delete_needs_confirmation(self):
+    def test_delete_needs_explicit_confirmation(self):
+        self.assertIn("error", self.tools["propose_application_change"](99, "delete"))
         draft = self.tools["propose_application_change"](7, "delete")["draft"]
         self.assertIsNotNone(self.db.get(models.JobApplication, 7))
-        with self.assertRaises(HTTPException):
-            routes.confirm_tracker_action(self.conversation.id, draft["id"], SimpleNamespace(session={"user_id": 2}), self.db)
         self.confirm(draft)
         self.assertIsNone(self.db.get(models.JobApplication, 7))
 
@@ -72,7 +71,7 @@ class CareerTrackerTests(unittest.TestCase):
         serialized = SimpleNamespace(model_dump_json=lambda: '{"skills":["Python"]}')
         prompts = []
         tools = {tool.__name__: tool for tool in create_tracker_tools(self.ctx, lambda _: ("Job requirements", "A"), lambda prompt: prompts.append(prompt) or "Supported: Python")}
-        with patch("services.career_tracker_tools.verify_personal_claims"), patch("services.career_tracker_tools.db_profile_to_schema", return_value=serialized) as profile:
+        with patch("cv_tailor.services.career_tracker_tools.verify_personal_claims"), patch("cv_tailor.services.career_tracker_tools.db_profile_to_schema", return_value=serialized) as profile:
             result = tools["analyze_job_fit"]()
         profile.assert_called_with(self.ctx.profile, confirmed_skills_only=True)
         self.assertEqual(result["draft"]["type"], "job_fit")
@@ -85,7 +84,7 @@ class CareerTrackerTests(unittest.TestCase):
         def fail(_):
             raise RuntimeError("provider unavailable")
         tools = {tool.__name__: tool for tool in create_tracker_tools(self.ctx, lambda _: ("Job requirements", "A"), fail)}
-        with patch("services.career_tracker_tools.db_profile_to_schema", return_value=serialized):
+        with patch("cv_tailor.services.career_tracker_tools.db_profile_to_schema", return_value=serialized):
             result = tools["analyze_job_fit"]()
         self.assertEqual(result["status"], "error")
         self.assertIsNone(self.ctx.latest_draft("job_fit"))
@@ -94,7 +93,7 @@ class CareerTrackerTests(unittest.TestCase):
         self.ctx.profile = object()
         serialized = SimpleNamespace(model_dump_json=lambda: "{}")
         for text in ("Fit: 80%", "Overall rating: 8/10", "Match score: 90", "**Verdict:** Apply", "Recommendation: skip"):
-            with self.subTest(text=text), patch("services.career_tracker_tools.db_profile_to_schema", return_value=serialized), patch("services.career_tracker_tools.verify_personal_claims"):
+            with self.subTest(text=text), patch("cv_tailor.services.career_tracker_tools.db_profile_to_schema", return_value=serialized), patch("cv_tailor.services.career_tracker_tools.verify_personal_claims"):
                 tools = {tool.__name__: tool for tool in create_tracker_tools(self.ctx, lambda _: ("Job requirements", "A"), lambda _: text)}
                 self.assertEqual(tools["analyze_job_fit"]()["status"], "error")
                 self.assertIsNone(self.ctx.latest_draft("job_fit"))

@@ -1,64 +1,150 @@
 # CV Tailor
 
-A free, open-source CV tailoring app. Paste your profile and a job description, get back an ATS-safe, one-page resume PDF built from your real experience — plus a matching cover letter.
+A local career workspace for your AI coding agent, with an optional visual dashboard. Tailor one-page CVs, prepare cover letters and interviews, discover jobs, and track applications in a SQLite database on your machine.
 
-**Live app:** [cvtailor.me](https://cvtailor.me)
+Use Claude Code, Codex, OpenCode, Antigravity, or another agent that can read skills and run shell commands. CV Tailor requires no account, PostgreSQL server, or AI API key. Your chosen agent supplies its own AI access. Built-in API-powered AI is optional.
 
-## How it works
+## Install
 
-- **AI-powered tailoring** — the backend sends your profile + job description to Google's Gemini models (with OpenAI as a one-line backup via `AI_PROVIDER`), which select, rewrite, and keyword-align your bullets.
-- **LaTeX-quality PDFs** — the AI returns plain text only; a deterministic LaTeX assembler builds every document, so an AI rewrite can never break compilation. Compiled with Tectonic.
-- **ATS Check** — every generated PDF is validated post-compile: section order, selectable text, ATS-conventional headings.
-- **Spot Edit** — select any text in the PDF preview and describe a change ("make this more metric-heavy"). Only those lines are rewritten; a grounding pass blocks invented facts and numbers.
-- **Roles & Presets** — pick a role (e.g. Virtual Assistant, Data Analyst) to steer summary style, skills bank, and section emphasis.
-- **Application Tracker, Cover Letters, Interview Practice, Coding Practice** — all powered by the same AI layer.
-- **Career Agent** — a Google ADK and Gemini assistant with persistent application or general chats, sourced company research, tailored CV and cover-letter drafts, interview preparation, and downloadable interview cheat sheets. Drafts can be reviewed and versioned before being applied to a tracked application.
-- **Job fit and tracker management** — request an evidence-based fit analysis without a numerical score, and review Career Agent proposals to add, update, archive, restore, or delete tracked applications. Archived applications keep their status and documents.
+Prerequisite: Python 3.12 or newer. Clone and run the installer:
 
-## Stack
-
-| Layer | Tech |
-|---|---|
-| Frontend | Next.js (TypeScript), react-pdf preview |
-| Backend | FastAPI (Python) |
-| AI | Google Gemini API (default) · OpenAI Chat Completions (backup) |
-| Database | PostgreSQL |
-| PDF | Tectonic (LaTeX), pypdf-based ATS validation |
-
-## Running locally
-
-Docker is optional for trusted, single-user development. The example configuration uses native Python and Tectonic (`EXECUTION_BACKEND=local`, `ENVIRONMENT=development`). `tecto` in the Python requirements supplies the Tectonic executable; it downloads TeX packages on first use. Alternatively, install XeLaTeX and set `PDF_LATEX_ENGINE=xelatex`.
-
-```bash
-# 1. Backend
-cd ai-service
-pip install -r requirements.txt
-cp .env.example .env        # set DATABASE_URL, GEMINI_API_KEY (or OPENAI_API_KEY)
-python migration.py         # create tables
-uvicorn main:app --reload --host 127.0.0.1
-
-# 2. Frontend (new terminal, from the repository root)
-cd frontend
-npm install
-npm run dev -- --hostname 127.0.0.1
+```sh
+git clone https://github.com/yabswannalearn/CV-Tailor.git
+cd CV-Tailor
+python scripts/install.py
 ```
 
-Use native mode only for your own local code and LaTeX. It runs tools with your OS account's file and network access, with time/output limits and an environment that excludes application credentials. Keep both servers bound to `127.0.0.1`. PostgreSQL, Node.js, Python and provider credentials are still required.
+Choose **CLI only** (the default) or **CLI + dashboard**. Noninteractive installation:
 
-For hosted or shared deployments, set `ENVIRONMENT=production` and `EXECUTION_BACKEND=docker`, and provision the isolated execution images described in [the runtime guide](docs/remediation_runtime.md). Native mode is rejected outside development; Docker failures never switch to native execution automatically.
+```sh
+python scripts/install.py --cli-only
+# Or include the optional local web interface:
+python scripts/install.py --with-dashboard
+```
 
-## Configuration
+The installer creates a repository `.venv`. Activate it before running commands:
 
-All AI traffic goes through one dispatcher (`ai-service/services/llm_service.py`). Switch providers with env vars:
+```powershell
+# Windows PowerShell
+.venv\Scripts\Activate.ps1
+```
+
+```sh
+# macOS / Linux
+. .venv/bin/activate
+```
+
+Without activation, run `.venv/Scripts/cv-tailor.exe` on Windows or `.venv/bin/cv-tailor` on macOS/Linux. The installer prints the exact executable path.
+
+Open your preferred AI agent in this repository and ask:
+
+> Use CV Tailor. Import my CV, compare this job with my profile, tailor a resume and cover letter, and save them as drafts for this application.
+
+The entry skill loads saved workspace context on each session. Confirm extracted profile facts and skills before using them in documents.
+
+## Optional dashboard
+
+Node.js 22 or newer is required to install/build the dashboard. It is not required for CLI-only use or to run an already built dashboard.
+
+```sh
+cv-tailor dashboard install
+cv-tailor dashboard
+```
+
+Open [the local dashboard](http://127.0.0.1:8000). One Python process serves the static dashboard and its `/api` endpoints. The CLI works even when this server is stopped. Both interfaces use the same SQLite workspace.
+
+Without provider credentials, use **Work with your CLI agent → Copy agent prompt**. Paste the prompt into your agent in this checkout. Results saved through the CLI appear in the dashboard. Review a draft before making it the current application document.
+
+## Data and sessions
+
+Data defaults to `~/.cv-tailor/cv-tailor.sqlite3`, outside the checkout, and survives restarts and repository updates. Each workspace has one local profile; profile email is contact information, not a login. Multiple clones share this default workspace.
+
+Use a separate workspace with:
+
+```sh
+cv-tailor --data-dir /absolute/path/career-workspace init
+cv-tailor --data-dir /absolute/path/career-workspace dashboard
+```
+
+`CV_TAILOR_HOME` is the equivalent environment setting. Pass the same workspace to every command. Existing hosted PostgreSQL databases are never read or changed; importing an old account is outside this release. Storage is local; your chosen AI agent/provider may process the context you give it. Harness chat histories remain in that harness.
+
+## Commands
+
+```sh
+cv-tailor --json status
+cv-tailor doctor
+cv-tailor schema profile
+cv-tailor profile extract-text /absolute/path/cv.pdf
+cv-tailor profile import --input profile.json
+cv-tailor applications add --input job.json --request-id unique-create-id
+cv-tailor applications list --status Interview
+cv-tailor applications get 1
+cv-tailor context export --task resume --application 1
+cv-tailor drafts import --kind resume --application 1 --input resume.json --request-id unique-draft-id
+cv-tailor drafts list --application 1
+cv-tailor resume blocks 1
+cv-tailor resume check 1
+cv-tailor drafts export 1 --format pdf --output resume.pdf
+cv-tailor drafts apply 1 --revision 1
+```
+
+Commands accept `--json` anywhere and file/stdin JSON (`--input -`). Errors return a nonzero exit code and structured JSON in JSON mode. Run `cv-tailor GROUP --help` for subcommands and `schema KIND` for accepted content.
+
+Updates, archive/restore, deletion, and applying documents require the current application revision; profile updates require the saved profile revision. On conflict, reread and reconcile changes. Use the same request ID for an identical create/import retry to prevent duplicates; a different payload requires a new ID.
+
+New personal facts supplied in a conversation can be passed as a JSON list with `--evidence facts.json` on draft import/revise, resume patch, or practice save. They remain scoped to that conversation/application and are included in later context exports; they do not silently change the profile. Job requirements and generated text are not personal evidence.
+
+Resumes are assembled from structured plain-text content, compiled with Tectonic, and checked for ATS warnings. Overflow drafts remain reviewable, but applying or exporting a resume PDF requires exactly one page. First PDF use may download TeX packages. Native execution is the default and runs with your OS permissions and bounded time/output; Docker execution remains an explicit option.
+
+## Included skills
+
+`cv-tailor`, `cv-profile`, `cv-jobs`, `cv-job-fit`, `cv-company-research`, `cv-resume`, `cv-resume-edit`, `cv-cover-letter`, `cv-tracker`, `cv-interview`, `cv-code-practice`.
+
+Canonical skills live in `.agents/skills`, with Claude entrypoints in `.claude/skills`. They share the same CLI and output schemas. Company research uses the harness's browsing tools, or user-provided sources when browsing is unavailable. Factual grounding guidance and deterministic checks help catch unsupported claims; review generated documents.
+
+## Optional built-in AI
+
+```sh
+python -m pip install -e "ai-service[ai]"
+```
+
+Put provider settings in `~/.cv-tailor/.env` (or your selected data directory), not the repository:
 
 ```env
-AI_PROVIDER=gemini          # or "openai"
-GEMINI_API_KEY=...          # required for the default provider
-GEMINI_MODEL=gemini-3.1-flash-lite-preview
-OPENAI_API_KEY=sk-...       # only needed if AI_PROVIDER=openai
-OPENAI_MODEL=gpt-4o-mini
+AI_MODE=api
+AI_PROVIDER=gemini
+GEMINI_API_KEY=your-key
+# Alternatively, standalone generation supports:
+# AI_PROVIDER=openai
+# OPENAI_API_KEY=your-key
+# Optional job-search ranking:
+# JEV_API_KEY=your-key
 ```
 
-The Career Agent uses Gemini for conversations and tools, even if the standalone AI provider is set to OpenAI. Set `GEMINI_API_KEY` (or `GOOGLE_API_KEY` for ADK) and use a Gemini model that supports Google Search grounding for company research. Existing skills need confirmation in the profile before the agent can use them as personal evidence. Run `python migration.py` when upgrading an existing database to add the conversation, skill confirmation, job source, and archive fields.
+The default is `AI_MODE=external`. Merely setting a key does not enable server-side AI. The existing built-in Career Agent and Google Search grounding require Gemini; standalone generation supports Gemini or OpenAI. Restart the dashboard after changing settings. API secrets are excluded from native code/PDF subprocess environments.
 
-The app does not use a credit system. AI evidence checks help catch unsupported claims, but users should review drafts before applying them.
+Browser-backed job sources are optional: `python -m pip install -e "ai-service[browser]"`. Unavailable sources report diagnostics; URL intake and pasted job descriptions remain available.
+
+## Development and verification
+
+```sh
+python -m pip install -e "ai-service[test,ai]"
+python -m pytest ai-service/tests
+npm --prefix frontend ci
+npm --prefix frontend run build
+npm --prefix frontend run test:tracker
+npm --prefix frontend run test:resume-draft
+npm --prefix frontend run test:browser
+```
+
+The backend is packaged under `ai-service/cv_tailor`. CLI and HTTP adapters share workspace services. Tests use disposable SQLite files, including real concurrent CLI processes; optional Docker integration tests use `RUN_SANDBOX_TESTS=1`.
+
+The public domain serves only the separately built static landing page:
+
+```sh
+npm --prefix landing ci
+npm --prefix landing run build
+# Publish landing/out with your static hosting provider.
+```
+
+The local dashboard build is `frontend/out`; `cv-tailor dashboard install` packages it with the Python app. Never deploy the login-free local API as a public backend.

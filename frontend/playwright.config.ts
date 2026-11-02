@@ -8,17 +8,16 @@ export default defineConfig({
   timeout: 120_000,
   expect: { timeout: 60_000 },
   use: {
-    baseURL: externalBaseUrl || "http://127.0.0.1:3100",
+    baseURL: externalBaseUrl || "http://127.0.0.1:3218",
     viewport: { width: 1440, height: 1000 },
     screenshot: "only-on-failure",
     launchOptions: { args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"] },
     permissions: ["camera"],
   },
   webServer: externalBaseUrl ? undefined : {
-    command: "node node_modules/next/dist/bin/next dev --port 3100",
-    env: { NEXT_DIST_DIR: ".next-remediation" },
-    url: "http://127.0.0.1:3100",
-    reuseExistingServer: !process.env.CI,
+    command: "python tests/browser/server.py",
+    url: "http://127.0.0.1:3218",
+    reuseExistingServer: false,
     timeout: 180_000,
   },
 });

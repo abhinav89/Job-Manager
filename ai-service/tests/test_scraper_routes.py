@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from routers import scraper_routes
-from services.job_scraper_service import fetch_remote_jobs, fetch_arbeitnow_jobs
+from cv_tailor.routers import scraper_routes
+from cv_tailor.services.job_scraper_service import fetch_remote_jobs, fetch_arbeitnow_jobs
 
 
 class DiscoverJobsTests(unittest.IsolatedAsyncioTestCase):
@@ -26,7 +26,7 @@ class DiscoverJobsTests(unittest.IsolatedAsyncioTestCase):
             "source": "RemoteOK",
         }]
         fetch_jobs = AsyncMock(return_value=(jobs, {"remoteok": "ok"}))
-        request = SimpleNamespace(session={"user_id": 7})
+        request = SimpleNamespace(session={"workspace_id": 7})
 
         with patch.object(scraper_routes, "fetch_remote_jobs", fetch_jobs):
             result = await scraper_routes.discover_jobs(
@@ -50,7 +50,7 @@ class DiscoverJobsTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_an_empty_source_selection_searches_no_websites(self):
         fetch_jobs = AsyncMock(return_value=([], {}))
-        request = SimpleNamespace(session={"user_id": 7})
+        request = SimpleNamespace(session={"workspace_id": 7})
 
         with patch.object(scraper_routes, "fetch_remote_jobs", fetch_jobs):
             await scraper_routes.discover_jobs(sources="", request=request)
@@ -69,7 +69,7 @@ class DiscoverJobsTests(unittest.IsolatedAsyncioTestCase):
             {"title": "Python Engineer", "company_name": "Unknown", "url": "https://example.com/jobs/3"},
             {"title": "Python Engineer", "company_name": "Missing URL", "remote": True},
         ]}
-        with patch("services.job_scraper_service._httpx_get", new=AsyncMock(return_value=json.dumps(response))):
+        with patch("cv_tailor.services.job_scraper_service._httpx_get", new=AsyncMock(return_value=json.dumps(response))):
             jobs, status = await fetch_arbeitnow_jobs("python APIs")
         self.assertEqual(status, "ok")
         self.assertEqual(len(jobs), 1)
@@ -79,7 +79,7 @@ class DiscoverJobsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(jobs[0]["salary_range"], "Not specified")
 
     async def test_arbeitnow_reports_feed_errors_without_fake_jobs(self):
-        with patch("services.job_scraper_service._httpx_get", new=AsyncMock(return_value="not-json")):
+        with patch("cv_tailor.services.job_scraper_service._httpx_get", new=AsyncMock(return_value="not-json")):
             jobs, status = await fetch_arbeitnow_jobs("python")
         self.assertEqual(jobs, [])
         self.assertEqual(status, "error")
@@ -91,18 +91,18 @@ class DiscoverJobsTests(unittest.IsolatedAsyncioTestCase):
             "first": ("First", AsyncMock(return_value=([listing("A"), listing("B"), listing("C")], "ok")), "httpx"),
             "second": ("Second", AsyncMock(return_value=([listing("D"), listing("E")], "ok")), "httpx"),
         }
-        with patch("services.job_scraper_service.SOURCE_REGISTRY", registry):
+        with patch("cv_tailor.services.job_scraper_service.SOURCE_REGISTRY", registry):
             jobs, statuses = await fetch_remote_jobs(sources=["first", "second"], limit=3)
         self.assertEqual([job["company_name"] for job in jobs], ["A", "D", "B"])
         self.assertEqual(statuses, {"First": "ok", "Second": "ok"})
 
     async def test_import_records_listing_source(self):
         db = MagicMock()
-        request = SimpleNamespace(session={"user_id": 7})
+        request = SimpleNamespace(session={"workspace_id": 7})
         payload = scraper_routes.ImportJobRequest(company_name="Example", job_title="Developer", source="Arbeitnow")
         await scraper_routes.import_scraped_job(payload, request, db)
         self.assertEqual(db.add.call_args.args[0].job_source, "Arbeitnow")
-        self.assertEqual(db.add.call_args.args[0].user_id, 7)
+        self.assertEqual(db.add.call_args.args[0].workspace_id, 1)
 
 
 if __name__ == "__main__":

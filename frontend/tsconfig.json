@@ -31,17 +31,16 @@
   },
   "include": [
     "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "tests/**/*.ts",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
-    "**/*.mts",
-    ".next-remediation/types/**/*.ts",
-    ".next-remediation/dev/types/**/*.ts",
-    "build/types/**/*.ts",
-    "build/dev/types/**/*.ts"
+    ".next/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    ".next-remediation",
+    ".next/dev",
+    "build"
   ]
 }

@@ -4,8 +4,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from services.latex_assembly import assemble_latex
-from models.schemas import UserProfile
+from cv_tailor.services.latex_assembly import assemble_latex
+from cv_tailor.models.schemas import UserProfile
 
 
 def make_profile(**overrides):

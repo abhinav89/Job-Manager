@@ -6,8 +6,8 @@ from unittest.mock import patch
 import httpx
 from google import genai
 
-from models.ai_responses import ResumeContent
-from services import llm_service
+from cv_tailor.models.ai_responses import ResumeContent
+from cv_tailor.services import llm_service
 
 
 class GeminiSchemaTransportTests(unittest.TestCase):

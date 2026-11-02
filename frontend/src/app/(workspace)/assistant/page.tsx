@@ -1,0 +1,407 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { ArrowUp, BookOpen, ChevronDown, FileText, Globe2, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { API_URL, getApiError } from "@/lib/api";
+import { queryKeys, useProfile, useTrackerJobs } from "@/lib/queries";
+import FormattedOutput from "@/components/FormattedOutput";
+
+type Source = { title: string; url: string };
+type DraftType = "resume" | "cover_letter" | "interview_plan" | "cheat_sheet" | "research" | "job_context" | "job_fit" | "tracker_action" | "job_search" | "agent_activity";
+type Draft = { id: number; type: DraftType; content: string; metadata?: { sources?: Source[]; assistant_message_id?: number; [key: string]: unknown } | null; created_at: string };
+type Activity = { tool: string; label: string; status: "started" | "completed" | "failed"; details?: { keyword?: string; results?: number; source_status?: Record<string, string>; sources?: Source[] } };
+type SearchJob = { job_title?: string; company_name?: string; job_url?: string; source?: string; location?: string; job_description?: string; jev_match?: { role?: string; experience?: string; preferences?: string } };
+type Message = { id: number; role: "user" | "assistant"; content: string; created_at: string };
+type ConversationSummary = { id: number; job_id: number | null; title: string; updated_at: string };
+type Conversation = ConversationSummary & { messages: Message[]; drafts: Draft[] };
+
+const labels: Record<DraftType, string> = { resume: "CV", cover_letter: "Cover letter", interview_plan: "Interview plan", cheat_sheet: "Cheat sheet", research: "Company research", job_context: "Job description", job_fit: "Job fit analysis", tracker_action: "Tracker proposal", job_search: "Job search", agent_activity: "Agent activity" };
+const suggestions = [
+  { icon: Sparkles, title: "Find jobs", prompt: "Find remote jobs that fit my confirmed experience. Ask about my preferences if needed." },
+  { icon: Globe2, title: "Research the company", prompt: "Research this company and show me the sources." },
+  { icon: FileText, title: "Tailor my application", prompt: "Write a cover letter tailored to this role using my real experience." },
+  { icon: BookOpen, title: "Prepare for an interview", prompt: "Help me prepare for an interview for this role." },
+  { icon: Sparkles, title: "Analyze job fit", prompt: "Analyze my fit for this job using my confirmed experience and show the evidence, gaps, and questions." },
+];
+
+async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_URL}${path}`, { ...init, credentials: "include", headers: { "Content-Type": "application/json", ...init?.headers } });
+  if (!response.ok) throw new Error(await getApiError(response, "Something went wrong. Please try again."));
+  return response.json() as Promise<T>;
+}
+
+function safeSource(url: string) {
+  try { const parsed = new URL(url); return parsed.protocol === "https:" || parsed.protocol === "http:"; } catch { return false; }
+}
+
+const matchLabels: Record<string, string> = {
+  related: "Related", possibly_related: "Possibly related", different: "Different", unknown: "Unknown",
+  supported: "Relevant experience found", some_overlap: "Some overlap", unclear: "Not enough detail",
+  consistent: "Consistent", conflict: "Possible conflict",
+};
+
+function ActivityLog({ events }: { events: Activity[] }) {
+  if (!events.length) return null;
+  const rows: Activity[] = [];
+  for (const event of events) {
+    const previous = rows.findLastIndex(item => item.tool === event.tool && item.status === "started");
+    if (event.status !== "started" && previous >= 0) rows[previous] = { ...event, details: { ...rows[previous].details, ...event.details } };
+    else rows.push(event);
+  }
+  return <details className="my-3 rounded-xl border border-[#dce5d8] bg-[#f4f8f1] text-left text-xs text-[#41543c]" open={events.at(-1)?.status === "started"}>
+    <summary className="cursor-pointer px-4 py-3 font-semibold">Agent activity · {events.at(-1)?.status === "started" ? "Working…" : `${rows.length} ${rows.length === 1 ? "step" : "steps"}`}</summary>
+    <ol className="space-y-3 border-t border-[#dce5d8] px-4 py-3">{rows.map((item, index) => <li key={`${item.tool}-${index}`}><div className="flex gap-2"><span aria-hidden="true">{item.status === "started" ? "◌" : item.status === "failed" ? "!" : "✓"}</span><span>{item.label}{item.status === "failed" ? " — failed" : item.status === "started" ? "…" : ""}</span></div>{item.details?.keyword && <p className="ml-5 mt-1 text-[#73816c]">Search: {item.details.keyword}</p>}{item.details?.source_status && <p className="ml-5 mt-1 text-[#73816c]">{Object.entries(item.details.source_status).map(([source, status]) => `${source}: ${status}`).join(" · ")}</p>}{item.details?.sources?.filter(source => safeSource(source.url)).map(source => <a key={source.url} href={source.url} target="_blank" rel="noopener noreferrer" className="ml-5 mt-1 block underline">{source.title} ↗</a>)}</li>)}</ol>
+  </details>;
+}
+
+function ResumePreview({ conversationId, draftId }: { conversationId: number; draftId: number }) {
+  const [preview, setPreview] = useState<{ url?: string; error?: string }>({});
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let url: string | undefined;
+    async function load() {
+      try {
+        const response = await fetch(`${API_URL}/assistant/conversations/${conversationId}/drafts/${draftId}/pdf`, {
+          credentials: "include", signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(await getApiError(response, "Could not load the CV preview."));
+        const pdf = await response.blob();
+        if (controller.signal.aborted) return;
+        url = URL.createObjectURL(pdf);
+        setPreview({ url });
+      } catch (err) {
+        if (!controller.signal.aborted) setPreview({ error: err instanceof Error ? err.message : "Could not load the CV preview." });
+      }
+    }
+    void load();
+    return () => { controller.abort(); if (url) URL.revokeObjectURL(url); };
+  }, [conversationId, draftId, attempt]);
+
+  if (preview.error) return <div role="alert" className="rounded-lg bg-[#f7f8f3] p-3 text-xs leading-5 text-[#a84f3f]">{preview.error}<button onClick={() => { setPreview({}); setAttempt(value => value + 1); }} className="mt-2 block font-semibold underline">Try again</button></div>;
+  if (!preview.url) return <div role="status" className="rounded-lg bg-[#f7f8f3] p-3 text-xs text-[#596259]">Preparing your CV preview…</div>;
+  return <div><iframe title="CV PDF preview" src={preview.url} className="h-[420px] w-full rounded-lg border border-[#dce2d6] bg-white" /><div className="mt-2 flex flex-wrap gap-3 text-xs font-semibold text-[#557442]"><a href={preview.url} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">Open full size ↗</a><a href={preview.url} download="cv-draft.pdf" className="underline underline-offset-2">Download PDF</a></div></div>;
+}
+
+function ChatCv({ conversationId, draft, onEdit, onApply, autoPreview }: { conversationId: number; draft: Draft; onEdit: () => void; onApply?: () => void; autoPreview: boolean }) {
+  const [showPreview, setShowPreview] = useState(autoPreview);
+  return (
+    <div id={`cv-draft-${draft.id}`} className="mt-4 w-full min-w-0 rounded-xl border border-[#d7e4d2] bg-white p-3 sm:min-w-[360px]">
+      <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#365833]"><FileText size={16} /> Your tailored CV <span className="font-normal text-[#899185]">PDF</span></div>
+      {showPreview ? <ResumePreview conversationId={conversationId} draftId={draft.id} /> : <button type="button" onClick={() => setShowPreview(true)} className="rounded-lg border border-[#d7dfd2] px-3 py-1.5 text-xs font-semibold text-[#557442]">Preview and download PDF</button>}
+      {draft.metadata?.one_page === false && <p role="alert" className="mt-2 text-xs leading-5 text-[#a84f3f]">This CV exceeds one page. Open the editor to resolve the overflow.</p>}
+      <button type="button" onClick={onEdit} className="mt-3 rounded-lg border border-[#d7dfd2] px-3 py-1.5 text-xs font-semibold text-[#557442]">Open in editor →</button>
+      {onApply && <button type="button" onClick={onApply} className="ml-2 mt-3 rounded-lg border border-[#d7dfd2] px-3 py-1.5 text-xs font-semibold text-[#557442]">Apply draft</button>}
+    </div>
+  );
+}
+
+export default function AssistantPage() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const { data: jobs = [], isPending: loadingJobs } = useTrackerJobs();
+  const { data: profile } = useProfile();
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const [conversation, setConversation] = useState<Conversation | null>(null);
+  const [editingDraftId, setEditingDraftId] = useState<number | null>(null);
+  const [draftText, setDraftText] = useState("");
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [liveActivity, setLiveActivity] = useState<Activity[]>([]);
+  const [pendingMessage, setPendingMessage] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [showSaveJob, setShowSaveJob] = useState(false);
+  const [jobTitle, setJobTitle] = useState("");
+  const [company, setCompany] = useState("");
+  const [jobDescription, setJobDescription] = useState("");
+  const [jobSource, setJobSource] = useState("");
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const sendControllerRef = useRef<AbortController | null>(null);
+  useEffect(() => () => sendControllerRef.current?.abort(), [activeId]);
+  const pendingRequestRef = useRef<{ conversationId: number; content: string; id: string } | null>(null);
+  const selectedJob = jobs.find(job => job.id === conversation?.job_id);
+  const unconfirmedSkills = profile?.skills.filter(skill => !skill.is_confirmed).length || 0;
+
+  const refreshList = useCallback(async () => {
+    const list = await api<ConversationSummary[]>("/assistant/conversations");
+    setConversations(list);
+    return list;
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    refreshList().then(list => {
+      if (!cancelled && list.length) {
+        const previous = Number(sessionStorage.getItem("career-assistant-active"));
+        setActiveId(list.find(item => item.id === previous)?.id || list[0].id);
+      }
+    })
+      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : "Could not load conversations."); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [refreshList]);
+
+  useEffect(() => {
+    if (activeId === null) return;
+    sessionStorage.setItem("career-assistant-active", String(activeId));
+    if (sessionStorage.getItem("career-assistant-fit-prompt") === String(activeId)) {
+      setInput("Analyze my fit for this job using my confirmed experience and show the evidence, gaps, and questions.");
+      sessionStorage.removeItem("career-assistant-fit-prompt");
+    }
+    let cancelled = false;
+    api<Conversation>(`/assistant/conversations/${activeId}`)
+      .then(data => { if (!cancelled) { setConversation(data); setEditingDraftId(null); } })
+      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : "Could not load this conversation."); });
+    return () => { cancelled = true; };
+  }, [activeId]);
+
+  useEffect(() => {
+    if (!activeId || busy || editingDraftId !== null) return;
+    const timer = window.setInterval(() => {
+      if (document.hidden) return;
+      void api<Conversation>(`/assistant/conversations/${activeId}`).then(setConversation).catch(() => {});
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [activeId, busy, editingDraftId]);
+
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [conversation?.messages.length, busy]);
+
+  async function createConversation(jobId: number | null) {
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const result = await api<ConversationSummary>("/assistant/conversations", { method: "POST", body: JSON.stringify({ job_id: jobId }) });
+      await refreshList();
+      if (activeId === result.id) setConversation(await api<Conversation>(`/assistant/conversations/${result.id}`));
+      else { setConversation(null); setActiveId(result.id); }
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not start a conversation."); }
+    finally { setBusy(false); }
+  }
+
+  async function deleteConversation() {
+    if (!conversation || busy || !window.confirm("Delete this conversation and its drafts? The tracked application will stay.")) return;
+    setBusy(true); setError("");
+    try {
+      await api(`/assistant/conversations/${conversation.id}`, { method: "DELETE" });
+      const remaining = await refreshList();
+      setConversation(null); setEditingDraftId(null); setActiveId(remaining[0]?.id || null);
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not delete this conversation."); }
+    finally { setBusy(false); }
+  }
+
+  async function send(text: string) {
+    const content = text.trim();
+    if (!content || !conversation || busy) return;
+    setBusy(true); setError(""); setNotice(""); setInput(""); setLiveActivity([]); setPendingMessage(content);
+    const previous = pendingRequestRef.current;
+    const requestId = previous && previous.conversationId === conversation.id && previous.content === content
+      ? previous.id : crypto.randomUUID();
+    pendingRequestRef.current = { conversationId: conversation.id, content, id: requestId };
+    let succeeded = false;
+    const controller = new AbortController();
+    sendControllerRef.current = controller;
+    try {
+      const response = await fetch(`${API_URL}/assistant/conversations/${conversation.id}/messages/stream`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content, request_id: requestId }), signal: controller.signal });
+      if (!response.ok) throw new Error(await getApiError(response, "Could not send your message."));
+      if (!response.body) throw new Error("The response stream is unavailable.");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let completed = false;
+      while (true) {
+        const { value, done } = await reader.read();
+        if (controller.signal.aborted) return;
+        buffer += decoder.decode(value, { stream: !done });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const event = JSON.parse(line) as { type: string; activity?: Activity; conversation?: Conversation; message?: string; request_status?: string };
+          if (event.type === "activity" && event.activity) setLiveActivity(items => [...items, event.activity!]);
+          if (event.type === "error") { if (["failed", "cancelled"].includes(event.request_status || "")) pendingRequestRef.current = null; throw new Error(event.message || "Could not send your message."); }
+          if (event.type === "complete" && event.conversation) { setConversation(event.conversation); completed = true; }
+        }
+        if (done) break;
+      }
+      if (!completed) throw new Error("The connection ended before the reply was ready. Try again.");
+      succeeded = true;
+      pendingRequestRef.current = null;
+      await refreshList().catch(() => undefined);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.workspace });
+    } catch (err) {
+      if (controller.signal.aborted) setNotice(controller.signal.reason === "cancelled" ? "Reply cancelled. External work may still be winding down." : controller.signal.reason === "completed" ? "The reply completed; the conversation has been refreshed." : "Stopped waiting. Refresh the conversation to check its status.");
+      else { setError(err instanceof Error ? err.message : "Could not send your message."); setInput(content); }
+    }
+    finally { if (sendControllerRef.current === controller) sendControllerRef.current = null; setBusy(false); setPendingMessage(""); if (succeeded) setLiveActivity([]); }
+  }
+
+  async function cancelReply() {
+    const pending = pendingRequestRef.current;
+    if (!pending) return;
+    try {
+      const result = await api<{ status: string }>(`/assistant/conversations/${pending.conversationId}/messages/${pending.id}/cancel`, { method: "POST" });
+      if (result.status === "completed") {
+        setConversation(await api<Conversation>(`/assistant/conversations/${pending.conversationId}`));
+      }
+      sendControllerRef.current?.abort(result.status);
+      setNotice(result.status === "completed" ? "The reply completed; the conversation has been refreshed." : "Reply cancelled. External work may still be winding down.");
+      pendingRequestRef.current = null;
+    } catch (error) { setError(error instanceof Error ? error.message : "Could not cancel the reply."); }
+  }
+
+  async function reviseDraft(draft: Draft) {
+    if (!conversation || !draftText.trim()) return;
+    setBusy(true); setError("");
+    try {
+      const revised = await api<Draft>(`/assistant/conversations/${conversation.id}/drafts/${draft.id}/revise`, { method: "POST", body: JSON.stringify({ content: draftText }) });
+      setConversation({ ...conversation, drafts: [...conversation.drafts, revised] }); setEditingDraftId(null); setNotice("New draft version saved.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not save this draft."); }
+    finally { setBusy(false); }
+  }
+
+  async function applyDraft(draft: Draft) {
+    if (!conversation || !conversation.job_id) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api(`/assistant/conversations/${conversation.id}/drafts/${draft.id}/apply?revision=${jobs.find(job => job.id === conversation.job_id)?.revision}`, { method: "POST" });
+      setConversation(await api<Conversation>(`/assistant/conversations/${conversation.id}`));
+      void queryClient.invalidateQueries({ queryKey: queryKeys.tracker });
+      setNotice(`${labels[draft.type]} saved to your application.`);
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not apply this draft."); }
+    finally { setBusy(false); }
+  }
+
+  async function confirmTrackerAction(draft: Draft) {
+    if (!conversation || draft.metadata?.applied) return;
+    if (draft.metadata?.action === "delete" && !window.confirm("Permanently delete this application and its linked conversation and drafts?")) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const result = await api<{ conversation_deleted: boolean; conversation?: Conversation }>(`/assistant/conversations/${conversation.id}/drafts/${draft.id}/confirm-tracker-action`, { method: "POST" });
+      if (result.conversation_deleted) {
+        const remaining = await refreshList();
+        setConversation(null); setEditingDraftId(null); setActiveId(remaining[0]?.id || null);
+      } else if (result.conversation) {
+        setConversation(result.conversation); await refreshList();
+      }
+      void queryClient.invalidateQueries({ queryKey: queryKeys.tracker });
+      setNotice("Tracker updated.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not update the tracker."); }
+    finally { setBusy(false); }
+  }
+
+  async function downloadCheatSheet(draft: Draft) {
+    if (!conversation) return;
+    setBusy(true); setError("");
+    try {
+      const response = await fetch(`${API_URL}/assistant/conversations/${conversation.id}/drafts/${draft.id}/pdf`, { credentials: "include" });
+      if (!response.ok) throw new Error(await getApiError(response, "Could not export this cheat sheet."));
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a"); link.href = url; link.download = "interview-cheat-sheet.pdf"; link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not export this cheat sheet."); }
+    finally { setBusy(false); }
+  }
+
+  function openResume(draft: Draft) {
+    if (!conversation) return;
+    sessionStorage.setItem("career-assistant-resume", JSON.stringify({ jobId: conversation.job_id, latex: draft.content, conversationId: conversation.id, draftId: draft.id }));
+    router.push(conversation.job_id ? `/generate?job_id=${conversation.job_id}` : "/generate?assistant_draft=1");
+  }
+
+  async function saveJob(event: FormEvent) {
+    event.preventDefault();
+    if (!conversation || !company.trim() || !jobTitle.trim() || !jobDescription.trim()) return;
+    setBusy(true); setError("");
+    try {
+      const job = await api<{ id: number }>("/tracker", { method: "POST", body: JSON.stringify({ company_name: company.trim(), job_title: jobTitle.trim(), job_description: jobDescription.trim(), job_source: jobSource.trim() || "unknown" }) });
+      try {
+        await api(`/assistant/conversations/${conversation.id}/link-job`, { method: "POST", body: JSON.stringify({ job_id: job.id }) });
+      } catch (err) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.trackerJobs });
+        throw new Error(`The application was saved, but could not be linked to this chat. ${err instanceof Error ? err.message : ""}`);
+      }
+      const updated = await api<Conversation>(`/assistant/conversations/${conversation.id}`);
+      setConversation(updated); await refreshList(); void queryClient.invalidateQueries({ queryKey: queryKeys.trackerJobs });
+      setShowSaveJob(false); setNotice("Application saved and linked to this conversation.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not save the application."); }
+    finally { setBusy(false); }
+  }
+
+  const activeLabel = selectedJob ? `${selectedJob.job_title} · ${selectedJob.company_name}` : conversation?.title || "General conversation";
+  function renderDraft(draft: Draft) {
+    if (!conversation) return null;
+    if (draft.type === "agent_activity") {
+      try { return <ActivityLog key={draft.id} events={JSON.parse(draft.content) as Activity[]} />; } catch { return null; }
+    }
+    if (draft.type === "job_search") {
+      let found: SearchJob[] = [];
+      try { found = JSON.parse(draft.content) as SearchJob[]; } catch { return null; }
+      const status = draft.metadata?.matching_status;
+      return <div key={draft.id} className="mt-4 space-y-2"><p className="text-xs font-semibold text-[#66755f]">Search results · select one to continue</p>
+        {status === "completed" && <p className="text-xs leading-5 text-[#71816b]">Ordered using Jev estimates. Check the posting and your experience before deciding.</p>}
+        {(status === "unavailable" || status === "not_configured") && <p className="text-xs leading-5 text-[#8b6c42]">{status === "unavailable" ? "Jev matching was unavailable" : "Jev matching is not configured"}; showing the original search order.</p>}
+        {found.map((job, index) => <div key={`${job.job_url}-${index}`} className="rounded-xl border border-[#d8e3d3] bg-white p-4"><p className="text-sm font-semibold">{index + 1}. {job.job_title || "Job"}</p><p className="mt-1 text-xs text-[#71816b]">{job.company_name || "Company not listed"} · {job.location || "Location not listed"} · {job.source || "Source unknown"}</p>
+          {job.jev_match && <dl aria-label="Jev match estimates" className="mt-3 grid gap-2 rounded-lg bg-[#f3f7f0] p-3 text-xs sm:grid-cols-3">{([["Role", job.jev_match.role], ["Experience", job.jev_match.experience], ["Preferences", job.jev_match.preferences]] as const).map(([label, value]) => <div key={label}><dt className="font-semibold text-[#66755f]">{label}</dt><dd className="mt-1 text-[#4c5948]">{matchLabels[value || ""] || "Unknown"}</dd></div>)}</dl>}
+          <div className="mt-3 flex flex-wrap gap-3 text-xs font-semibold text-[#557442]">{job.job_url && safeSource(job.job_url) && <a href={job.job_url} target="_blank" rel="noopener noreferrer" className="underline">View posting ↗</a>}<button disabled={busy} onClick={() => setInput(`Use job ${index + 1} from search ${draft.id}. Please review the job details with me.`)} className="underline disabled:opacity-40">Choose this job</button></div></div>)}</div>;
+    }
+    const editing = editingDraftId === draft.id;
+    const sources = draft.metadata?.sources?.filter(source => safeSource(source.url)) || [];
+    if (draft.type === "resume") return <ChatCv key={draft.id} conversationId={conversation.id} draft={draft} onEdit={() => openResume(draft)} onApply={conversation.job_id && !busy ? () => void applyDraft(draft) : undefined} autoPreview={false} />;
+    return <div key={draft.id} className="mt-4 rounded-xl border border-[#d8e3d3] bg-white p-4 text-[#303a32]">
+      <div className="mb-3 flex items-center justify-between gap-3"><h3 className="text-sm font-semibold">{labels[draft.type]}</h3><span className="font-mono text-[10px] text-[#899185]">{new Date(draft.created_at).toLocaleString()}</span></div>
+      {editing ? <textarea aria-label="Edit draft" value={draftText} onChange={event => setDraftText(event.target.value)} rows={12} className="w-full rounded-lg border border-[#cbd8c8] p-3 text-sm leading-6" /> : <FormattedOutput content={draft.content} copyLabel="Copy draft" />}
+      {!!sources.length && <ul className="mt-3 space-y-1">{sources.map(source => <li key={source.url}><a href={source.url} target="_blank" rel="noopener noreferrer" className="break-words text-xs text-[#4a753c] underline">{source.title || source.url} ↗</a></li>)}</ul>}
+      <div className="mt-4 flex flex-wrap gap-2">
+        {draft.type !== "research" && draft.type !== "tracker_action" && (editing ? <><button disabled={busy || !draftText.trim()} onClick={() => void reviseDraft(draft)} className="rounded-lg bg-[#3f5b3c] px-3 py-2 text-xs font-semibold text-white">Save new version</button><button onClick={() => setEditingDraftId(null)} className="rounded-lg border px-3 py-2 text-xs">Cancel</button></> : <button onClick={() => { setDraftText(draft.content); setEditingDraftId(draft.id); }} className="rounded-lg border border-[#d7dfd2] px-3 py-2 text-xs font-semibold text-[#557442]">Edit draft</button>)}
+        {!editing && draft.type === "tracker_action" && (draft.metadata?.applied ? <span className="text-xs text-[#557442]">Applied</span> : <button disabled={busy} onClick={() => void confirmTrackerAction(draft)} className="rounded-lg bg-[#3f5b3c] px-3 py-2 text-xs font-semibold text-white">Confirm tracker change</button>)}
+        {!editing && (draft.type === "interview_plan" || draft.type === "cheat_sheet") && conversation.job_id && <Link href={`/interview?job_id=${conversation.job_id}`} className="rounded-lg border px-3 py-2 text-xs font-semibold text-[#557442]">Practice interview →</Link>}
+        {!editing && draft.type === "cheat_sheet" && <button disabled={busy} onClick={() => void downloadCheatSheet(draft)} className="rounded-lg bg-[#3f5b3c] px-3 py-2 text-xs font-semibold text-white">Download PDF</button>}
+        {!editing && draft.type === "job_context" && !conversation.job_id && <button onClick={() => { setJobDescription(draft.content); setShowSaveJob(true); }} className="rounded-lg bg-[#3f5b3c] px-3 py-2 text-xs font-semibold text-white">Save this job</button>}
+        {!editing && draft.type === "cover_letter" && conversation.job_id && <button disabled={busy} onClick={() => void applyDraft(draft)} className="rounded-lg bg-[#3f5b3c] px-3 py-2 text-xs font-semibold text-white">Save to application</button>}
+        {!editing && draft.type === "job_fit" && <button onClick={() => setInput("Reassess my fit for this job using my current profile and our conversation.")} className="rounded-lg border px-3 py-2 text-xs font-semibold text-[#557442]">Reassess fit</button>}
+      </div>
+    </div>;
+  }
+
+  return (
+    <div className="h-full min-h-0 overflow-hidden bg-[#f5f2ed] text-[#1a1814]">
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-[1500px] flex-col px-3 py-3 sm:px-7 sm:py-5">
+        <header className="mb-3 flex shrink-0 flex-wrap items-end justify-between gap-3 border-b border-[#d7d1c8] pb-3 sm:mb-4 sm:pb-4">
+          <div><p className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[#688046]">Your application workspace</p><h1 className="text-2xl font-semibold tracking-tight sm:text-4xl">Career Agent<span className="text-[#6b8d35]">.</span></h1><p className="mt-1 hidden text-sm leading-6 text-[#777169] sm:block">Find jobs, research companies, and shape your application in one conversation.</p></div>
+        </header>
+
+        {unconfirmedSkills > 0 && <div className="mb-4 rounded-lg border border-[#ded5af] bg-[#faf7e8] px-4 py-3 text-xs leading-5 text-[#6a603f]">{unconfirmedSkills} {unconfirmedSkills === 1 ? "skill needs" : "skills need"} confirmation before use in documents. <Link href="/dashboard" className="font-semibold underline underline-offset-2">Review skills →</Link></div>}
+        <div className="flex min-h-0 flex-1 flex-col gap-3 lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
+          <aside className="flex min-h-0 shrink-0 items-center gap-2 overflow-hidden rounded-xl border border-[#ddd7cd] bg-[#efebe4] p-2 lg:flex-col lg:items-stretch lg:gap-0 lg:p-4">
+            <div className="mb-4 hidden shrink-0 items-center justify-between lg:flex"><span className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[#817a71]">Conversations</span><button disabled={busy} onClick={() => void createConversation(null)} aria-label="New general conversation" title="New general conversation" className="rounded-md p-1 text-[#536b37] hover:bg-[#e2ead3] focus-visible:outline-2 focus-visible:outline-[#536b37] disabled:opacity-40"><Plus size={17} /></button></div>
+            <label htmlFor="start-application" className="sr-only">Open an application conversation</label>
+            <div className="relative w-[42%] shrink-0 lg:mb-4 lg:w-full"><select id="start-application" value="" disabled={busy || loadingJobs} onChange={event => { if (event.target.value) void createConversation(Number(event.target.value)); }} className="w-full appearance-none rounded-lg border border-[#d6d0c6] bg-[#fffefa] px-3 py-2.5 pr-8 text-xs text-[#4d5147] outline-none focus:ring-2 focus:ring-[#8bac6c] disabled:opacity-40"><option value="">+ Application</option>{jobs.map(job => <option key={job.id} value={job.id}>{job.company_name} · {job.job_title}</option>)}</select><ChevronDown size={14} className="pointer-events-none absolute right-3 top-3 text-[#929087]" /></div>
+            <div className="flex min-h-0 min-w-0 flex-1 gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:flex-col lg:overflow-x-hidden lg:overflow-y-auto lg:[scrollbar-width:auto] lg:[&::-webkit-scrollbar]:block">{conversations.map(item => <button key={item.id} disabled={busy} onClick={() => { if (item.id !== activeId) { setConversation(null); setActiveId(item.id); } setError(""); setNotice(""); }} className={`min-w-28 max-w-36 shrink-0 overflow-hidden rounded-lg px-3 py-1.5 text-left transition lg:min-w-0 lg:max-w-none lg:shrink lg:py-2.5 ${item.id === activeId ? "bg-[#dfead1] text-[#35532e]" : "text-[#6c6b61] hover:bg-[#e3ded6]"}`}><span className="block truncate text-xs font-semibold">{item.title || (item.job_id ? "Application" : "General chat")}</span><span className="mt-1 block font-mono text-[9px] uppercase tracking-wider opacity-70">{item.job_id ? "Application" : "General"}</span></button>)}</div>
+            {!loading && !conversations.length && <p className="hidden text-xs leading-5 text-[#847e73] lg:block">Start a general chat or choose an application.</p>}
+            <button disabled={busy} onClick={() => void createConversation(null)} aria-label="New general conversation" title="New general conversation" className="shrink-0 rounded-md p-2 text-[#536b37] hover:bg-[#e2ead3] focus-visible:outline-2 focus-visible:outline-[#536b37] disabled:opacity-40 lg:hidden"><Plus size={17} /></button>
+            <button disabled={busy} onClick={() => void createConversation(null)} className="mt-4 hidden shrink-0 items-center gap-2 text-xs font-semibold text-[#557442] hover:underline disabled:opacity-40 lg:flex"><Plus size={14} /> New general chat</button>
+          </aside>
+
+          <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[#ddd7cd] bg-[#fffefa]">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#e7e2d9] px-4 py-3 sm:px-5 sm:py-4"><div className="min-w-0"><p className="font-mono text-[9px] uppercase tracking-[0.16em] text-[#8b9181]">{conversation?.job_id ? "Application conversation" : "General conversation"}</p><h2 className="mt-1 truncate text-sm font-semibold">{conversation ? activeLabel : "Choose a conversation"}</h2></div><div className="flex items-center gap-2">{conversation && !conversation.job_id && <button onClick={() => setShowSaveJob(true)} className="rounded-md border border-[#d9ded2] px-3 py-1.5 text-xs text-[#536b37] hover:bg-[#f3f8ee]">Save a job</button>}{conversation && <button disabled={busy} onClick={() => void deleteConversation()} aria-label="Delete conversation" title="Delete conversation" className="rounded-md p-2 text-[#918b81] hover:bg-[#fff1ee] hover:text-[#aa443d] disabled:opacity-40"><Trash2 size={15} /></button>}</div></div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5 sm:py-6" aria-live="polite">
+              {!conversation ? <div className="flex h-full flex-col items-center justify-center text-center"><Sparkles className="mb-4 text-[#789762]" size={25} /><p className="font-semibold">Your next step starts here.</p><p className="mt-2 max-w-xs text-sm leading-6 text-[#817c73]">Start a conversation or choose an application from the left.</p></div> : conversation.messages.length === 0 ? <div className="mx-auto max-w-2xl py-6"><div className="mb-5 inline-flex rounded-xl bg-[#e3eed9] p-3 text-[#51713f]"><Sparkles size={20} /></div><h3 className="text-2xl font-medium tracking-tight">What are you working toward?</h3><p className="mt-2 text-sm leading-6 text-[#777a70]">Find jobs, research a company, or shape your application.</p><div className="mt-6 grid gap-2 sm:grid-cols-3">{suggestions.map(({ icon: Icon, title, prompt }) => <button key={title} disabled={busy} onClick={() => setInput(prompt)} className="flex min-h-24 flex-col items-start justify-between rounded-lg border border-[#e3e4db] p-3 text-left text-xs font-semibold text-[#4e6350] hover:border-[#9ab590] hover:bg-[#f7fbf4] disabled:opacity-40"><Icon size={17} /><span>{title} ↗</span></button>)}</div></div> : <div className="mx-auto w-full max-w-3xl space-y-5">{conversation.messages.map(message => <article key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}><div className={`min-w-0 max-w-[95%] rounded-2xl px-4 py-3 text-[15px] leading-7 sm:max-w-[90%] ${message.role === "user" ? "bg-[#3f5b3c] text-white" : "border border-[#e5e8df] bg-[#f8faf5] text-[#303a32]"}`}><div className="mb-1 font-mono text-[9px] uppercase tracking-[0.15em] opacity-60">{message.role === "user" ? "You" : "Career assistant"}</div>{message.role === "assistant" ? <><FormattedOutput content={message.content} copyLabel="Copy response" />{conversation.drafts.filter(draft => draft.metadata?.assistant_message_id === message.id).map(renderDraft)}</> : <div className="whitespace-pre-wrap break-words">{message.content}</div>}</div></article>)}{conversation.drafts.filter(draft => !draft.metadata?.assistant_message_id || !conversation.messages.some(message => message.id === draft.metadata?.assistant_message_id)).map(renderDraft)}<div ref={bottomRef} /></div>}
+              {(pendingMessage || (error && liveActivity.length > 0)) && <div className="mx-auto w-full max-w-3xl space-y-3">{pendingMessage && <div className="flex justify-end"><div className="min-w-0 max-w-[90%] rounded-2xl bg-[#3f5b3c] px-4 py-3 text-[15px] leading-7 text-white"><span className="mb-1 block font-mono text-[9px] uppercase tracking-wider opacity-70">You</span>{pendingMessage}</div></div>}<ActivityLog events={liveActivity} />{busy && <p role="status" className="text-sm text-[#7b8275]">Working on it…</p>}</div>}
+            </div>
+            {conversation && !conversation.job_id && (conversation.drafts.some(d => d.type === "cover_letter") || conversation.messages.some(m => /cover letter/i.test(m.content))) && <div className="px-5 pb-2"><button type="button" disabled={busy} onClick={() => setInput("Add this job to my tracker.")} className="rounded-full border border-[#cbd8c8] px-3 py-1.5 text-xs font-semibold text-[#557442]">Add this job to my tracker</button></div>}
+            {conversation && <form onSubmit={event => { event.preventDefault(); void send(input); }} className="flex shrink-0 items-end gap-2 border-t border-[#e7e2d9] p-3 sm:p-4"><label htmlFor="career-message" className="sr-only">Message the Career Agent</label>{busy && sendControllerRef.current && <button type="button" onClick={() => void cancelReply()} className="px-3 py-2 text-xs font-semibold">Cancel reply</button>}<textarea id="career-message" value={input} maxLength={12000} onChange={event => setInput(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(input); } }} placeholder="Ask about jobs, a company, your CV, or an interview…" rows={2} className="min-w-0 flex-1 resize-none rounded-lg border border-[#e3e6dc] bg-[#fbfcf9] px-3 py-2 text-sm leading-6 outline-none focus:ring-2 focus:ring-[#a3bc95]" /><div className="flex shrink-0 justify-end"><button type="submit" disabled={busy || !input.trim()} aria-label="Send message" className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#3f5b3c] text-white hover:bg-[#304a30] disabled:opacity-40"><ArrowUp size={18} /></button></div></form>}
+            {(error || notice) && <p role={error ? "alert" : "status"} className={`border-t border-[#e7e2d9] px-5 py-3 text-xs ${error ? "text-[#ae4038]" : "text-[#4e733c]"}`}>{error || notice}</p>}
+          </section>
+
+        </div>
+      </div>
+      {showSaveJob && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><div role="dialog" aria-modal="true" aria-labelledby="save-job-title" className="w-full max-w-md rounded-xl bg-[#fffefa] p-6 shadow-xl"><div className="flex items-center justify-between"><h2 id="save-job-title" className="text-lg font-semibold">Save this application</h2><button aria-label="Close" onClick={() => setShowSaveJob(false)}><X size={18} /></button></div><p className="mt-2 text-xs leading-5 text-[#777a70]">Add the role and description to your tracker and link this conversation.</p><form onSubmit={event => void saveJob(event)} className="mt-5 space-y-3"><label className="block text-xs font-semibold text-[#5f665d]">Company<input required value={company} onChange={event => setCompany(event.target.value)} className="mt-1 w-full rounded-lg border border-[#d9ded2] p-2.5 text-sm" /></label><label className="block text-xs font-semibold text-[#5f665d]">Job title<input required value={jobTitle} onChange={event => setJobTitle(event.target.value)} className="mt-1 w-full rounded-lg border border-[#d9ded2] p-2.5 text-sm" /></label><label className="block text-xs font-semibold text-[#5f665d]">Where did you find it? <span className="font-normal">(optional)</span><input value={jobSource} onChange={event => setJobSource(event.target.value)} className="mt-1 w-full rounded-lg border border-[#d9ded2] p-2.5 text-sm" /></label><label className="block text-xs font-semibold text-[#5f665d]">Job description<textarea required rows={5} value={jobDescription} onChange={event => setJobDescription(event.target.value)} className="mt-1 w-full resize-y rounded-lg border border-[#d9ded2] p-2.5 text-sm" /></label>{error && <p role="alert" className="text-xs text-[#ae4038]">{error}</p>}<button disabled={busy} className="rounded-lg bg-[#3f5b3c] px-4 py-2 text-xs font-semibold text-white disabled:opacity-40">Save and link</button></form></div></div>}
+    </div>
+  );
+}

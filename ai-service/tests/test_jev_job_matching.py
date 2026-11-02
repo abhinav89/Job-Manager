@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, patch
 import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from services import jev_job_matching as matching
-from services.job_search_agent import create_job_search_tools
+from cv_tailor.services import jev_job_matching as matching
+from cv_tailor.services.job_search_agent import create_job_search_tools
 
 
 class FakeContext:
@@ -85,9 +85,9 @@ class JevMatchingTests(unittest.TestCase):
         ctx = FakeContext()
         jobs = [{"job_title": "First"}, {"job_title": "Second"}]
         ranked = [{"job_title": "Second", "jev_match": {"role": "related"}}, {"job_title": "First"}]
-        with patch("services.job_search_agent.configured_key", return_value="key"), \
-             patch("services.job_search_agent.fetch_remote_jobs", new=AsyncMock(return_value=(jobs, {"site": "ok"}))), \
-             patch("services.job_search_agent.rank_jobs", new=AsyncMock(return_value=ranked)) as rank:
+        with patch("cv_tailor.services.job_search_agent.configured_key", return_value="key"), \
+             patch("cv_tailor.services.job_search_agent.fetch_remote_jobs", new=AsyncMock(return_value=(jobs, {"site": "ok"}))), \
+             patch("cv_tailor.services.job_search_agent.rank_jobs", new=AsyncMock(return_value=ranked)) as rank:
             result = asyncio.run(create_job_search_tools(ctx)[0]("Python", preferences="remote work"))
         self.assertEqual(result["jobs"], ranked)
         self.assertEqual(json.loads(ctx.drafts[0]["content"]), ranked)
@@ -99,9 +99,9 @@ class JevMatchingTests(unittest.TestCase):
         jobs = [{"job_title": "First"}, {"job_title": "Second"}]
         for key, expected in [("", "not_configured"), ("key", "unavailable")]:
             ctx = FakeContext()
-            with patch("services.job_search_agent.configured_key", return_value=key), \
-                 patch("services.job_search_agent.fetch_remote_jobs", new=AsyncMock(return_value=(jobs, {}))), \
-                 patch("services.job_search_agent.rank_jobs", new=AsyncMock(side_effect=RuntimeError("private detail"))):
+            with patch("cv_tailor.services.job_search_agent.configured_key", return_value=key), \
+                 patch("cv_tailor.services.job_search_agent.fetch_remote_jobs", new=AsyncMock(return_value=(jobs, {}))), \
+                 patch("cv_tailor.services.job_search_agent.rank_jobs", new=AsyncMock(side_effect=RuntimeError("private detail"))):
                 result = asyncio.run(create_job_search_tools(ctx)[0]("Python"))
             self.assertEqual(result["jobs"], jobs)
             self.assertEqual(result["matching_status"], expected)
@@ -112,9 +112,9 @@ class JevMatchingTests(unittest.TestCase):
     def test_unverified_preferences_are_not_sent_to_jev(self):
         ctx = FakeContext()
         jobs = [{"job_title": "Engineer"}]
-        with patch("services.job_search_agent.configured_key", return_value="key"), \
-             patch("services.job_search_agent.fetch_remote_jobs", new=AsyncMock(return_value=(jobs, {}))), \
-             patch("services.job_search_agent.rank_jobs", new=AsyncMock(return_value=jobs)) as rank:
+        with patch("cv_tailor.services.job_search_agent.configured_key", return_value="key"), \
+             patch("cv_tailor.services.job_search_agent.fetch_remote_jobs", new=AsyncMock(return_value=(jobs, {}))), \
+             patch("cv_tailor.services.job_search_agent.rank_jobs", new=AsyncMock(return_value=jobs)) as rank:
             asyncio.run(create_job_search_tools(ctx)[0]("Python", preferences="invented preference"))
         self.assertEqual(rank.await_args.args[3], "")
 
