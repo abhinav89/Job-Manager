@@ -9,6 +9,7 @@ from pypdf import PdfReader
 from services.llm_service import extract_profile_from_resume
 from services.preset_service import resolve_preset
 from limiter import limiter
+from services.external_work import run_blocking
 
 router = APIRouter(
     prefix="/profile",
@@ -36,12 +37,14 @@ def serialize_profile(profile: db_models.Profile) -> dict:
         "github": profile.github,
         "portfolio": profile.portfolio,
         "preset_slug": profile.preset_slug,
+        "preferred_template": profile.preferred_template,
         "education": [
             {
                 "school_name": item.school_name,
                 "course": item.course,
                 "location": item.location,
                 "description": item.description,
+                "date_range": item.date_range,
             }
             for item in profile.education
         ],
@@ -83,6 +86,7 @@ async def auto_fill_resume(request: Request, file: UploadFile = File(...), db: S
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
         
+    db.rollback()
     if not file.filename.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
         
@@ -96,14 +100,16 @@ async def auto_fill_resume(request: Request, file: UploadFile = File(...), db: S
         if not text.strip():
             raise HTTPException(status_code=400, detail="Could not extract text from PDF")
             
-        profile_data = extract_profile_from_resume(text)
+        profile_data = await run_blocking(extract_profile_from_resume, text[:64000])
         
         return {"status": "success", "data": profile_data}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to parse resume: {str(e)}")
 
 def save_profile_data(db: Session, user_id: int, profile_data: UserProfile) -> None:
-    """Replace the user's profile and all nested rows with profile_data, then commit."""
+    """Update the profile in place and replace its nested rows, then commit."""
     existing = db.query(db_models.Profile).filter(
         db_models.Profile.user_id == user_id
     ).first()
@@ -113,26 +119,21 @@ def save_profile_data(db: Session, user_id: int, profile_data: UserProfile) -> N
         for skill in existing.skills
     } if existing else {}
     previous_project_links = {project.name.strip().casefold(): project.link for project in existing.projects if project.name} if existing else {}
+    previous_education_dates = {(item.school_name, item.course): item.date_range for item in existing.education} if existing else {}
     if existing:
         db.query(db_models.Education).filter(db_models.Education.profile_id == existing.id).delete()
         db.query(db_models.Experience).filter(db_models.Experience.profile_id == existing.id).delete()
         db.query(db_models.Project).filter(db_models.Project.profile_id == existing.id).delete()
         db.query(db_models.Skill).filter(db_models.Skill.profile_id == existing.id).delete()
         db.query(db_models.Certification).filter(db_models.Certification.profile_id == existing.id).delete()
-        db.query(db_models.Profile).filter(db_models.Profile.id == existing.id).delete()
         db.flush()
+        db.expire(existing, ["education", "experience", "projects", "skills", "certifications"])
 
-    new_profile = db_models.Profile(
-        user_id=user_id,
-        first_name=profile_data.first_name,
-        last_name=profile_data.last_name,
-        mobile_no=profile_data.mobile_no,
-        email=profile_data.email,
-        linkedin=profile_data.linkedin,
-        github=profile_data.github,
-        portfolio=profile_data.portfolio,
-        preset_slug=profile_data.preset_slug
-    )
+    new_profile = existing or db_models.Profile(user_id=user_id)
+    for field in ("first_name", "last_name", "mobile_no", "email", "linkedin", "github", "portfolio", "preset_slug"):
+        setattr(new_profile, field, getattr(profile_data, field))
+    if profile_data.preferred_template is not None:
+        new_profile.preferred_template = profile_data.preferred_template
     db.add(new_profile)
     db.flush()
 
@@ -142,7 +143,8 @@ def save_profile_data(db: Session, user_id: int, profile_data: UserProfile) -> N
             school_name=edu.school_name,
             course=edu.course,
             location=edu.location,
-            description=edu.description
+            description=edu.description,
+            date_range=edu.date_range if edu.date_range is not None else previous_education_dates.get((edu.school_name, edu.course)),
         ))
 
     for exp in profile_data.experience:

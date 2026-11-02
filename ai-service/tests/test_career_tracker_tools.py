@@ -72,9 +72,9 @@ class CareerTrackerTests(unittest.TestCase):
         serialized = SimpleNamespace(model_dump_json=lambda: '{"skills":["Python"]}')
         prompts = []
         tools = {tool.__name__: tool for tool in create_tracker_tools(self.ctx, lambda _: ("Job requirements", "A"), lambda prompt: prompts.append(prompt) or "Supported: Python")}
-        with patch("services.career_tracker_tools.db_profile_to_schema", return_value=serialized) as profile:
+        with patch("services.career_tracker_tools.verify_personal_claims"), patch("services.career_tracker_tools.db_profile_to_schema", return_value=serialized) as profile:
             result = tools["analyze_job_fit"]()
-        profile.assert_called_once_with(self.ctx.profile, confirmed_skills_only=True)
+        profile.assert_called_with(self.ctx.profile, confirmed_skills_only=True)
         self.assertEqual(result["draft"]["type"], "job_fit")
         self.assertIn("I built workflows", prompts[0])
         self.assertIn("lack of evidence is not a known gap", prompts[0])
@@ -89,6 +89,15 @@ class CareerTrackerTests(unittest.TestCase):
             result = tools["analyze_job_fit"]()
         self.assertEqual(result["status"], "error")
         self.assertIsNone(self.ctx.latest_draft("job_fit"))
+
+    def test_fit_rejects_scores_and_apply_skip_verdicts(self):
+        self.ctx.profile = object()
+        serialized = SimpleNamespace(model_dump_json=lambda: "{}")
+        for text in ("Fit: 80%", "Overall rating: 8/10", "Match score: 90", "**Verdict:** Apply", "Recommendation: skip"):
+            with self.subTest(text=text), patch("services.career_tracker_tools.db_profile_to_schema", return_value=serialized), patch("services.career_tracker_tools.verify_personal_claims"):
+                tools = {tool.__name__: tool for tool in create_tracker_tools(self.ctx, lambda _: ("Job requirements", "A"), lambda _: text)}
+                self.assertEqual(tools["analyze_job_fit"]()["status"], "error")
+                self.assertIsNone(self.ctx.latest_draft("job_fit"))
 
     def test_delete_linked_application_also_deletes_conversation(self):
         self.conversation.job_id = 7

@@ -109,7 +109,7 @@ class PersonalEvidenceTests(unittest.TestCase):
         calls = []
         def model(prompt):
             calls.append(prompt)
-            return '{"summary":"Built a Python app"}' if len(calls) == 1 else '{"supported":true,"unsupported":[]}'
+            return '{"summary":"Built a Python app","experience":[],"projects":[],"skills":[],"certifications":""}' if len(calls) == 1 else '{"supported":true,"unsupported":[]}'
         with patch("services.llm_service.retrieve_successful_evidence", return_value=[{"source": "Old offer", "text": "Managed a team of 100"}]), patch("services.llm_service.assemble_latex", return_value="latex"):
             result = generate_latex_resume(profile, "Needs leadership", conversation_evidence="I built a Python app", complete_fn=model)
         self.assertEqual(result, "latex")
@@ -134,16 +134,31 @@ class PersonalEvidenceTests(unittest.TestCase):
     def test_resume_repairs_unsupported_claim_once(self):
         profile = models.Profile(user_id=1, first_name="Alex", last_name="Example", mobile_no="", email="alex@example.com")
         prompts = []
-        replies = iter(['{"summary":"Led a team of five"}', '{"supported":false,"unsupported":["Unsubstantiated team leadership"]}',
-                        '{"summary":"Python developer"}', '{"supported":true,"unsupported":[]}'])
+        replies = iter(['{"summary":"Led a team of five","experience":[],"projects":[],"skills":[],"certifications":""}', '{"supported":false,"unsupported":["Unsubstantiated team leadership"]}',
+                        '{"summary":"Python developer","experience":[],"projects":[],"skills":[],"certifications":""}', '{"supported":true,"unsupported":[]}'])
         def model(prompt):
             prompts.append(prompt)
             return next(replies)
         with patch("services.llm_service.assemble_latex", return_value="latex") as assemble:
             self.assertEqual(generate_latex_resume(profile, "Lead a team", complete_fn=model), "latex")
-        self.assertEqual(assemble.call_args.args[1], {"summary": "Python developer"})
+        self.assertEqual(assemble.call_args.args[1]["summary"], "Python developer")
         self.assertEqual(len(prompts), 4)
         self.assertIn("Unsubstantiated team leadership", prompts[2])
+
+    def test_resume_repair_receives_rejected_draft_as_untrusted_context(self):
+        profile = models.Profile(user_id=1, first_name="Alex", last_name="Example", mobile_no="", email="alex@example.com")
+        rejected = {"summary": "Led a team of five", "experience": [], "projects": [], "skills": [], "certifications": ""}
+        replies = iter([json.dumps(rejected), '{"supported":false,"unsupported":["No leadership evidence"]}',
+                        '{"summary":"Developer","experience":[],"projects":[],"skills":[],"certifications":""}', '{"supported":true,"unsupported":[]}'])
+        prompts = []
+        def model(prompt):
+            prompts.append(prompt)
+            return next(replies)
+        with patch("services.llm_service.assemble_latex", return_value="latex"):
+            generate_latex_resume(profile, "Developer", complete_fn=model)
+        self.assertIn("REJECTED DRAFT (untrusted phrasing, not personal evidence)", prompts[2])
+        self.assertIn('"summary": "Led a team of five"', prompts[2])
+        self.assertNotIn("Led a team of five", prompts[3].split("DRAFT:")[0])
 
 
 if __name__ == "__main__":

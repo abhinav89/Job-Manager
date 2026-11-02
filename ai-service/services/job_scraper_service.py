@@ -1,4 +1,5 @@
 import asyncio
+from urllib.parse import quote_plus
 import json
 import httpx
 from bs4 import BeautifulSoup
@@ -9,6 +10,8 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept-Language": "en-US,en;q=0.9",
 }
+
+_browser_slots = asyncio.Semaphore(2)
 
 # On-site signals used to enforce remote-only filtering.
 ONSITE_SIGNALS = ["on-site", "onsite", "on site", "in office", "in-office", "office based", "office-based"]
@@ -29,9 +32,10 @@ def _is_remote_posting(text: str) -> bool:
 async def scrape_scrapling(url: str, timeout: int = 25) -> Optional[str]:
     try:
         from scrapling.fetchers import StealthyFetcher
-        resp = await StealthyFetcher.async_fetch(
-            url, headless=True, block_webrtc=True, timeout=timeout
-        )
+        async with _browser_slots:
+            resp = await StealthyFetcher.async_fetch(
+                url, headless=True, block_webrtc=True, timeout=timeout
+            )
         body = getattr(resp, "body", b"") or b""
         return body.decode("utf-8", errors="ignore") if isinstance(body, bytes) else str(body)
     except Exception as err:
@@ -52,7 +56,7 @@ async def _httpx_get(url: str, timeout: int = 10) -> Optional[str]:
 
 # ── Source: OnlineJobs.ph (httpx) ────────────────────────────────
 async def fetch_onlinejobs_ph(query: str = "", limit: int = 5) -> Tuple[List[Dict[str, Any]], str]:
-    search_term = query.strip() or "developer"
+    search_term = quote_plus(query.strip() or "developer")
     url = f"https://www.onlinejobs.ph/jobseekers/jobsearch?jobkeyword={search_term}"
     html = await _httpx_get(url)
     if not html:
@@ -87,7 +91,7 @@ async def fetch_onlinejobs_ph(query: str = "", limit: int = 5) -> Tuple[List[Dic
             "job_url": href or url,
             "location": "Remote (Philippines / Global)",
             "salary_range": salary,
-            "job_description": desc or f"Online job posting for {title} on OnlineJobs.ph.",
+            "job_description": desc,
             "short_description": (desc[:200] + "...") if len(desc) > 200 else (desc or f"Position for {title}."),
             "job_type": job_type,
             "source": "OnlineJobs.ph",
@@ -99,7 +103,7 @@ async def fetch_onlinejobs_ph(query: str = "", limit: int = 5) -> Tuple[List[Dic
 
 # ── Source: LinkedIn PH (httpx) ──────────────────────────────────
 async def fetch_linkedin_ph(query: str = "", limit: int = 5) -> Tuple[List[Dict[str, Any]], str]:
-    search_term = query.strip() or "developer"
+    search_term = quote_plus(query.strip() or "developer")
     url = f"https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords={search_term}&location=Philippines&f_WT=2"
     html = await _httpx_get(url)
     if not html:
@@ -128,7 +132,7 @@ async def fetch_linkedin_ph(query: str = "", limit: int = 5) -> Tuple[List[Dict[
             "job_url": href,
             "location": location,
             "salary_range": "Competitive",
-            "job_description": f"LinkedIn job posting for {title} at {company} ({location}).",
+            "job_description": "",
             "short_description": f"Position for {title} at {company} ({location}).",
             "job_type": "Full-Time",
             "source": "LinkedIn",
@@ -182,7 +186,7 @@ async def fetch_remoteok_jobs(query: str = "", limit: int = 5) -> Tuple[List[Dic
             "job_url": job.get("url") or job.get("apply_url") or "",
             "location": job.get("location") or "Remote",
             "salary_range": salary_str,
-            "job_description": desc[:4000] if desc else f"Remote position for {title} at {company}.",
+            "job_description": desc[:4000] if desc else "",
             "short_description": (desc[:200] + "...") if desc and len(desc) > 200 else (title or ""),
             "job_type": "Full-Time (Remote)",
             "source": "RemoteOK",
@@ -260,7 +264,7 @@ async def fetch_remotive_jobs(query: str = "", limit: int = 5) -> Tuple[List[Dic
             "job_url": job.get("url") or "",
             "location": job.get("candidate_required_location") or "Remote",
             "salary_range": job.get("salary") or "Competitive",
-            "job_description": desc[:4000] if desc else f"Remote position for {title}.",
+            "job_description": desc[:4000] if desc else "",
             "short_description": (desc[:200] + "...") if desc and len(desc) > 200 else (title or ""),
             "job_type": "Full-Time (Remote)",
             "source": "Remotive",
@@ -316,8 +320,8 @@ async def fetch_arbeitnow_jobs(query: str = "", limit: int = 5) -> Tuple[List[Di
 
 # ── Source: JobStreet PH (scrapling stealth) ─────────────────────
 async def fetch_jobstreet_ph(query: str = "", limit: int = 5) -> Tuple[List[Dict[str, Any]], str]:
-    search_term = query.strip() or "remote"
-    url = f"https://www.jobstreet.com.ph/j?q={search_term.replace(' ', '%20')}&work-type=242"
+    search_term = quote_plus(query.strip() or "remote")
+    url = f"https://www.jobstreet.com.ph/j?q={search_term}&work-type=242"
     html = await scrape_scrapling(url)
     if not html:
         return [], "blocked"
@@ -343,7 +347,7 @@ async def fetch_jobstreet_ph(query: str = "", limit: int = 5) -> Tuple[List[Dict
             "job_url": href,
             "location": "Remote (Philippines)",
             "salary_range": "Competitive",
-            "job_description": f"JobStreet PH posting for {title} at {company}.",
+            "job_description": "",
             "short_description": f"Position for {title} at {company}.",
             "job_type": "Full-Time",
             "source": "JobStreet PH",
@@ -355,8 +359,8 @@ async def fetch_jobstreet_ph(query: str = "", limit: int = 5) -> Tuple[List[Dict
 
 # ── Source: Indeed US (scrapling stealth) ────────────────────────
 async def fetch_indeed_us(query: str = "", limit: int = 5) -> Tuple[List[Dict[str, Any]], str]:
-    search_term = query.strip() or "remote"
-    url = f"https://www.indeed.com/jobs?q={search_term.replace(' ', '+')}+remote&remotejob=032b3046-06e9-4ae4-8f4b-986bb313b994"
+    search_term = quote_plus(query.strip() or "remote")
+    url = f"https://www.indeed.com/jobs?q={search_term}+remote&remotejob=032b3046-06e9-4ae4-8f4b-986bb313b994"
     html = await scrape_scrapling(url)
     if not html:
         return [], "blocked"
@@ -384,7 +388,7 @@ async def fetch_indeed_us(query: str = "", limit: int = 5) -> Tuple[List[Dict[st
             "job_url": href,
             "location": location,
             "salary_range": "Competitive",
-            "job_description": f"Indeed US posting for {title} at {company}.",
+            "job_description": "",
             "short_description": f"Position for {title} at {company}.",
             "job_type": "Full-Time",
             "source": "Indeed (US)",
@@ -396,8 +400,8 @@ async def fetch_indeed_us(query: str = "", limit: int = 5) -> Tuple[List[Dict[st
 
 # ── Source: Indeed PH (scrapling stealth) ────────────────────────
 async def fetch_indeed_ph(query: str = "", limit: int = 5) -> Tuple[List[Dict[str, Any]], str]:
-    search_term = query.strip() or "remote"
-    url = f"https://ph.indeed.com/jobs?q={search_term.replace(' ', '+')}+remote&remotejob=032b3046-06e9-4ae4-8f4b-986bb313b994"
+    search_term = quote_plus(query.strip() or "remote")
+    url = f"https://ph.indeed.com/jobs?q={search_term}+remote&remotejob=032b3046-06e9-4ae4-8f4b-986bb313b994"
     html = await scrape_scrapling(url)
     if not html:
         return [], "blocked"
@@ -425,7 +429,7 @@ async def fetch_indeed_ph(query: str = "", limit: int = 5) -> Tuple[List[Dict[st
             "job_url": href,
             "location": location,
             "salary_range": "Competitive",
-            "job_description": f"Indeed PH posting for {title} at {company}.",
+            "job_description": "",
             "short_description": f"Position for {title} at {company}.",
             "job_type": "Full-Time",
             "source": "Indeed (PH)",

@@ -17,6 +17,13 @@ LABELS = {
     "prepare_interview": "Preparing for your interview",
     "create_cheat_sheet": "Creating an interview cheat sheet",
     "analyze_job_fit": "Checking job fit",
+    "list_resume_blocks": "Reading resume Blocks",
+    "check_resume": "Checking your resume",
+    "revise_resume_summary": "Revising your summary",
+    "revise_resume_bullet": "Revising your selected bullet",
+    "list_applications": "Reading your applications",
+    "propose_add_application": "Preparing an application proposal",
+    "propose_application_change": "Preparing a tracker change",
 }
 
 

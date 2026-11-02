@@ -95,6 +95,7 @@ A Spot Edit may reframe, re-emphasise, re-order or re-word what the user's profi
 
 ## Architectural constraints
 
+- **Execution mode is explicit.** Trusted single-user development can use `EXECUTION_BACKEND=local` with native Python and Tectonic/XeLaTeX, bound to loopback. It runs with the developer's OS permissions and is not a sandbox. Hosted deployments use `EXECUTION_BACKEND=docker`; native mode is rejected outside `ENVIRONMENT=development`. Neither mode silently falls back to the other.
 - **PDF compilation is Python + Tectonic** (`ai-service/services/pdf_service.py`), invoked directly from FastAPI. The `pdf-service/` Go/Gin app is dead code (nothing calls port 8081) and is not used. ATS validation is Python (`ai-service/services/ats_check.py`), not Go.
 - **The resume editor has three modes over one source of truth** (`frontend/src/app/(authenticated)/generate/page.tsx`): a structured field form ("Edit"), a PDF preview, and a raw LaTeX editor ("LaTeX"). The LaTeX string is the single source of truth; the structured form is a parsed projection of it (`frontend/src/lib/resumeDraft.ts`) that writes edits back into the LaTeX surgically. Preset prefill happens at the profile + prompt level, never as UI placeholder fields.
 - **The AI never emits LaTeX.** Gemini returns plain-text JSON; `services/latex_assembly.py` builds every LaTeX construct. This holds for Spot Edits too — a Spot Edit returns replacement plain text for a Block, never markup. It is what makes an AI rewrite structurally incapable of breaking compilation.

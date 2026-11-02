@@ -2,7 +2,7 @@
 import { Suspense, useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
-import { API_URL } from "@/lib/api";
+import { API_URL, getApiError } from "@/lib/api";
 import InlineQueryError from "@/components/InlineQueryError";
 import RouteLoading from "@/components/RouteLoading";
 import { useQueryClient } from "@tanstack/react-query";
@@ -116,6 +116,7 @@ function CodePageContent() {
   const [genDifficulty, setGenDifficulty] = useState("Medium");
   const [problemsLoading, setProblemsLoading] = useState(true);
   const [problemsError, setProblemsError] = useState("");
+  const [requestError, setRequestError] = useState("");
 
   // ── Auth + load ──────────────────────────────────────────────────
   const loadProblems = useCallback(async () => {
@@ -147,7 +148,10 @@ function CodePageContent() {
 
   // ── Load full problem ────────────────────────────────────────────
   const selectProblem = async (p: Problem) => {
+    setRequestError("");
+    try {
     const res = await fetch(`${API}/code/problems/${p.id}`, { credentials: "include" });
+    if (!res.ok) { setRequestError(await getApiError(res, "Could not load the problem.")); return; }
     if (res.ok) {
       const full: Problem = await res.json();
       setSelectedProblem(full);
@@ -156,25 +160,29 @@ function CodePageContent() {
       setErrorExplanation(""); setRightPanel("output");
       setHintLevel(1);
     }
+    } catch (error) { setRequestError(error instanceof Error ? error.message : "Could not load the problem."); }
   };
 
   // ── Run code ─────────────────────────────────────────────────────
   const handleRun = useCallback(async () => {
     if (!code.trim()) return;
+    setRequestError("");
     setRunning(true); setRightPanel("output");
     try {
       const res = await fetch(`${API}/code/run`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         credentials: "include", body: JSON.stringify({ code }),
       });
+      if (!res.ok) throw new Error(await getApiError(res, "The practice request failed."));
       const data: RunResult = await res.json();
       setRunResult(data);
-    } finally { setRunning(false); }
+    } catch (error) { setRequestError(error instanceof Error ? error.message : "The practice request failed."); } finally { setRunning(false); }
   }, [code]);
 
   // ── Hint ─────────────────────────────────────────────────────────
   const handleHint = async () => {
     if (!selectedProblem) return;
+    setRequestError("");
     setHintLoading(true); setRightPanel("hint");
     try {
       const res = await fetch(`${API}/code/hint`, {
@@ -187,15 +195,17 @@ function CodePageContent() {
           hint_level: hintLevel,
         }),
       });
+      if (!res.ok) throw new Error(await getApiError(res, "The practice request failed."));
       const data = await res.json();
       setHintText(data.hint);
       if (hintLevel < 3) setHintLevel(l => l + 1);
-    } finally { setHintLoading(false); }
+    } catch (error) { setRequestError(error instanceof Error ? error.message : "The practice request failed."); } finally { setHintLoading(false); }
   };
 
   // ── Review ───────────────────────────────────────────────────────
   const handleReview = async () => {
     if (!selectedProblem || !code.trim()) return;
+    setRequestError("");
     setReviewLoading(true); setRightPanel("review");
     try {
       const res = await fetch(`${API}/code/review`, {
@@ -208,14 +218,16 @@ function CodePageContent() {
           output: runResult?.stdout || "",
         }),
       });
+      if (!res.ok) throw new Error(await getApiError(res, "The practice request failed."));
       const data: ReviewResult = await res.json();
       setReviewResult(data);
-    } finally { setReviewLoading(false); }
+    } catch (error) { setRequestError(error instanceof Error ? error.message : "The practice request failed."); } finally { setReviewLoading(false); }
   };
 
   // ── Explain error ────────────────────────────────────────────────
   const handleExplainError = async () => {
     if (!runResult?.stderr) return;
+    setRequestError("");
     setErrorLoading(true); setRightPanel("error");
     try {
       const res = await fetch(`${API}/code/explain-error`, {
@@ -227,15 +239,17 @@ function CodePageContent() {
           problem_title: selectedProblem?.title || "",
         }),
       });
+      if (!res.ok) throw new Error(await getApiError(res, "The practice request failed."));
       const data = await res.json();
       setErrorExplanation(data.explanation);
-    } finally { setErrorLoading(false); }
+    } catch (error) { setRequestError(error instanceof Error ? error.message : "The practice request failed."); } finally { setErrorLoading(false); }
   };
 
   // ── Generate from JD ─────────────────────────────────────────────
   const handleGenerate = async () => {
     const job = jobs.find(j => String(j.id) === selectedJobForGen);
     if (!job) return;
+    setRequestError("");
     setGenerateLoading(true); setRightPanel("generate");
     try {
       const details = await queryClient.fetchQuery(trackerDetailsQueryOptions(job.id));
@@ -249,6 +263,7 @@ function CodePageContent() {
           count: 3,
         }),
       });
+      if (!res.ok) throw new Error(await getApiError(res, "The practice request failed."));
       const data = await res.json();
       setGeneratedProblems(data.problems);
       setProblems(prev => {
@@ -256,7 +271,7 @@ function CodePageContent() {
         const newOnes = data.problems.filter((p: Problem) => !existingIds.has(p.id));
         return [...prev, ...newOnes];
       });
-    } finally { setGenerateLoading(false); }
+    } catch (error) { setRequestError(error instanceof Error ? error.message : "The practice request failed."); } finally { setGenerateLoading(false); }
   };
 
   // ── Filtered problems ────────────────────────────────────────────
@@ -282,13 +297,14 @@ function CodePageContent() {
   const bootError = problemsError || (jobsQuery.error instanceof Error ? jobsQuery.error.message : "");
   if (bootLoading && problems.length === 0 && jobs.length === 0) return <RouteLoading />;
   if (bootError && problems.length === 0 && jobs.length === 0) {
-    return <div className="p-6 sm:p-10"><InlineQueryError message={bootError} onRetry={() => { void loadProblems(); void jobsQuery.refetch(); }} /></div>;
+    return <div className="p-6 sm:p-10"><InlineQueryError message={bootError || requestError} onRetry={() => { void loadProblems(); void jobsQuery.refetch(); }} /></div>;
   }
 
   return (
-    <div className="code-workspace h-full flex overflow-hidden font-mono" style={{ background: "#f5f2ed", color: "#1a1814" }}>
+    <div className="code-workspace relative h-full flex overflow-hidden font-mono" style={{ background: "#f5f2ed", color: "#1a1814" }}>
 
-        {/* ── LEFT: Problem list ── */}
+        {requestError && <p role="alert" className="absolute inset-x-3 top-3 z-50 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{requestError}</p>}
+      {/* ── LEFT: Problem list ── */}
         <div className="code-sidebar flex flex-col shrink-0 overflow-hidden" style={{ width: 260, borderRight: "1px solid #d4cfc7", background: "#edeae4" }}>
 
           {/* Header */}

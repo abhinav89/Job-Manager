@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from database import get_db
 from models import database_models as db_models
 from models.schemas import (
@@ -45,8 +46,11 @@ def issue_token() -> tuple[str, str]:
 @router.post("/register")
 @limiter.limit("5/minute")
 async def register(data: RegisterRequest, request: Request, db: Session = Depends(get_db)):
+    email = data.email.strip().lower()
+    if len(data.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters.")
     existing = db.query(db_models.User).filter(
-        db_models.User.email == data.email
+        func.lower(db_models.User.email) == email
     ).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -54,7 +58,7 @@ async def register(data: RegisterRequest, request: Request, db: Session = Depend
     hashed_pw = ph.hash(data.password)
     raw_token, hashed_token = issue_token()
     user = db_models.User(
-        email=data.email,
+        email=email,
         hashed_password=hashed_pw,
         is_verified=False,
         verification_token_hash=hashed_token,
@@ -65,10 +69,10 @@ async def register(data: RegisterRequest, request: Request, db: Session = Depend
     db.refresh(user)
 
     subject, html_body, text_body = verification_email(
-        data.email, f"{frontend_url()}/verify?token={raw_token}"
+        email, f"{frontend_url()}/verify?token={raw_token}"
     )
     try:
-        send_email(to=data.email, subject=subject, html_body=html_body, text_body=text_body, tag="verify-email")
+        send_email(to=email, subject=subject, html_body=html_body, text_body=text_body, tag="verify-email")
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail="Unable to send verification email. Please try again later.") from exc
 
@@ -78,7 +82,7 @@ async def register(data: RegisterRequest, request: Request, db: Session = Depend
 @limiter.limit("5/minute")
 async def login(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
     user = db.query(db_models.User).filter(
-        db_models.User.email == data.email
+        func.lower(db_models.User.email) == data.email.strip().lower()
     ).first()
 
     if not user:
@@ -88,10 +92,7 @@ async def login(data: LoginRequest, request: Request, db: Session = Depends(get_
         raise HTTPException(status_code=403, detail="Please verify your email before signing in.")
 
     if not user.hashed_password:
-        # Legacy account migration: Set the password to whatever they just typed
-        user.hashed_password = ph.hash(data.password)
-        db.commit()
-        db.refresh(user)
+        raise HTTPException(status_code=401, detail="Use password reset to secure this account before signing in.")
     else:
         try:
             ph.verify(user.hashed_password, data.password)
@@ -149,7 +150,7 @@ async def verify_email(token: str, db: Session = Depends(get_db)):
 @limiter.limit("3/hour")
 async def resend_verification(data: EmailRequest, request: Request, db: Session = Depends(get_db)):
     email = data.email.strip().lower()
-    user = db.query(db_models.User).filter(db_models.User.email == email).first()
+    user = db.query(db_models.User).filter(func.lower(db_models.User.email) == email).first()
     if user and not user.is_verified:
         raw_token, hashed_token = issue_token()
         user.verification_token_hash = hashed_token
@@ -166,7 +167,7 @@ async def resend_verification(data: EmailRequest, request: Request, db: Session 
 @router.post("/password-reset/request")
 @limiter.limit("3/hour")
 async def request_password_reset(data: PasswordResetRequest, request: Request, db: Session = Depends(get_db)):
-    user = db.query(db_models.User).filter(db_models.User.email == data.email.strip().lower()).first()
+    user = db.query(db_models.User).filter(func.lower(db_models.User.email) == data.email.strip().lower()).first()
     if user:
         raw_token, hashed_token = issue_token()
         user.password_reset_token_hash = hashed_token

@@ -1,36 +1,27 @@
+import base64
 import os
-import sys
 import unittest
-from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from services.pdf_service import PDFCompilationError, compile_latex_to_pdf
+from services.sandbox import SandboxUnavailable
 
 
 class PdfEngineTests(unittest.TestCase):
-    def test_xelatex_uses_installed_compiler_without_shell_escape(self):
-        def compile_pdf(command, **kwargs):
-            self.assertIn("-no-shell-escape", command)
-            self.assertNotIn("--only-cached", command)
-            self.assertEqual(kwargs["timeout"], 120)
-            (Path(kwargs["cwd"]) / "resume.pdf").write_bytes(b"%PDF-test")
-            return SimpleNamespace(returncode=0, stdout="", stderr="")
+    def test_engine_is_forwarded_only_to_isolated_compiler(self):
+        for engine in ("tectonic", "xelatex"):
+            with patch.dict(os.environ, {"PDF_LATEX_ENGINE": engine}), patch("services.sandbox.run_isolated", return_value={"pdf_b64": base64.b64encode(b"%PDF-test").decode()}) as run:
+                self.assertEqual(compile_latex_to_pdf("latex", fast_preview=True), b"%PDF-test")
+                run.assert_called_once_with("pdf", {"latex": "latex", "engine": engine}, 120)
 
-        with patch.dict(os.environ, {"PDF_LATEX_ENGINE": "xelatex"}), \
-             patch("services.pdf_service.which", return_value="xelatex"), \
-             patch("services.pdf_service.subprocess.run", side_effect=compile_pdf):
-            self.assertEqual(compile_latex_to_pdf("latex", fast_preview=True), b"%PDF-test")
-
-    def test_missing_or_invalid_compiler_is_reported(self):
-        with patch.dict(os.environ, {"PDF_LATEX_ENGINE": "xelatex"}), patch("services.pdf_service.which", return_value=None):
-            with self.assertRaisesRegex(PDFCompilationError, "XeLaTeX is not installed"):
+    def test_unavailable_isolation_has_no_host_fallback(self):
+        with patch("services.sandbox.run_isolated", side_effect=SandboxUnavailable("Unavailable")):
+            with self.assertRaisesRegex(PDFCompilationError, "Unavailable"):
                 compile_latex_to_pdf("latex")
+
+    def test_invalid_engine_or_invalid_pdf_is_rejected(self):
         with patch.dict(os.environ, {"PDF_LATEX_ENGINE": "unknown"}):
-            with self.assertRaisesRegex(PDFCompilationError, "must be tectonic or xelatex"):
+            with self.assertRaises(PDFCompilationError):
                 compile_latex_to_pdf("latex")
-
-
-if __name__ == "__main__":
-    unittest.main()
+        with patch.dict(os.environ, {"PDF_LATEX_ENGINE": "tectonic"}), patch("services.sandbox.run_isolated", return_value={"pdf_b64": base64.b64encode(b"invalid").decode()}):
+            with self.assertRaises(PDFCompilationError):
+                compile_latex_to_pdf("latex")

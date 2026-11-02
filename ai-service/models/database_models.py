@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Date, LargeBinary, JSON, Boolean, Index, UniqueConstraint
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, deferred, column_property
 from sqlalchemy.sql import func
 from database import Base
 
@@ -107,7 +107,8 @@ class JobApplication(Base):
     is_archived = Column(Boolean, nullable=False, default=False, server_default="false")
     short_description = Column(Text)       # keep for display
     job_description = Column(Text)         # full JD for AI
-    pdf_data = Column(LargeBinary)         # stored PDF bytes
+    pdf_data = deferred(Column(LargeBinary))
+    has_pdf = column_property(pdf_data.expression.isnot(None))
     pdf_generated_at = Column(DateTime(timezone=True))
     status = Column(String(50), default="Saved")
     date_applied = Column(Date)
@@ -136,6 +137,7 @@ class AssistantConversation(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     job_id = Column(Integer, ForeignKey("job_applications.id", ondelete="CASCADE"), nullable=True)
     title = Column(String(200), nullable=False, default="General conversation")
+    active_request_key = Column(String(80), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     messages = relationship("AssistantMessage", cascade="all, delete-orphan", order_by="AssistantMessage.id")
@@ -161,6 +163,19 @@ class AssistantDraft(Base):
     content = Column(Text, nullable=False)
     details = Column("metadata", JSON, nullable=False, default=dict)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class AssistantTurn(Base):
+    __tablename__ = "assistant_turns"
+    __table_args__ = (UniqueConstraint("conversation_id", "request_key", name="uq_assistant_turn_request"),)
+    id = Column(Integer, primary_key=True)
+    conversation_id = Column(Integer, ForeignKey("assistant_conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    request_key = Column(String(80), nullable=False)
+    content = Column(Text, nullable=False)
+    status = Column(String(20), nullable=False, default="in_progress")
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 class ResumePreset(Base):
     __tablename__ = "resume_presets"

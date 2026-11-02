@@ -64,7 +64,7 @@ class AssembleLatexTests(unittest.TestCase):
         doc = assemble_latex(make_profile(education=[]), EMPTY_AI_CONTENT, "classic")
         self.assertIn("No education history provided", doc)
         self.assertIn("No experience entries provided", doc)
-        self.assertIn("No projects provided", doc)
+        self.assertNotIn(r"\section{Projects}", doc)
 
     def test_blank_certifications_omit_the_section_entirely(self):
         doc = assemble_latex(make_profile(), EMPTY_AI_CONTENT, "classic")

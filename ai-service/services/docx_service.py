@@ -7,6 +7,9 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 def strip_latex_formatting(text: str) -> str:
     if not text:
         return ""
+    text = re.sub(r'\\(?:begin|end)\{[^{}]*\}(?:\[[^]]*\])?', '', text)
+    text = re.sub(r'\\(?:color|vspace|hspace)\*?\s*\{[^{}]*\}', '', text)
+    text = re.sub(r'\\textcolor\{[^{}]*\}\{(.*?)\}', r'\1', text)
     text = re.sub(r'\\textbf\{(.*?)\}', r'\1', text)
     text = re.sub(r'\\textit\{(.*?)\}', r'\1', text)
     text = re.sub(r'\\emph\{(.*?)\}', r'\1', text)
@@ -32,6 +35,30 @@ def convert_latex_to_docx(latex_code: str) -> bytes:
     normal_style.font.size = Pt(10.5)
     normal_style.font.color.rgb = RGBColor(0x33, 0x33, 0x33)
 
+    # Join complete, balanced heading macros across lines before line-oriented
+    # paragraph rendering. Nested formatting groups remain one argument.
+    pattern = re.compile(r"\\(resumeSubheading|resumeProjectHeading)\s*")
+    for match in reversed(list(pattern.finditer(latex_code))):
+        if r"\newcommand{" in latex_code[max(0, match.start()-15):match.start()]:
+            continue
+        count = 4 if match.group(1) == "resumeSubheading" else 2
+        cursor = match.end()
+        parts = []
+        for _ in range(count):
+            while cursor < len(latex_code) and latex_code[cursor].isspace():
+                cursor += 1
+            if cursor >= len(latex_code) or latex_code[cursor] != "{":
+                break
+            start, cursor, depth = cursor + 1, cursor + 1, 1
+            while cursor < len(latex_code) and depth:
+                if latex_code[cursor] == "\\":
+                    cursor += 2
+                    continue
+                depth += (latex_code[cursor] == "{") - (latex_code[cursor] == "}")
+                cursor += 1
+            parts.append(strip_latex_formatting(latex_code[start:cursor-1]))
+        if len(parts) == count:
+            latex_code = latex_code[:match.start()] + "\n\ue100" + " | ".join(parts) + "\n" + latex_code[cursor:]
     lines = latex_code.split('\n')
     in_document = False
     
@@ -45,6 +72,15 @@ def convert_latex_to_docx(latex_code: str) -> bytes:
         if not in_document or not line_str or line_str.startswith('%'):
             continue
             
+        if line_str.startswith("\ue100"):
+            paragraph = doc.add_paragraph()
+            paragraph.paragraph_format.space_before = Pt(4)
+            paragraph.paragraph_format.space_after = Pt(1)
+            run = paragraph.add_run(line_str[1:])
+            run.bold = True
+            run.font.size = Pt(10.5)
+            continue
+
         # Parse Section Headers \section{...}
         section_match = re.search(r'\\section\*?\{(.*?)\}', line_str)
         if section_match:

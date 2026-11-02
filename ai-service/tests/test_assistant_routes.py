@@ -74,7 +74,8 @@ class AssistantTests(unittest.TestCase):
             second = asyncio.run(routes.send_message.__wrapped__(cid, routes.SendMessage(content="Hi"), self.request, self.db))
         self.assertNotEqual(second["messages"][-1]["id"], first["drafts"][0]["metadata"]["assistant_message_id"])
         self.assertEqual(routes.get_conversation(cid, self.request, self.db)["drafts"][0]["metadata"]["assistant_message_id"], message["id"])
-        revision = routes.revise_draft(cid, first["drafts"][0]["id"], routes.ReviseDraft(content="changed cv"), self.request, self.db)
+        with patch.object(routes, "compile_latex_to_pdf", return_value=b"pdf"), patch.object(routes, "pdf_page_count", return_value=1):
+            revision = routes.revise_draft(cid, first["drafts"][0]["id"], routes.ReviseDraft(content="changed cv"), self.request, self.db)
         self.assertNotIn("assistant_message_id", revision["metadata"])
 
     def test_tool_runs_with_zero_legacy_balance_and_rolls_back_failures(self):

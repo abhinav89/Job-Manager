@@ -2,12 +2,7 @@ name: Backend CI
 
 on:
   push:
-    branches:
-      - main
-      - deployment
   pull_request:
-    branches:
-      - main
 
 jobs:
   backend-smoke-test:
@@ -24,6 +19,7 @@ jobs:
       SESSION_SECRET: ci-session-secret
       FRONTEND_ORIGINS: http://localhost:3000
       ENVIRONMENT: testing
+      EXECUTION_BACKEND: docker
 
     steps:
       - name: Check out repository
@@ -37,7 +33,10 @@ jobs:
           cache-dependency-path: ai-service/requirements.txt
 
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+        run: python -m pip install -r requirements.txt pytest
+
+      - name: Run backend tests
+        run: python -m pytest tests -q
 
       - name: Import FastAPI app
         run: |
@@ -46,3 +45,45 @@ jobs:
       - name: Check health endpoint
         run: |
           python -B -c "from fastapi.testclient import TestClient; from main import app; response = TestClient(app).get('/health'); assert response.status_code == 200; assert response.json() == {'status': 'ok'}; print('health ok')"
+
+  backend-integration:
+    name: Postgres and execution isolation
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cv_tailor_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: ai-service
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cv_tailor_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cv_tailor_test
+      RUN_SANDBOX_TESTS: "1"
+      GEMINI_API_KEY: ci-placeholder
+      SESSION_SECRET: ci-session-secret
+      ENVIRONMENT: testing
+      EXECUTION_BACKEND: docker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: ai-service/.python-version
+          cache: pip
+          cache-dependency-path: ai-service/requirements.txt
+      - run: python -m pip install -r requirements.txt pytest
+      - name: Provision isolated Python and offline PDF images
+        run: |
+          docker build --target python -t cv-tailor-python:1 -f sandbox/Dockerfile .
+          docker build --target pdf -t cv-tailor-pdf:1 -f sandbox/Dockerfile .
+      - name: Verify real isolation and concurrent transactions
+        run: python -m pytest tests/test_remediation_integration.py -q

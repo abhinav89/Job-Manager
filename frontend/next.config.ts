@@ -7,6 +7,8 @@ if (process.env.VERCEL && !backendUrl) {
 }
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: process.env.NEXT_DIST_DIR ? ["127.0.0.1"] : [],
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   turbopack: {},
   webpack: (config) => {
     config.resolve.alias.canvas = false;

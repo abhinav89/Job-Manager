@@ -14,7 +14,7 @@ import RouteLoading from "@/components/RouteLoading";
 import Alert from "@/components/Alert";
 import { ButtonLink } from "@/components/Button";
 import { ApiQueryError, queryKeys, type JobDetails, useCurrentUser, usePresets, useProfile, useTrackerDetails } from "@/lib/queries";
-import { applyBlockText, formatEducationDetails, parseResumeBlocks, parseResumeDraft, replaceCommandArgument, replaceResumeItem, replaceResumeName, replaceSectionDetail, replaceSummary, resolveSelectionToBlocks, type ResumeBlock, type ResumeDraft } from "@/lib/resumeDraft";
+import { applyBlockText, formatEducationDetails, replaceProjectHeading, parseResumeBlocks, parseResumeDraft, replaceCommandArgument, replaceResumeItem, replaceResumeName, replaceSectionDetail, replaceSummary, resolveSelectionToBlocks, type ResumeBlock, type ResumeDraft } from "@/lib/resumeDraft";
 
 const Document = dynamic(() => import("react-pdf").then(m => m.Document), { ssr: false });
 const Page = dynamic(() => import("react-pdf").then(m => m.Page), { ssr: false });
@@ -681,6 +681,8 @@ function GeneratePageContent() {
   const dragRef = useRef(false);
   const lastCompiledLatexRef = useRef<string>("");
   const compileInFlightRef = useRef(false);
+  const latestLatexRef = useRef(latex);
+  latestLatexRef.current = latex;
   const pendingCompileRef = useRef<{ source: string; checkAts: boolean } | null>(null);
   const compileLatexRef = useRef<(src?: string, checkAts?: boolean) => Promise<void>>(async () => {});
 
@@ -690,7 +692,7 @@ function GeneratePageContent() {
     if (!source.trim()) return;
 
     if (compileInFlightRef.current) {
-      pendingCompileRef.current = { source, checkAts };
+      pendingCompileRef.current = { source, checkAts: checkAts || (pendingCompileRef.current?.source === source && pendingCompileRef.current.checkAts) };
       return;
     }
 
@@ -699,7 +701,7 @@ function GeneratePageContent() {
     try {
       const endpoint = checkAts ? "/generate/compile-with-check" : "/generate/compile-preview";
       const res = await fetch(`${API_URL}${endpoint}`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ latex: source }),
       });
       if (!res.ok) {
@@ -713,17 +715,20 @@ function GeneratePageContent() {
 
       let blob: Blob;
       let pages: number;
+      let nextAts: typeof atsResult = null;
       if (checkAts) {
         const { pdf_b64, ats, num_pages } = await res.json();
         const bytes = Uint8Array.from(atob(pdf_b64), char => char.charCodeAt(0));
         blob = new Blob([bytes], { type: "application/pdf" });
         pages = num_pages;
-        setAtsResult(ats);
+        nextAts = ats;
       } else {
         blob = await res.blob();
         pages = Number(res.headers.get("X-PDF-Pages") || "1");
       }
 
+      if (source !== latestLatexRef.current || (pendingCompileRef.current && pendingCompileRef.current.source !== source)) return;
+      setAtsResult(nextAts);
       const newBlobUrl = window.URL.createObjectURL(blob);
       lastCompiledLatexRef.current = source;
       setPdfUrl(prevUrl => {
@@ -732,15 +737,16 @@ function GeneratePageContent() {
       });
       setAppState("editing");
       if (pages) setNumPages(pages);
-      setCurrentPage(1);
+      setCurrentPage(page => Math.min(page, Math.max(1, pages)));
     } catch (err: unknown) {
+      if (source !== latestLatexRef.current) return;
       setErrorMsg(err instanceof Error ? err.message : "Compile failed");
       setAppState("error");
     } finally {
       compileInFlightRef.current = false;
       const pending = pendingCompileRef.current;
       pendingCompileRef.current = null;
-      if (pending && pending.source !== source) {
+      if (pending && (pending.source !== source || (pending.checkAts && !checkAts))) {
         window.setTimeout(() => compileLatexRef.current(pending.source, pending.checkAts), 0);
       }
     }
@@ -1074,10 +1080,7 @@ function GeneratePageContent() {
         method: "POST", headers: { "Content-Type": "application/json" },
         credentials: "include", body: JSON.stringify({ email: userEmail, jd, template_id: selectedTemplate, preset_slug: presetSlug }),
       });
-      if (!res.ok) { 
-        const err = await res.json(); 
-        throw new Error(err.detail || "Generation failed"); 
-      }
+      if (!res.ok) throw new Error(await getApiError(res, "Resume generation failed. Please try again."));
       const { latex: gen, pdf_b64, ats } = await res.json();
       lastCompiledLatexRef.current = gen;
       setLatex(gen);
@@ -1189,7 +1192,7 @@ function GeneratePageContent() {
     }
   };
   
-  const onDocumentLoadSuccess = useCallback(({ numPages }: { numPages: number }) => setNumPages(numPages), []);
+  const onDocumentLoadSuccess = useCallback(({ numPages }: { numPages: number }) => { setNumPages(numPages); setCurrentPage(page => Math.min(page, Math.max(1, numPages))); }, []);
   const isBusy = appState === "generating" || appState === "compiling";
   const lineCount = latex.split("\n").length;
   const coverLetterEditor = coverLetterOpen && jobId ? (
@@ -1246,8 +1249,8 @@ function GeneratePageContent() {
         });
       }
     } else {
-      const fieldIndex = field === "meta" ? 1 : 0;
-      setLatex(current => replaceCommandArgument(current, entry.command, entry.occurrence, fieldIndex, value));
+      if (field === "meta") setLatex(current => replaceCommandArgument(current, entry.command, entry.occurrence, 1, value));
+      else setLatex(current => replaceProjectHeading(current, entry.occurrence, field === "title" ? value : entry.title, field === "subtitle" ? value : entry.subtitle));
     }
   };
 
@@ -1418,7 +1421,7 @@ function GeneratePageContent() {
             onDownloadDocx={handleDownloadDocx}
             onDownloadTex={handleDownloadTex}
             mode={editorMode}
-            onModeChange={setEditorMode}
+            onModeChange={mode => { if (mode === "friendly") { setDraft(parseResumeDraft(latex)); setDraftReady(true); } setSpotEdit(null); setEditorMode(mode); }}
           />
           {coverLetterEditor}
 
@@ -1505,7 +1508,9 @@ function GeneratePageContent() {
                 </div>
               </div>
 
-              <div className="flex flex-1 items-start justify-center overflow-auto p-4 sm:p-6">
+              {numPages > 1 && <nav aria-label="PDF pages" className="flex justify-center gap-3 p-2 text-xs"><button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage <= 1}>←</button><span>{currentPage}/{numPages}</span><button onClick={() => setCurrentPage(p => Math.min(numPages, p + 1))} disabled={currentPage >= numPages}>→</button></nav>}
+              <div className="relative flex flex-1 items-start justify-center overflow-auto p-4 sm:p-6" onMouseUp={handlePdfSelection}>
+                {spotEditLayer}
                 {isBusy && <div className="absolute mt-20 rounded-lg bg-white/80 px-4 py-3 text-xs shadow-sm" style={{ color: C.textMuted }}>Updating your preview…</div>}
                 {pdfUrl && <div style={{ filter: "drop-shadow(0 6px 20px rgba(0,0,0,0.18))" }}><Document file={pdfUrl} onLoadSuccess={onDocumentLoadSuccess} loading={<div className="p-10 text-xs" style={{ color: C.textMuted }}>Loading preview…</div>} error={<div className="p-10 text-xs" style={{ color: C.red }}>Preview unavailable</div>}><Page pageNumber={currentPage} renderTextLayer={true} renderAnnotationLayer={false} width={Math.min(660, window.innerWidth < 1024 ? window.innerWidth - 64 : window.innerWidth * 0.43)} /></Document></div>}
               </div>
@@ -1542,10 +1547,12 @@ function GeneratePageContent() {
             onDownloadDocx={handleDownloadDocx}
             onDownloadTex={handleDownloadTex}
             mode={editorMode}
-            onModeChange={setEditorMode}
+            onModeChange={mode => { if (mode === "friendly") { setDraft(parseResumeDraft(latex)); setDraftReady(true); } setSpotEdit(null); setEditorMode(mode); }}
           />
           {coverLetterEditor}
-          <div className="flex flex-1 items-start justify-center overflow-auto p-8">
+          {numPages > 1 && <nav aria-label="PDF pages" className="flex justify-center gap-3 p-2 text-xs"><button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage <= 1}>←</button><span>{currentPage}/{numPages}</span><button onClick={() => setCurrentPage(p => Math.min(numPages, p + 1))} disabled={currentPage >= numPages}>→</button></nav>}
+          <div className="relative flex flex-1 items-start justify-center overflow-auto p-8" onMouseUp={handlePdfSelection}>
+            {spotEditLayer}
             {isBusy && <div className="absolute mt-10 rounded-lg bg-white/80 px-4 py-3 text-xs shadow-sm" style={{ color: C.textMuted }}>Updating your preview…</div>}
             {pdfUrl && <div style={{ filter: "drop-shadow(0 8px 24px rgba(0,0,0,0.18))" }}><Document file={pdfUrl} onLoadSuccess={onDocumentLoadSuccess} loading={<div className="p-10 text-xs" style={{ color: C.textMuted }}>Loading preview…</div>} error={<div className="p-10 text-xs" style={{ color: C.red }}>Preview unavailable</div>}><Page pageNumber={currentPage} renderTextLayer={true} renderAnnotationLayer={false} width={Math.min(760, window.innerWidth - 120)} /></Document></div>}
           </div>
@@ -1582,7 +1589,7 @@ function GeneratePageContent() {
           onDownloadDocx={handleDownloadDocx}
           onDownloadTex={handleDownloadTex}
           mode={editorMode}
-          onModeChange={setEditorMode}
+          onModeChange={mode => { if (mode === "friendly") { setDraft(parseResumeDraft(latex)); setDraftReady(true); } setSpotEdit(null); setEditorMode(mode); }}
           extra={
             <>
               <button

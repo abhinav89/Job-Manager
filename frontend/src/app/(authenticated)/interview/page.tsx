@@ -187,6 +187,7 @@ function InterviewPageContent() {
   const [selectionError, setSelectionError] = useState("");
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const isRecordingRef = useRef(false); 
   const transcriptRef = useRef("");
@@ -225,48 +226,52 @@ function InterviewPageContent() {
     if (job) void prepareJob(job);
   }, [jobs, preselectedJobId, prepareJob, selectedJob]);
 
-  const initCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: 320, height: 240 }
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.onloadeddata = () => setCameraReady(true);
-      }
-    } catch {
-      setCameraError("Camera access denied — delivery metrics unavailable");
-    }
-  };
-
-  const initMediaPipe = async () => {
-    try {
-      const { FaceLandmarker, FilesetResolver } = await import("@mediapipe/tasks-vision");
-      const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM);
-      const landmarker = await FaceLandmarker.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-          delegate: "GPU",
-        },
-        outputFaceBlendshapes: true,
-        runningMode: "VIDEO",
-        numFaces: 1,
-      });
-      faceLandmarkerRef.current = landmarker;
-      setMediapipeReady(true);
-    } catch (e) {
-      console.warn("MediaPipe failed to load — delivery tracking unavailable:", e);
-    }
-  };
+  const metricsUpdatedRef = useRef(0);
+  const cameraActive = ["ready", "question", "recording", "analyzing"].includes(sessionState);
+  useEffect(() => {
+    if (!cameraActive) return;
+    let disposed = false;
+    let stream: MediaStream | null = null;
+    let landmarker: FaceLandmarker | null = null;
+    void (async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: 320, height: 240 } });
+        if (disposed) { stream.getTracks().forEach(track => track.stop()); return; }
+        mediaStreamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.onloadeddata = () => { if (!disposed) setCameraReady(true); };
+        }
+      } catch { if (!disposed) setCameraError("Camera access denied — delivery metrics unavailable"); }
+    })();
+    void (async () => {
+      try {
+        const { FaceLandmarker, FilesetResolver } = await import("@mediapipe/tasks-vision");
+        const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM);
+        landmarker = await FaceLandmarker.createFromOptions(vision, {
+          baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task", delegate: "GPU" },
+          outputFaceBlendshapes: true, runningMode: "VIDEO", numFaces: 1,
+        });
+        if (disposed) { landmarker.close(); return; }
+        faceLandmarkerRef.current = landmarker;
+        setMediapipeReady(true);
+      } catch (error) { if (!disposed) console.warn("Delivery tracking unavailable:", error); }
+    })();
+    return () => {
+      disposed = true;
+      stream?.getTracks().forEach(track => track.stop());
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      isRecordingRef.current = false;
+      recognitionRef.current?.stop();
+      mediaStreamRef.current = null;
+      landmarker?.close();
+      faceLandmarkerRef.current = null;
+      if (videoRef.current) { videoRef.current.srcObject = null; videoRef.current.onloadeddata = null; }
+    };
+  }, [cameraActive]);
 
   useEffect(() => {
-    if (["ready", "question", "recording", "analyzing"].includes(sessionState)) {
-      initCamera();
-      initMediaPipe();
-    }
-    return () => {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    };
+    if (videoRef.current && mediaStreamRef.current) videoRef.current.srcObject = mediaStreamRef.current;
   }, [sessionState]);
 
   const runMediaPipeLoop = useCallback(() => {
@@ -305,8 +310,11 @@ function InterviewPageContent() {
 
       const eyePct = metricsRef.current.totalFrames > 0
         ? (metricsRef.current.eyeContactFrames / metricsRef.current.totalFrames) * 100 : 0;
-      setLiveEyeContact(eyePct);
-      setLiveSmile(smile);
+      if (performance.now() - metricsUpdatedRef.current >= 250) {
+        metricsUpdatedRef.current = performance.now();
+        setLiveEyeContact(eyePct);
+        setLiveSmile(smile);
+      }
     }
     animFrameRef.current = requestAnimationFrame(runMediaPipeLoop);
   }, [cameraReady]);
@@ -400,7 +408,11 @@ function InterviewPageContent() {
   const startSession = async () => {
     if (!selectedJob) return;
     try {
-      const res = await fetch(`${API}/interview/questions`, { credentials: "include" });
+      const res = await fetch(`${API}/interview/questions`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ job_title: selectedJob.job_title, jd: selectedJob.job_description || "" }),
+      });
+      if (!res.ok) throw new Error("Failed to load interview questions. Please try again.");
       const data = await res.json();
       setQuestions(data.questions);
       setCurrentQ(0); setAllFeedback([]);

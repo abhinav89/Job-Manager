@@ -17,6 +17,8 @@ class FakeContext:
     user_evidence = "I want remote work"
 
     def __init__(self):
+        self.created_drafts = []
+        self.db = None
         self.drafts = []
         self.activity = []
         self.activity_callback = self.activity.append
@@ -68,6 +70,16 @@ class JevMatchingTests(unittest.TestCase):
             result = asyncio.run(matching.rank_jobs(jobs, "engineer", None, "", "key"))
         self.assertEqual(result[0]["jev_match"]["experience"], "unclear")
         self.assertEqual(result[0]["jev_match"]["preferences"], "unknown")
+
+    def test_one_failed_question_does_not_discard_other_judgments(self):
+        jobs = [{"job_title": "Engineer", "job_description": "Build Python tools remotely. " * 8}]
+        answers = {"job_0_role": {"choice": "related", "confidence": .9},
+                   "job_0_experience": {"error": "question failed"},
+                   "job_0_preferences": {"choice": "consistent", "confidence": .9}}
+        real_client = httpx.AsyncClient
+        with patch.object(matching.httpx, "AsyncClient", side_effect=lambda **kwargs: real_client(transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"answers": answers})), **kwargs)):
+            result = asyncio.run(matching.rank_jobs(jobs, "engineer", {"skills": [{"skill_name": "Python"}]}, "remote work", "key"))
+        self.assertEqual(result[0]["jev_match"], {"role": "related", "experience": "unclear", "preferences": "consistent"})
 
     def test_search_uses_jev_order_and_preserves_selection_order(self):
         ctx = FakeContext()

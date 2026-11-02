@@ -27,19 +27,25 @@ A free, open-source CV tailoring app. Paste your profile and a job description, 
 
 ## Running locally
 
+Docker is optional for trusted, single-user development. The example configuration uses native Python and Tectonic (`EXECUTION_BACKEND=local`, `ENVIRONMENT=development`). `tecto` in the Python requirements supplies the Tectonic executable; it downloads TeX packages on first use. Alternatively, install XeLaTeX and set `PDF_LATEX_ENGINE=xelatex`.
+
 ```bash
 # 1. Backend
 cd ai-service
 pip install -r requirements.txt
 cp .env.example .env        # set DATABASE_URL, GEMINI_API_KEY (or OPENAI_API_KEY)
 python migration.py         # create tables
-uvicorn main:app --reload
+uvicorn main:app --reload --host 127.0.0.1
 
-# 2. Frontend
+# 2. Frontend (new terminal, from the repository root)
 cd frontend
 npm install
-npm run dev
+npm run dev -- --hostname 127.0.0.1
 ```
+
+Use native mode only for your own local code and LaTeX. It runs tools with your OS account's file and network access, with time/output limits and an environment that excludes application credentials. Keep both servers bound to `127.0.0.1`. PostgreSQL, Node.js, Python and provider credentials are still required.
+
+For hosted or shared deployments, set `ENVIRONMENT=production` and `EXECUTION_BACKEND=docker`, and provision the isolated execution images described in [the runtime guide](docs/remediation_runtime.md). Native mode is rejected outside development; Docker failures never switch to native execution automatically.
 
 ## Configuration
 

@@ -95,41 +95,8 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 def init_db():
-    from models import database_models
-
-    Base.metadata.create_all(bind=engine)
-    # create_all() does not alter tables that already exist. Keep this
-    # compatibility migration here so deployments with AUTO_CREATE_TABLES
-    # can safely pick up newly-added required columns.
-    with engine.begin() as conn:
-        for statement in (
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS credits INTEGER NOT NULL DEFAULT 5",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN NOT NULL DEFAULT TRUE",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token_hash VARCHAR(64)",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token_expires_at TIMESTAMPTZ",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_token_hash VARCHAR(64)",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_token_expires_at TIMESTAMPTZ",
-            "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS preferred_template VARCHAR(50) DEFAULT 'classic'",
-            "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS preset_slug VARCHAR(50) DEFAULT 'blank'",
-            "ALTER TABLE skills ADD COLUMN IF NOT EXISTS is_confirmed BOOLEAN NOT NULL DEFAULT FALSE",
-            "ALTER TABLE projects ADD COLUMN IF NOT EXISTS link TEXT",
-            "ALTER TABLE assistant_messages ADD COLUMN IF NOT EXISTS request_key VARCHAR(80)",
-            "CREATE UNIQUE INDEX IF NOT EXISTS uq_assistant_message_request_idx ON assistant_messages (conversation_id, request_key)",
-            "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS cover_letter TEXT",
-            "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS template_id VARCHAR(50) NOT NULL DEFAULT 'classic'",
-            "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS match_score INTEGER",
-            "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS match_analysis JSON",
-            "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS job_source VARCHAR(250)",
-            "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE",
-            "CREATE INDEX IF NOT EXISTS ix_education_profile_id ON education (profile_id)",
-            "CREATE INDEX IF NOT EXISTS ix_experience_profile_id ON experience (profile_id)",
-            "CREATE INDEX IF NOT EXISTS ix_projects_profile_id ON projects (profile_id)",
-            "CREATE INDEX IF NOT EXISTS ix_skills_profile_id ON skills (profile_id)",
-            "CREATE INDEX IF NOT EXISTS ix_certifications_profile_id ON certifications (profile_id)",
-            "CREATE INDEX IF NOT EXISTS ix_job_applications_user_created ON job_applications (user_id, created_at)",
-            "CREATE INDEX IF NOT EXISTS ix_job_applications_user_status ON job_applications (user_id, status)",
-        ):
-            conn.execute(text(statement))
+    from schema_changes import apply_schema_changes
+    apply_schema_changes(engine)
 
 def get_db():
     db = SessionLocal()

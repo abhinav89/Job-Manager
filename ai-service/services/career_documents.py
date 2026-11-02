@@ -1,4 +1,5 @@
 """Render interview-day notes as a downloadable PDF."""
+import re
 import io
 from xml.sax.saxutils import escape
 
@@ -21,6 +22,12 @@ def cheat_sheet_pdf(content: str) -> bytes:
     flow = [Paragraph("Interview cheat sheet", heading), Spacer(1, 8)]
     for line in content.splitlines():
         stripped = line.strip()
+        if stripped.startswith("```"):
+            continue
+        stripped = re.sub(r"\[([^]\n]+)\]\(([^)]+)\)", r"\1 (\2)", stripped)
+        stripped = re.sub(r"(\*\*|__|~~|`)", "", stripped)
+        stripped = re.sub(r"(?<!\w)[*_](.+?)[*_](?!\w)", r"\1", stripped)
+        stripped = re.sub(r"^[-*+]\s+", "", stripped)
         if not stripped:
             flow.append(Spacer(1, 5))
         elif stripped.startswith("#"):

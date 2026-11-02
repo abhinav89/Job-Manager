@@ -123,6 +123,8 @@ export default function AssistantPage() {
   const [jobDescription, setJobDescription] = useState("");
   const [jobSource, setJobSource] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
+  const sendControllerRef = useRef<AbortController | null>(null);
+  useEffect(() => () => sendControllerRef.current?.abort(), [activeId]);
   const pendingRequestRef = useRef<{ conversationId: number; content: string; id: string } | null>(null);
   const selectedJob = jobs.find(job => job.id === conversation?.job_id);
   const unconfirmedSkills = profile?.skills.filter(skill => !skill.is_confirmed).length || 0;
@@ -193,8 +195,10 @@ export default function AssistantPage() {
       ? previous.id : crypto.randomUUID();
     pendingRequestRef.current = { conversationId: conversation.id, content, id: requestId };
     let succeeded = false;
+    const controller = new AbortController();
+    sendControllerRef.current = controller;
     try {
-      const response = await fetch(`${API_URL}/assistant/conversations/${conversation.id}/messages/stream`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content, request_id: requestId }) });
+      const response = await fetch(`${API_URL}/assistant/conversations/${conversation.id}/messages/stream`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content, request_id: requestId }), signal: controller.signal });
       if (!response.ok) throw new Error(await getApiError(response, "Could not send your message."));
       if (!response.body) throw new Error("The response stream is unavailable.");
       const reader = response.body.getReader();
@@ -203,14 +207,15 @@ export default function AssistantPage() {
       let completed = false;
       while (true) {
         const { value, done } = await reader.read();
+        if (controller.signal.aborted) return;
         buffer += decoder.decode(value, { stream: !done });
         const lines = buffer.split("\n");
         buffer = lines.pop() || "";
         for (const line of lines) {
           if (!line.trim()) continue;
-          const event = JSON.parse(line) as { type: string; activity?: Activity; conversation?: Conversation; message?: string };
+          const event = JSON.parse(line) as { type: string; activity?: Activity; conversation?: Conversation; message?: string; request_status?: string };
           if (event.type === "activity" && event.activity) setLiveActivity(items => [...items, event.activity!]);
-          if (event.type === "error") throw new Error(event.message || "Could not send your message.");
+          if (event.type === "error") { if (["failed", "cancelled"].includes(event.request_status || "")) pendingRequestRef.current = null; throw new Error(event.message || "Could not send your message."); }
           if (event.type === "complete" && event.conversation) { setConversation(event.conversation); completed = true; }
         }
         if (done) break;
@@ -220,8 +225,25 @@ export default function AssistantPage() {
       pendingRequestRef.current = null;
       await refreshList().catch(() => undefined);
       void queryClient.invalidateQueries({ queryKey: queryKeys.currentUser });
-    } catch (err) { setError(err instanceof Error ? err.message : "Could not send your message."); setInput(content); }
-    finally { setBusy(false); setPendingMessage(""); if (succeeded) setLiveActivity([]); }
+    } catch (err) {
+      if (controller.signal.aborted) setNotice(controller.signal.reason === "cancelled" ? "Reply cancelled. External work may still be winding down." : controller.signal.reason === "completed" ? "The reply completed; the conversation has been refreshed." : "Stopped waiting. Refresh the conversation to check its status.");
+      else { setError(err instanceof Error ? err.message : "Could not send your message."); setInput(content); }
+    }
+    finally { if (sendControllerRef.current === controller) sendControllerRef.current = null; setBusy(false); setPendingMessage(""); if (succeeded) setLiveActivity([]); }
+  }
+
+  async function cancelReply() {
+    const pending = pendingRequestRef.current;
+    if (!pending) return;
+    try {
+      const result = await api<{ status: string }>(`/assistant/conversations/${pending.conversationId}/messages/${pending.id}/cancel`, { method: "POST" });
+      if (result.status === "completed") {
+        setConversation(await api<Conversation>(`/assistant/conversations/${pending.conversationId}`));
+      }
+      sendControllerRef.current?.abort(result.status);
+      setNotice(result.status === "completed" ? "The reply completed; the conversation has been refreshed." : "Reply cancelled. External work may still be winding down.");
+      pendingRequestRef.current = null;
+    } catch (error) { setError(error instanceof Error ? error.message : "Could not cancel the reply."); }
   }
 
   async function reviseDraft(draft: Draft) {
@@ -364,7 +386,7 @@ export default function AssistantPage() {
               {(pendingMessage || (error && liveActivity.length > 0)) && <div className="mx-auto w-full max-w-3xl space-y-3">{pendingMessage && <div className="flex justify-end"><div className="min-w-0 max-w-[90%] rounded-2xl bg-[#3f5b3c] px-4 py-3 text-[15px] leading-7 text-white"><span className="mb-1 block font-mono text-[9px] uppercase tracking-wider opacity-70">You</span>{pendingMessage}</div></div>}<ActivityLog events={liveActivity} />{busy && <p role="status" className="text-sm text-[#7b8275]">Working on it…</p>}</div>}
             </div>
             {conversation && !conversation.job_id && (conversation.drafts.some(d => d.type === "cover_letter") || conversation.messages.some(m => /cover letter/i.test(m.content))) && <div className="px-5 pb-2"><button type="button" disabled={busy} onClick={() => setInput("Add this job to my tracker.")} className="rounded-full border border-[#cbd8c8] px-3 py-1.5 text-xs font-semibold text-[#557442]">Add this job to my tracker</button></div>}
-            {conversation && <form onSubmit={event => { event.preventDefault(); void send(input); }} className="flex shrink-0 items-end gap-2 border-t border-[#e7e2d9] p-3 sm:p-4"><label htmlFor="career-message" className="sr-only">Message the Career Agent</label><textarea id="career-message" value={input} maxLength={12000} onChange={event => setInput(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(input); } }} placeholder="Ask about jobs, a company, your CV, or an interview…" rows={2} className="min-w-0 flex-1 resize-none rounded-lg border border-[#e3e6dc] bg-[#fbfcf9] px-3 py-2 text-sm leading-6 outline-none focus:ring-2 focus:ring-[#a3bc95]" /><div className="flex shrink-0 justify-end"><button type="submit" disabled={busy || !input.trim()} aria-label="Send message" className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#3f5b3c] text-white hover:bg-[#304a30] disabled:opacity-40"><ArrowUp size={18} /></button></div></form>}
+            {conversation && <form onSubmit={event => { event.preventDefault(); void send(input); }} className="flex shrink-0 items-end gap-2 border-t border-[#e7e2d9] p-3 sm:p-4"><label htmlFor="career-message" className="sr-only">Message the Career Agent</label>{busy && sendControllerRef.current && <button type="button" onClick={() => void cancelReply()} className="px-3 py-2 text-xs font-semibold">Cancel reply</button>}<textarea id="career-message" value={input} maxLength={12000} onChange={event => setInput(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(input); } }} placeholder="Ask about jobs, a company, your CV, or an interview…" rows={2} className="min-w-0 flex-1 resize-none rounded-lg border border-[#e3e6dc] bg-[#fbfcf9] px-3 py-2 text-sm leading-6 outline-none focus:ring-2 focus:ring-[#a3bc95]" /><div className="flex shrink-0 justify-end"><button type="submit" disabled={busy || !input.trim()} aria-label="Send message" className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#3f5b3c] text-white hover:bg-[#304a30] disabled:opacity-40"><ArrowUp size={18} /></button></div></form>}
             {(error || notice) && <p role={error ? "alert" : "status"} className={`border-t border-[#e7e2d9] px-5 py-3 text-xs ${error ? "text-[#ae4038]" : "text-[#4e733c]"}`}>{error || notice}</p>}
           </section>
 

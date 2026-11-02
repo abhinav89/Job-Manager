@@ -1,12 +1,3 @@
-import os
-import json
-import re
-from dotenv import load_dotenv
-
-load_dotenv()
-
-from services.llm_service import complete
-
 BEHAVIORAL_QUESTIONS = [
     "Tell me about yourself.",
     "Why are you interested in this role?",
@@ -28,10 +19,12 @@ TECHNICAL_QUESTIONS = [
     "How do you ensure code quality?",
 ]
 
-def get_questions() -> list[str]:
+def get_questions(job_title: str = "", jd: str = "") -> list[str]:
     import random
     behavioral = random.sample(BEHAVIORAL_QUESTIONS, 7)
     technical = random.sample(TECHNICAL_QUESTIONS, 3)
+    if job_title.strip():
+        technical[0] = f"Which of your projects best prepares you for the {job_title[:150]} role?"
     return behavioral + technical
 
 def build_delivery_section(delivery) -> str:
@@ -107,16 +100,6 @@ Return this exact JSON structure:
 }}
 """
 
-    try:
-        raw = complete(prompt)
-        raw = re.sub(r"```(?:json)?\s*", "", raw)
-        raw = re.sub(r"```", "", raw)
-        start = raw.find("{")
-        end = raw.rfind("}") + 1
-        if start != -1 and end > start:
-            raw = raw[start:end]
-        return json.loads(raw)
-    except json.JSONDecodeError as e:
-        raise Exception(f"AI returned invalid JSON: {str(e)}")
-    except Exception as e:
-        raise Exception(f"Analysis failed: {str(e)}")
+    from models.ai_responses import InterviewFeedback
+    from services.llm_service import complete_structured
+    return complete_structured(prompt, InterviewFeedback).model_dump()

@@ -3,7 +3,8 @@ import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { JobMatchCard, ScrapedJobMatch } from "@/components/tracker/JobMatchCard";
 import { getApiError } from "@/lib/api";
-import { usePresets } from "@/lib/queries";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys, usePresets } from "@/lib/queries";
 import Alert from "@/components/Alert";
 import Button from "@/components/Button";
 
@@ -35,6 +36,7 @@ const DEFAULT_SOURCES = ["onlinejobs", "linkedin", "remoteok", "weworkremotely",
 
 export default function DiscoverPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const { data: presets = [], isPending: presetsLoading, isError: presetsError, refetch: refetchPresets } = usePresets();
   const [keyword, setKeyword] = useState("");
@@ -109,6 +111,7 @@ export default function DiscoverPage() {
     });
     if (!res.ok) throw new Error("Failed to import job");
     const data = await res.json();
+    await queryClient.invalidateQueries({ queryKey: queryKeys.tracker });
     if (redirectTailor && data.job_id) router.push(`/generate?job_id=${data.job_id}`);
   };
 

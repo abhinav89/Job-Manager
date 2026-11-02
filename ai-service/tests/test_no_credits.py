@@ -17,9 +17,11 @@ class NoCreditsTests(unittest.TestCase):
         letter_request = SimpleNamespace(email="a@example.com", jd="Developer", company_name="Example")
         with patch.object(generate_routes, "get_profile_or_404", return_value=profile), \
              patch.object(generate_routes, "generate_latex_resume", return_value="latex"), \
-             patch.object(generate_routes, "generate_cover_letter", return_value="letter"):
-            cv = asyncio.run(generate_routes.generate_cv.__wrapped__(cv_request, None, object()))
-            letter = asyncio.run(generate_routes.generate_cl.__wrapped__(letter_request, None, object()))
+             patch.object(generate_routes, "generate_cover_letter", return_value="letter"), \
+             patch.object(generate_routes, "resume_snapshot", return_value=(profile, None, [])), \
+             patch.object(generate_routes, "profile_snapshot", return_value=profile):
+            cv = asyncio.run(generate_routes.generate_cv.__wrapped__(cv_request, SimpleNamespace(session={"user_id": 1}), SimpleNamespace(rollback=lambda: None)))
+            letter = asyncio.run(generate_routes.generate_cl.__wrapped__(letter_request, SimpleNamespace(session={"user_id": 1}), SimpleNamespace(rollback=lambda: None)))
         self.assertEqual(cv, {"latex": "latex"})
         self.assertEqual(letter, {"cover_letter": "letter"})
         self.assertEqual(user._legacy_credits, 0)
@@ -29,7 +31,7 @@ class NoCreditsTests(unittest.TestCase):
         upload = SimpleNamespace(filename="resume.pdf", read=lambda: asyncio.sleep(0, result=b"pdf"))
         reader = SimpleNamespace(pages=[SimpleNamespace(extract_text=lambda: "Profile text")])
         user_query = SimpleNamespace(filter=lambda *args: SimpleNamespace(first=lambda: SimpleNamespace(id=1, _legacy_credits=0)))
-        db = SimpleNamespace(query=lambda *args: user_query)
+        db = SimpleNamespace(query=lambda *args: user_query, rollback=lambda: None)
         with patch.object(database_routes, "PdfReader", return_value=reader), \
              patch.object(database_routes, "extract_profile_from_resume", return_value={"first_name": "Alex"}):
             result = asyncio.run(database_routes.auto_fill_resume.__wrapped__(request, upload, db))

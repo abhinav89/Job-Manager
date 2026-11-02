@@ -86,10 +86,12 @@ async def rank_jobs(jobs, keyword, profile, preferences, api_key):
         for dimension, config in DIMENSIONS.items():
             answer = answers.get(f"job_{index}_{dimension}")
             if not isinstance(answer, dict) or answer.get("choice") not in config["criteria"]:
-                raise ValueError("TypeSafe returned an invalid judgment.")
+                decisions[dimension] = {"role": "unknown", "experience": "unclear", "preferences": "unknown"}[dimension]
+                continue
             confidence = answer.get("confidence")
             if not isinstance(confidence, (int, float)) or isinstance(confidence, bool) or not math.isfinite(confidence) or not 0 <= confidence <= 1:
-                raise ValueError("TypeSafe returned an invalid confidence.")
+                decisions[dimension] = {"role": "unknown", "experience": "unclear", "preferences": "unknown"}[dimension]
+                continue
             decisions[dimension] = answer["choice"]
         description = str(job.get("job_description") or "").strip()
         if not any(evidence.values()) or len(description) < 100:

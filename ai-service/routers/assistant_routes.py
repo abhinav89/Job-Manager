@@ -7,7 +7,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -39,11 +38,12 @@ class ReviseDraft(BaseModel):
     content: str = Field(min_length=1, max_length=100000)
 
 
-def _conversation(db, user_id, conversation_id):
-    conversation = db.query(models.AssistantConversation).filter(
+def _conversation(db, user_id, conversation_id, *, lock=False):
+    query = db.query(models.AssistantConversation).filter(
         models.AssistantConversation.id == conversation_id,
         models.AssistantConversation.user_id == user_id,
-    ).first()
+    )
+    conversation = (query.with_for_update() if lock else query).first()
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found.")
     return conversation
@@ -155,27 +155,74 @@ def link_job(conversation_id: int, data: LinkJob, request: Request, db: Session 
 @router.post("/conversations/{conversation_id}/messages")
 @limiter.limit("10/minute")
 async def send_message(conversation_id: int, data: SendMessage, request: Request, db: Session = Depends(get_db)):
+    from uuid import uuid4
+    from services.snapshots import snapshot, profile_snapshot
+    from services.conversation_evidence import select_user_evidence
+    from routers.database_routes import PROFILE_LOAD_OPTIONS
+    from services.preset_service import resolve_preset
+    from services.llm_service import retrieve_successful_evidence
+
     user_id = get_current_user_id(request)
-    conversation = _conversation(db, user_id, conversation_id)
-    job = _job(db, user_id, conversation.job_id)
-    profile = db.query(models.Profile).filter(models.Profile.user_id == user_id).first()
+    conversation = _conversation(db, user_id, conversation_id, lock=True)
     content = data.content.strip()
     if not content:
         raise HTTPException(status_code=422, detail="Enter a message.")
-    if data.request_id:
-        existing = db.query(models.AssistantMessage).filter_by(
-            conversation_id=conversation.id, request_key=data.request_id).first()
-        if existing:
-            if existing.content != content:
-                raise HTTPException(status_code=409, detail="This request ID was already used for a different message.")
+    request_key = data.request_id or uuid4().hex
+    if conversation.active_request_key:
+        active = db.query(models.AssistantTurn).filter_by(conversation_id=conversation_id, request_key=conversation.active_request_key).first()
+        if active and active.status == "in_progress":
+            created = active.created_at.replace(tzinfo=timezone.utc) if active.created_at.tzinfo is None else active.created_at
+            if (datetime.now(timezone.utc) - created).total_seconds() > 900:
+                active.status, active.error = "failed", "Worker completion is unknown. Review before retrying this work."
+                conversation.active_request_key = None
+                db.commit()
+    previous = db.query(models.AssistantTurn).filter_by(conversation_id=conversation_id, request_key=request_key).first()
+    if previous:
+        if previous.content != content:
+            raise HTTPException(status_code=409, detail="This request ID was already used for a different message.")
+        if previous.status == "completed":
             return _detail(conversation, db)
-    history = db.query(models.AssistantMessage).filter(
-        models.AssistantMessage.conversation_id == conversation.id).order_by(models.AssistantMessage.id).all()
-    transcript = [{"role": m.role, "content": m.content} for m in history] + [{"role": "user", "content": content}]
-    evidence = "\n".join(item["content"] for item in transcript if item["role"] == "user")[-20000:]
-    db.add(models.AssistantMessage(conversation_id=conversation.id, role="user", content=content,
-                                   request_key=data.request_id))
-    ctx = CareerToolContext(db, user_id, conversation, job, profile, evidence)
+        # Recover the conversation lock, but never automatically repeat work whose
+        # external outcome is unknown after a process crash.
+        created = previous.created_at.replace(tzinfo=timezone.utc) if previous.created_at.tzinfo is None else previous.created_at
+        if previous.status == "in_progress" and (datetime.now(timezone.utc) - created).total_seconds() > 900:
+            previous.status, previous.error = "failed", "The worker stopped before completion; review before starting another request."
+            db.query(models.AssistantConversation).filter_by(id=conversation_id, active_request_key=request_key).update({"active_request_key": None})
+            db.commit()
+        raise HTTPException(status_code=409, detail=f"This request is {previous.status}. Refresh the conversation before starting another request.")
+    # Support retrying messages written before the turn lifecycle was introduced.
+    legacy = db.query(models.AssistantMessage).filter_by(conversation_id=conversation_id, request_key=request_key).first()
+    if legacy:
+        if legacy.content != content:
+            raise HTTPException(status_code=409, detail="This request ID was already used for a different message.")
+        return _detail(conversation, db)
+    claimed = db.query(models.AssistantConversation).filter_by(id=conversation_id, user_id=user_id, active_request_key=None).update({"active_request_key": request_key})
+    if not claimed:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Another turn is active in this conversation. Wait or cancel it first.")
+    turn = models.AssistantTurn(conversation_id=conversation_id, request_key=request_key, content=content, status="in_progress")
+    db.add(turn)
+    db.add(models.AssistantMessage(conversation_id=conversation_id, role="user", content=content, request_key=request_key))
+    try:
+        db.flush()
+        profile = db.query(models.Profile).options(*PROFILE_LOAD_OPTIONS).filter_by(user_id=user_id).first()
+        job = _job(db, user_id, conversation.job_id)
+        transcript = [{"role": m.role, "content": m.content} for m in db.query(models.AssistantMessage).filter_by(conversation_id=conversation_id).order_by(models.AssistantMessage.id).all()]
+        drafts = [snapshot(d) for d in db.query(models.AssistantDraft).filter_by(conversation_id=conversation_id).order_by(models.AssistantDraft.id).all()]
+        applications = [snapshot(j) for j in db.query(models.JobApplication).filter_by(user_id=user_id).order_by(models.JobApplication.id.desc()).limit(101).all()]
+        preset = resolve_preset(db, profile.preset_slug) if profile else None
+        preset_data = {key: getattr(preset, key) for key in ("slug", "display_name", "target_summary_prompt", "core_skills_bank", "metric_prompts", "section_order", "recommended_template", "lever_guidance")} if preset else None
+        historical = retrieve_successful_evidence(profile, job.job_description if job else "", db) if profile else []
+        ctx = CareerToolContext(None, user_id, snapshot(conversation), snapshot(job), profile_snapshot(profile), select_user_evidence(transcript),
+            staged=True, drafts=drafts, applications=applications, preset=preset_data, historical_evidence=historical)
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="This request is already active.") from exc
+    except Exception:
+        db.rollback()
+        raise
+
     activity = []
     sink = activity_sink.get()
     def record_activity(item):
@@ -183,32 +230,58 @@ async def send_message(conversation_id: int, data: SendMessage, request: Request
         if sink:
             sink(item)
     ctx.activity_callback = record_activity
+
+    def finish_failure(status, message):
+        db.rollback()
+        # Claim, completion, cancellation and recovery lock the conversation first.
+        conversation = db.query(models.AssistantConversation).filter_by(id=conversation_id, user_id=user_id).with_for_update().first()
+        row = db.query(models.AssistantTurn).filter_by(conversation_id=conversation_id, request_key=request_key).with_for_update().first()
+        if row and row.status == "in_progress":
+            row.status, row.error = status, message
+        if conversation and conversation.active_request_key == request_key:
+            conversation.active_request_key = None
+        db.commit()
+
     try:
-        # Claim the request ID before the model or any paid tools run. A unique
-        # constraint makes concurrent retries wait for the first transaction.
-        db.flush()
-        reply = await run_career_agent(ctx, transcript)
+        from services.external_work import run_agent
+        reply = await run_agent(run_career_agent, ctx, transcript)
         if activity:
             ctx.save_draft("agent_activity", json.dumps(activity, ensure_ascii=False))
-        assistant_message = models.AssistantMessage(conversation_id=conversation.id, role="assistant", content=reply)
+        conversation = db.query(models.AssistantConversation).filter_by(id=conversation_id, user_id=user_id).with_for_update().first()
+        turn = db.query(models.AssistantTurn).filter_by(conversation_id=conversation_id, request_key=request_key).first()
+        if not conversation or not turn or turn.status != "in_progress" or conversation.active_request_key != request_key:
+            raise HTTPException(status_code=409, detail="This turn was cancelled or its conversation is no longer available.")
+        assistant_message = models.AssistantMessage(conversation_id=conversation_id, role="assistant", content=reply)
         db.add(assistant_message)
         db.flush()
-        for draft in ctx.created_drafts:
-            if inspect(draft).persistent:
-                draft.details = {**(draft.details or {}), "assistant_message_id": assistant_message.id}
+        identifiers = {}
+        saved = []
+        for staged in ctx.created_drafts:
+            draft = models.AssistantDraft(conversation_id=conversation_id, type=staged.type, content=staged.content,
+                details={**staged.details, "assistant_message_id": assistant_message.id})
+            db.add(draft)
+            db.flush()
+            identifiers[staged.id] = draft.id
+            saved.append(draft)
+        for draft in saved:
+            details = dict(draft.details)
+            key = details.get("context_key", "")
+            if key.startswith("draft:"):
+                old = int(key.split(":", 1)[1])
+                details["context_key"] = f"draft:{identifiers.get(old, old)}"
+            draft.details = details
+        conversation.active_request_key = None
         conversation.updated_at = datetime.now(timezone.utc)
+        turn.status = "completed"
         db.commit()
-    except IntegrityError as exc:
-        db.rollback()
-        existing = db.query(models.AssistantMessage).filter_by(
-            conversation_id=conversation_id, request_key=data.request_id).first() if data.request_id else None
-        if existing and existing.content == content:
-            conversation = _conversation(db, user_id, conversation_id)
-            return _detail(conversation, db)
-        raise HTTPException(status_code=409, detail="This request ID has already been used.") from exc
+    except asyncio.CancelledError:
+        finish_failure("cancelled", "The connection closed before completion.")
+        raise
     except Exception as exc:
-        db.rollback()
-        raise HTTPException(status_code=502, detail="The career agent couldn't respond. Please try again.") from exc
+        finish_failure("failed", "The turn could not finish. Review its status before starting another request.")
+        if isinstance(exc, HTTPException):
+            raise
+        raise HTTPException(status_code=502, detail="The career agent couldn't respond. Please start a new request after reviewing the conversation.") from exc
     return _detail(conversation, db)
 
 
@@ -217,6 +290,7 @@ async def send_message(conversation_id: int, data: SendMessage, request: Request
 async def stream_message(conversation_id: int, data: SendMessage, request: Request, db: Session = Depends(get_db)):
     # Validate access before beginning the streaming response.
     _conversation(db, get_current_user_id(request), conversation_id)
+    db.rollback()
     if not data.content.strip():
         raise HTTPException(status_code=422, detail="Enter a message.")
 
@@ -229,7 +303,10 @@ async def stream_message(conversation_id: int, data: SendMessage, request: Reque
                 result = await send_message.__wrapped__(conversation_id, data, request, db)
                 await queue.put({"type": "complete", "conversation": result})
             except HTTPException as exc:
-                await queue.put({"type": "error", "message": str(exc.detail)})
+                turn = db.query(models.AssistantTurn).filter_by(conversation_id=conversation_id, request_key=data.request_id).first() if data.request_id else None
+                status = turn.status if turn else None
+                db.rollback()
+                await queue.put({"type": "error", "message": str(exc.detail), "request_status": status})
             except Exception:
                 await queue.put({"type": "error", "message": "The agent could not respond. Please try again."})
 
@@ -253,14 +330,39 @@ async def stream_message(conversation_id: int, data: SendMessage, request: Reque
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
+@router.post("/conversations/{conversation_id}/messages/{request_key}/cancel")
+def cancel_message(conversation_id: int, request_key: str, request: Request, db: Session = Depends(get_db)):
+    user_id = get_current_user_id(request)
+    conversation = db.query(models.AssistantConversation).filter_by(id=conversation_id, user_id=user_id).with_for_update().first()
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+    turn = db.query(models.AssistantTurn).filter_by(conversation_id=conversation_id, request_key=request_key).with_for_update().first()
+    if not turn:
+        raise HTTPException(status_code=404, detail="Request not found.")
+    if turn.status == "in_progress":
+        turn.status, turn.error = "cancelled", "Cancelled by the user. External work may still be winding down."
+        db.query(models.AssistantConversation).filter_by(id=conversation_id, active_request_key=request_key).update({"active_request_key": None})
+    db.commit()
+    return {"status": turn.status}
+
+
 @router.post("/conversations/{conversation_id}/drafts/{draft_id}/revise")
 def revise_draft(conversation_id: int, draft_id: int, data: ReviseDraft, request: Request, db: Session = Depends(get_db)):
     conversation = _conversation(db, get_current_user_id(request), conversation_id)
     original = _draft(db, conversation.id, draft_id)
-    if original.type in {"tracker_action", "job_search", "agent_activity"}:
+    draft_type = original.type
+    if draft_type in {"tracker_action", "job_search", "agent_activity"}:
         raise HTTPException(status_code=422, detail="This item cannot be edited as a draft.")
     details = {key: value for key, value in (original.details or {}).items() if key != "assistant_message_id"}
-    draft = models.AssistantDraft(conversation_id=conversation.id, type=original.type,
+    if draft_type == "resume":
+        db.rollback()
+        try:
+            pages = pdf_page_count(compile_latex_to_pdf(data.content))
+        except PDFCompilationError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+        details = {**details, "pages": pages, "one_page": pages == 1}
+        conversation = _conversation(db, get_current_user_id(request), conversation_id)
+    draft = models.AssistantDraft(conversation_id=conversation.id, type=draft_type,
                                   content=data.content, details=details)
     db.add(draft)
     conversation.updated_at = datetime.now(timezone.utc)
@@ -341,13 +443,19 @@ def apply_draft(conversation_id: int, draft_id: int, request: Request, db: Sessi
         _snapshot_current(db, conversation, "cover_letter", job.cover_letter)
         job.cover_letter = draft.content
     elif draft.type == "resume":
+        source = draft.content
+        selected_job_id = job.id
+        db.rollback()
         try:
-            pdf = compile_latex_to_pdf(draft.content)
+            pdf = compile_latex_to_pdf(source)
             pages = pdf_page_count(pdf)
         except PDFCompilationError as exc:
-            raise HTTPException(status_code=422, detail=f"Could not compile this resume: {exc}") from exc
+            raise HTTPException(status_code=exc.status_code, detail=f"Could not compile this resume: {exc}") from exc
         if pages != 1:
             raise HTTPException(status_code=422, detail=f"Resume must fit one page; this draft has {pages} pages. Open it in the editor to resolve overflow.")
+        conversation = _conversation(db, user_id, conversation_id)
+        job = _job(db, user_id, selected_job_id)
+        draft = _draft(db, conversation_id, draft_id)
         _snapshot_current(db, conversation, "resume", job.latex_source)
         job.latex_source, job.pdf_data = draft.content, pdf
         job.pdf_generated_at = datetime.now(timezone.utc)
@@ -371,18 +479,20 @@ def _snapshot_current(db, conversation, draft_type, content):
 def download_draft_pdf(conversation_id: int, draft_id: int, request: Request, db: Session = Depends(get_db)):
     conversation = _conversation(db, get_current_user_id(request), conversation_id)
     draft = _draft(db, conversation.id, draft_id)
-    if draft.type == "resume":
+    draft_type, content = draft.type, draft.content
+    db.rollback()
+    if draft_type == "resume":
         try:
-            pdf = compile_latex_to_pdf(draft.content)
+            pdf = compile_latex_to_pdf(content)
         except PDFCompilationError as exc:
-            raise HTTPException(status_code=422, detail=f"Could not compile this CV: {exc}") from exc
+            raise HTTPException(status_code=exc.status_code, detail=f"Could not compile this CV: {exc}") from exc
         return Response(content=pdf, media_type="application/pdf",
                         headers={"Content-Disposition": "inline; filename=cv-draft.pdf", "Cache-Control": "no-store"})
-    if draft.type != "cheat_sheet":
+    if draft_type != "cheat_sheet":
         raise HTTPException(status_code=422, detail="PDF export is available for CVs and cheat sheets.")
     from services.career_documents import cheat_sheet_pdf
     try:
-        pdf = cheat_sheet_pdf(draft.content)
+        pdf = cheat_sheet_pdf(content)
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Could not create the cheat sheet PDF.") from exc
     return Response(content=pdf, media_type="application/pdf",

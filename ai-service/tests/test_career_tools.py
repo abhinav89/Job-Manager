@@ -10,6 +10,7 @@ from services import career_tools
 
 class FakeContext:
     def __init__(self):
+        self.staged = False
         self.db = object()
         self.profile = SimpleNamespace(preset_slug="blank")
         self.job = SimpleNamespace(job_description="A developer role", company_name="Example", job_title="Developer", template_id="classic")

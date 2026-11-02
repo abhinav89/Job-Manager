@@ -7,46 +7,39 @@ _HEADING_STYLES = {
 }
 
 
-def _escape_latex(text: str) -> str:
-    if not text:
-        return text
-    replacements = [
-        ("\\", r"\textbackslash{}"),
-        ("%", r"\%"),
-        ("&", r"\&"),
-        ("$", r"\$"),
-        ("#", r"\#"),
-        ("_", r"\_"),
-        ("~", r"\textasciitilde{}"),
-        ("^", r"\^{}"),
-    ]
-    for char, escaped in replacements:
-        text = text.replace(char, escaped)
-    return text
+def _escape_latex(text: str | None) -> str:
+    replacements = {"\\": r"\textbackslash{}", "{": r"\{", "}": r"\}", "%": r"\%",
+                    "&": r"\&", "$": r"\$", "#": r"\#", "_": r"\_",
+                    "~": r"\textasciitilde{}", "^": r"\^{}"}
+    return "".join(replacements.get(char, char) for char in str(text or ""))
+
+
+def _link(target: str, display: str, icon: str = "") -> str:
+    from urllib.parse import urlsplit, quote
+    if urlsplit(target).scheme not in {"http", "https", "mailto"}:
+        return _escape_latex(display)
+    encoded = quote(target, safe=":/?=&@-_.~+#%")
+    encoded = encoded.replace("%", r"\%").replace("#", r"\#")
+    return r"\href{" + encoded + "}{" + icon + r"\underline{" + _escape_latex(display) + "}}"
 
 
 def _build_contact_line(profile: UserProfile) -> tuple[str, str]:
-    contact_parts = []
+    parts = []
     if profile.mobile_no:
-        contact_parts.append(r"\faPhone\ " + profile.mobile_no)
+        parts.append(r"\faPhone\ " + _escape_latex(profile.mobile_no))
     if profile.email:
-        contact_parts.append(r"\href{mailto:" + profile.email + r"}{\faEnvelope\ \underline{" + profile.email + r"}}")
-    if profile.linkedin:
-        display = profile.linkedin.replace("https://", "").replace("http://", "")
-        contact_parts.append(r"\href{" + profile.linkedin + r"}{\faLinkedinSquare\ \underline{" + display + r"}}")
-    if profile.github:
-        display = profile.github.replace("https://", "").replace("http://", "")
-        contact_parts.append(r"\href{" + profile.github + r"}{\faGithub\ \underline{" + display + r"}}")
-    contact_line = " $|$ ".join(contact_parts)
-    portfolio_line = ""
+        parts.append(_link("mailto:" + profile.email, profile.email, r"\faEnvelope\ "))
+    for value, icon in ((profile.linkedin, r"\faLinkedinSquare\ "), (profile.github, r"\faGithub\ ")):
+        if value:
+            parts.append(_link(value, value.removeprefix("https://").removeprefix("http://"), icon))
+    portfolio = ""
     if profile.portfolio:
-        display = profile.portfolio.replace("https://", "").replace("http://", "")
-        portfolio_line = r"\\ \href{" + profile.portfolio + r"}{\faGlobe\ \underline{" + display + r"}}"
-    return contact_line, portfolio_line
+        portfolio = r"\\ " + _link(profile.portfolio, profile.portfolio.removeprefix("https://").removeprefix("http://"), r"\faGlobe\ ")
+    return " $|$ ".join(parts), portfolio
 
 
 def _build_heading(profile: UserProfile, template_id: str = "classic") -> str:
-    name = f"{profile.first_name} {profile.last_name}".upper()
+    name = _escape_latex(f"{profile.first_name or ''} {profile.last_name or ''}".upper())
     contact_line, portfolio_line = _build_contact_line(profile)
     style = _HEADING_STYLES.get(template_id, _HEADING_STYLES["classic"])
     return (
@@ -65,8 +58,8 @@ def _build_education(profile: UserProfile) -> str:
     for edu in profile.education:
         desc = edu.description or ""
         lines.append(r"    \resumeSubheading")
-        lines.append(f"      {{{edu.school_name}}}{{{edu.location}}}")
-        lines.append(f"      {{{edu.course}{' --- ' + desc if desc else ''}}}{{}}")
+        lines.append(f"      {{{_escape_latex(edu.school_name)}}}{{{_escape_latex(edu.location)}}}")
+        lines.append(f"      {{{_escape_latex(edu.course + (' --- ' + desc if desc else ''))}}}{{{_escape_latex(edu.date_range)}}}")
     return "\n".join(lines)
 
 
@@ -114,7 +107,7 @@ def _build_skills(skills_dict: dict) -> str:
 def _build_certifications(cert_line: str) -> str:
     if not cert_line or not cert_line.strip():
         return ""
-    cert_line = cert_line.replace(" | ", " $|$ ")
+    cert_line = _escape_latex(cert_line).replace(" | ", " $|$ ")
     return r"""\section{Certifications}
  \begin{itemize}[leftmargin=0.15in, label={}]
     \small{\item{
@@ -123,7 +116,7 @@ def _build_certifications(cert_line: str) -> str:
  \end{itemize}"""
 
 
-def assemble_latex(profile: UserProfile, ai_content: dict, template_id: str = "classic") -> str:
+def assemble_latex(profile: UserProfile, ai_content: dict, template_id: str = "classic", section_order: list[str] | None = None) -> str:
     doc = TEMPLATES.get(template_id, TEMPLATES["classic"])
 
     num_exp = len(ai_content.get("experience", []))
@@ -139,10 +132,22 @@ def assemble_latex(profile: UserProfile, ai_content: dict, template_id: str = "c
     heading = _build_heading(profile, template_id)
 
     doc = doc.replace("<<HEADING>>", heading)
-    doc = doc.replace("<<SUMMARY>>", ai_content.get("summary", ""))
+    doc = doc.replace("<<SUMMARY>>", _escape_latex(ai_content.get("summary", "")))
     doc = doc.replace("<<EDUCATION>>", _build_education(profile))
     doc = doc.replace("<<EXPERIENCE>>", _build_experience(ai_content.get("experience", [])))
     doc = doc.replace("<<PROJECTS>>", _build_projects(ai_content.get("projects", [])))
     doc = doc.replace("<<SKILLS>>", _build_skills(ai_content.get("skills", {})))
     doc = doc.replace("<<CERTIFICATIONS>>", _build_certifications(ai_content.get("certifications", "")))
+    import re
+    matches = list(re.finditer(r"(?m)^\\section\{([^}]+)\}", doc))
+    if matches:
+        end = doc.index(r"\end{document}")
+        sections = {m.group(1): doc[m.start():matches[i+1].start() if i+1 < len(matches) else end]
+                    for i, m in enumerate(matches)}
+        if not ai_content.get("projects"):
+            sections.pop("Projects", None)
+        aliases = {"skills": "Technical Skills", "work experience": "Experience", "professional summary": "Summary"}
+        order = [aliases.get(name.lower(), name) for name in (section_order or sections)]
+        order = list(dict.fromkeys([*order, *sections]))
+        doc = doc[:matches[0].start()] + "\n".join(sections[name] for name in order if name in sections) + doc[end:]
     return doc

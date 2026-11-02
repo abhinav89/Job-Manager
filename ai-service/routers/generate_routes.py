@@ -1,21 +1,27 @@
-import asyncio
+from services.external_work import run_blocking
+from services.snapshots import profile_snapshot, resume_snapshot
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from database import get_db
+from dependencies import get_current_user_id
+from routers.database_routes import PROFILE_LOAD_OPTIONS
 from models import database_models as db_models
 from models.schemas import GenerateRequest, GenerateCoverLetterRequest, SpotEditRequest
-from services.llm_service import generate_latex_resume, generate_cover_letter
+from services.llm_service import generate_latex_resume, generate_cover_letter, UnsupportedPersonalClaims
 from services.spot_edit_service import rewrite_blocks
 from services.pdf_service import PDFCompilationError, compile_latex_to_pdf, pdf_page_count, apply_single_page_autofit
-from services.preset_service import resolve_preset
 from limiter import limiter
 from fastapi import Request
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/generate",
-    tags=["generate"]
+    tags=["generate"],
+    dependencies=[Depends(get_current_user_id)],
 )
 
 
@@ -28,13 +34,29 @@ def require_one_page(pdf_bytes: bytes) -> None:
         )
 
 
-def get_profile_or_404(db: Session, email: str) -> db_models.Profile:
-    profile = db.query(db_models.Profile).join(db_models.User).filter(
-        db_models.User.email == email
+def get_profile_or_404(db: Session, user_id: int) -> db_models.Profile:
+    profile = db.query(db_models.Profile).options(*PROFILE_LOAD_OPTIONS).filter(
+        db_models.Profile.user_id == user_id
     ).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
     return profile
+
+
+async def _generate_resume(profile, data: GenerateRequest, preset, history):
+    try:
+        return await run_blocking(generate_latex_resume, profile, data.jd, data.template_id,
+            preset_slug=data.preset_slug, preset_config=preset, historical_evidence=history)
+    except HTTPException:
+        raise
+    except UnsupportedPersonalClaims as exc:
+        findings = "; ".join(exc.findings) or "The checker could not identify support for one or more personal claims."
+        raise HTTPException(status_code=502, detail="The generated resume still includes claims the checker couldn't support. Claims to review: " + findings) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Resume generation failed")
+        raise HTTPException(status_code=502, detail="The AI service couldn't generate your resume. Please try again.") from exc
 
 
 @router.get("/templates")
@@ -54,28 +76,30 @@ async def get_templates():
 
 
 class CompileLatexRequest(BaseModel):
-    latex: str
+    latex: str = Field(min_length=1, max_length=200000)
     auto_fit: bool = False
 
 
 @router.post("/cv")
 @limiter.limit("3/minute")
 async def generate_cv(data: GenerateRequest, request: Request, db: Session = Depends(get_db)):
-    profile = get_profile_or_404(db, data.email)
-    latex_code = generate_latex_resume(profile, data.jd, data.template_id, preset_slug=data.preset_slug, db=db)
+    profile = get_profile_or_404(db, get_current_user_id(request))
+    plain, preset, history = resume_snapshot(db, profile, data.jd, data.preset_slug)
+    latex_code = await _generate_resume(plain, data, preset, history)
     
     return {"latex": latex_code}
 
 @router.post("/pdf")
 @limiter.limit("3/minute")
 async def generate_pdf(data: GenerateRequest, request: Request, db: Session = Depends(get_db)):
-    profile = get_profile_or_404(db, data.email)
-    latex_code = generate_latex_resume(profile, data.jd, data.template_id, preset_slug=data.preset_slug, db=db)
+    profile = get_profile_or_404(db, get_current_user_id(request))
+    plain, preset, history = resume_snapshot(db, profile, data.jd, data.preset_slug)
+    latex_code = await _generate_resume(plain, data, preset, history)
 
     try:
-        pdf_bytes = await asyncio.to_thread(compile_latex_to_pdf, latex_code)
+        pdf_bytes = await run_blocking(compile_latex_to_pdf, latex_code)
     except PDFCompilationError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     require_one_page(pdf_bytes)
 
     return Response(
@@ -89,10 +113,12 @@ async def generate_pdf(data: GenerateRequest, request: Request, db: Session = De
 @limiter.limit("10/minute")
 async def compile_latex(data: CompileLatexRequest, request: Request):
     try:
-        pdf_bytes = await asyncio.to_thread(compile_latex_to_pdf, data.latex)
+        pdf_bytes = await run_blocking(compile_latex_to_pdf, data.latex)
     except PDFCompilationError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     require_one_page(pdf_bytes)
+
+    return Response(content=pdf_bytes, media_type="application/pdf")
 
 from services.docx_service import convert_latex_to_docx
 
@@ -101,7 +127,9 @@ from services.docx_service import convert_latex_to_docx
 @limiter.limit("10/minute")
 async def export_docx(data: CompileLatexRequest, request: Request):
     try:
-        docx_bytes = await asyncio.to_thread(convert_latex_to_docx, data.latex)
+        docx_bytes = await run_blocking(convert_latex_to_docx, data.latex)
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to generate DOCX: {exc}") from exc
 
@@ -123,9 +151,9 @@ async def compile_latex_with_check(data: CompileLatexRequest, request: Request):
         auto_fitted = True
 
     try:
-        pdf_bytes = await asyncio.to_thread(compile_latex_to_pdf, latex_code)
+        pdf_bytes = await run_blocking(compile_latex_to_pdf, latex_code)
     except PDFCompilationError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
     pages = pdf_page_count(pdf_bytes)
 
@@ -134,7 +162,7 @@ async def compile_latex_with_check(data: CompileLatexRequest, request: Request):
         if data.auto_fit or header_fallback:
             tightened = apply_single_page_autofit(latex_code)
             try:
-                pdf_bytes_tight = await asyncio.to_thread(compile_latex_to_pdf, tightened)
+                pdf_bytes_tight = await run_blocking(compile_latex_to_pdf, tightened)
                 pages_tight = pdf_page_count(pdf_bytes_tight)
                 pdf_bytes = pdf_bytes_tight
                 pages = pages_tight
@@ -145,7 +173,7 @@ async def compile_latex_with_check(data: CompileLatexRequest, request: Request):
 
     from services.ats_check import ats_check
     import base64
-    ats_result = await asyncio.to_thread(ats_check, pdf_bytes, None)
+    ats_result = await run_blocking(ats_check, pdf_bytes, None)
     
     return {
         "pdf_b64": base64.b64encode(pdf_bytes).decode("utf-8"),
@@ -160,9 +188,9 @@ async def compile_latex_with_check(data: CompileLatexRequest, request: Request):
 @limiter.limit("30/minute")
 async def compile_latex_preview(data: CompileLatexRequest, request: Request):
     try:
-        pdf_bytes = await asyncio.to_thread(compile_latex_to_pdf, data.latex, True)
+        pdf_bytes = await run_blocking(compile_latex_to_pdf, data.latex, True)
     except PDFCompilationError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
     pages = pdf_page_count(pdf_bytes)
     return Response(
@@ -178,21 +206,21 @@ async def compile_latex_preview(data: CompileLatexRequest, request: Request):
 @router.post("/ats-check")
 @limiter.limit("5/minute")
 async def generate_ats_check(data: GenerateRequest, request: Request, db: Session = Depends(get_db)):
-    profile = get_profile_or_404(db, data.email)
-    latex_code = generate_latex_resume(profile, data.jd, data.template_id, data.preset_slug, db)
+    profile = get_profile_or_404(db, get_current_user_id(request))
+    plain, preset, history = resume_snapshot(db, profile, data.jd, data.preset_slug)
+    latex_code = await _generate_resume(plain, data, preset, history)
     
     try:
-        pdf_bytes = await asyncio.to_thread(compile_latex_to_pdf, latex_code)
+        pdf_bytes = await run_blocking(compile_latex_to_pdf, latex_code)
     except PDFCompilationError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     require_one_page(pdf_bytes)
         
-    preset = resolve_preset(db, data.preset_slug)
-    preset_section_order = preset.section_order if preset else None
+    preset_section_order = preset.get("section_order") if preset else None
             
     from services.ats_check import ats_check
     import base64
-    ats_result = await asyncio.to_thread(ats_check, pdf_bytes, preset_section_order)
+    ats_result = await run_blocking(ats_check, pdf_bytes, preset_section_order)
     
     return {
         "latex": latex_code,
@@ -204,8 +232,10 @@ async def generate_ats_check(data: GenerateRequest, request: Request, db: Sessio
 @router.post("/cover-letter")
 @limiter.limit("3/minute")
 async def generate_cl(data: GenerateCoverLetterRequest, request: Request, db: Session = Depends(get_db)):
-    profile = get_profile_or_404(db, data.email)
-    cover_letter_content = generate_cover_letter(profile, data.jd, data.company_name)
+    profile = get_profile_or_404(db, get_current_user_id(request))
+    plain = profile_snapshot(profile)
+    db.rollback()
+    cover_letter_content = await run_blocking(generate_cover_letter, plain, data.jd, data.company_name)
 
     return {"cover_letter": cover_letter_content}
 
@@ -214,9 +244,13 @@ async def generate_cl(data: GenerateCoverLetterRequest, request: Request, db: Se
 @limiter.limit("10/minute")
 async def spot_edit(data: SpotEditRequest, request: Request, db: Session = Depends(get_db)):
     """Rewrite the selected Blocks only."""
-    profile = get_profile_or_404(db, data.email)
+    profile = get_profile_or_404(db, get_current_user_id(request))
+    plain = profile_snapshot(profile)
+    db.rollback()
     try:
-        blocks = await asyncio.to_thread(rewrite_blocks, profile, data)
+        blocks = await run_blocking(rewrite_blocks, plain, data)
+    except HTTPException:
+        raise
     except ValueError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except Exception as exc:

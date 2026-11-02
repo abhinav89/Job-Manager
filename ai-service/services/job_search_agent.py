@@ -65,7 +65,25 @@ def create_job_search_tools(ctx):
             return {"profile": None, "note": "Ask the user for relevant experience and preferences."}
         return {"profile": db_profile_to_schema(ctx.profile, confirmed_skills_only=True).model_dump()}
 
-    return [search_jobs, get_search_profile]
+    from functools import wraps
+    original = search_jobs
+    @wraps(original)
+    async def safe_search(*args, **kwargs):
+        async def execute():
+            before = len(ctx.created_drafts)
+            try:
+                return await original(*args, **kwargs)
+            except Exception as exc:
+                del ctx.created_drafts[before:]
+                if ctx.db is not None:
+                    ctx.db.rollback()
+                logger.warning("Job search failed (%s)", type(exc).__name__)
+                return {"status": "error", "error": "Job search is temporarily unavailable. Try another source or provide a job description."}
+        if getattr(ctx, "staged", False):
+            async with ctx.tool_lock:
+                return await execute()
+        return await execute()
+    return [safe_search, get_search_profile]
 
 
 def create_job_search_agent(model, ctx, before_tool=None, after_tool=None, on_tool_error=None):

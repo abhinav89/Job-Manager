@@ -44,3 +44,21 @@ def test_remembered_login_uses_a_30_day_cookie():
         assert "max-age=2592000" in cookie
         assert "httponly" in cookie
         assert client.get("/me").json() == {"user_id": 1}
+
+
+def test_browser_session_cookie_still_expires_on_the_server():
+    from unittest.mock import patch
+    with make_client() as client:
+        with patch("itsdangerous.TimestampSigner.get_timestamp", return_value=1_000_000):
+            client.post("/login/false")
+        with patch("itsdangerous.TimestampSigner.get_timestamp", return_value=1_000_000 + 12 * 3600 + 1):
+            assert client.get("/me").json() == {"user_id": None}
+
+
+def test_remembered_session_is_valid_beyond_the_browser_session_limit():
+    from unittest.mock import patch
+    with make_client() as client:
+        with patch("itsdangerous.TimestampSigner.get_timestamp", return_value=1_000_000):
+            client.post("/login/true")
+        with patch("itsdangerous.TimestampSigner.get_timestamp", return_value=1_000_000 + 13 * 3600):
+            assert client.get("/me").json() == {"user_id": 1}

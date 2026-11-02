@@ -36,6 +36,9 @@ def parse_origins(value: str | None) -> list[str]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from services.sandbox import execution_backend
+    backend = execution_backend()
+    logger.info("Execution backend: %s", backend)
     if parse_bool(os.getenv("AUTO_CREATE_TABLES")):
         logger.info("AUTO_CREATE_TABLES enabled; creating database tables if needed.")
         init_db()

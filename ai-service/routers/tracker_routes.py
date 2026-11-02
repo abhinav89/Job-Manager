@@ -1,9 +1,11 @@
-import asyncio
-
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from sqlalchemy import func
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
+from routers.database_routes import PROFILE_LOAD_OPTIONS
+from services.snapshots import resume_snapshot, profile_snapshot
+from services.external_work import run_blocking
+from routers.generate_routes import require_one_page
 from typing import List
 from datetime import datetime
 from database import get_db
@@ -33,7 +35,7 @@ def serialize_job(job: db_models.JobApplication, include_details: bool = True) -
         "job_source": job.job_source,
         "is_archived": job.is_archived,
         "short_description": job.short_description,
-        "has_pdf": job.pdf_data is not None,
+        "has_pdf": bool(job.has_pdf),
         "pdf_generated_at": job.pdf_generated_at.isoformat() if job.pdf_generated_at else None,
         "status": job.status,
         "date_applied": job.date_applied.isoformat() if job.date_applied else None,
@@ -155,26 +157,24 @@ async def generate_pdf_for_job(job_id: int, request: Request, db: Session = Depe
 
     from services.llm_service import generate_latex_resume
 
-    profile = db.query(db_models.Profile).options(
-        joinedload(db_models.Profile.education),
-        joinedload(db_models.Profile.experience),
-        joinedload(db_models.Profile.projects),
-        joinedload(db_models.Profile.skills),
-        joinedload(db_models.Profile.certifications),
-    ).filter(db_models.Profile.user_id == user.id).first()
+    profile = db.query(db_models.Profile).options(*PROFILE_LOAD_OPTIONS).filter(db_models.Profile.user_id == user.id).first()
 
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found — fill in your profile first")
 
     # 1. Generate LaTeX
-    latex_code = generate_latex_resume(profile, job.job_description, template_id=job.template_id or "classic", db=db)
+    jd, template, preset_slug = job.job_description, job.template_id or "classic", profile.preset_slug
+    plain, preset, history = resume_snapshot(db, profile, jd, preset_slug)
+    latex_code = await run_blocking(generate_latex_resume, plain, jd, template_id=template, preset_slug=preset_slug, preset_config=preset, historical_evidence=history)
 
     # 2. Compile PDF with the Python-managed Tectonic binary
     try:
-        pdf_bytes = await asyncio.to_thread(compile_latex_to_pdf, latex_code)
+        pdf_bytes = await run_blocking(compile_latex_to_pdf, latex_code)
     except PDFCompilationError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
+    require_one_page(pdf_bytes)
+    job = get_job_for_user(db, job_id, user_id)
     # 3. Save both LaTeX and PDF to DB
     job.latex_source = latex_code
     job.pdf_data = pdf_bytes
@@ -197,19 +197,17 @@ async def generate_cover_letter_for_job(job_id: int, request: Request, db: Sessi
 
     from services.llm_service import generate_cover_letter
 
-    profile = db.query(db_models.Profile).options(
-        joinedload(db_models.Profile.education),
-        joinedload(db_models.Profile.experience),
-        joinedload(db_models.Profile.projects),
-        joinedload(db_models.Profile.skills),
-        joinedload(db_models.Profile.certifications),
-    ).filter(db_models.Profile.user_id == user.id).first()
+    profile = db.query(db_models.Profile).options(*PROFILE_LOAD_OPTIONS).filter(db_models.Profile.user_id == user.id).first()
 
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found — fill in your profile first")
 
     # Generate cover letter
-    cover_letter_content = generate_cover_letter(profile, job.job_description, job.company_name)
+    jd, company = job.job_description, job.company_name
+    plain = profile_snapshot(profile)
+    db.rollback()
+    cover_letter_content = await run_blocking(generate_cover_letter, plain, jd, company)
+    job = get_job_for_user(db, job_id, user_id)
 
     # Save to DB
     job.cover_letter = cover_letter_content
@@ -221,6 +219,7 @@ async def generate_cover_letter_for_job(job_id: int, request: Request, db: Sessi
 async def get_pdf(job_id: int, request: Request, db: Session = Depends(get_db)):
     user_id = get_current_user_id(request)
     job = get_job_for_user(db, job_id, user_id)
+    db.refresh(job, ["pdf_data"])
     if not job.pdf_data:
         raise HTTPException(status_code=404, detail="No PDF found for this job")
     return Response(
@@ -246,19 +245,24 @@ async def save_latex(job_id: int, data: SaveLatexRequest, request: Request, db: 
     user_id = get_current_user_id(request)
     job = get_job_for_user(db, job_id, user_id)
 
-    # Save new LaTeX
-    job.latex_source = data.latex
+    # External compilation runs without a checked-out DB connection.
+    db.rollback()
 
     # Recompile PDF from new LaTeX
     pdf_updated = False
     compilation_error = None
     try:
-        job.pdf_data = await asyncio.to_thread(compile_latex_to_pdf, data.latex)
+        pdf_bytes = await run_blocking(compile_latex_to_pdf, data.latex)
+        require_one_page(pdf_bytes)
+        job = get_job_for_user(db, job_id, user_id)
+        job.pdf_data = pdf_bytes
         job.pdf_generated_at = datetime.utcnow()
         pdf_updated = True
     except PDFCompilationError as exc:
         compilation_error = str(exc)
 
+    job = get_job_for_user(db, job_id, user_id)
+    job.latex_source = data.latex
     db.commit()
     response = {"status": "success", "pdf_updated": pdf_updated}
     if compilation_error:
@@ -272,35 +276,13 @@ class FetchJobRequest(PydanticBaseModel):
 def fetch_job_details(data: FetchJobRequest, request: Request):
     user_id = get_current_user_id(request)
     
-    from scrapling import Fetcher
+    from services.safe_fetch import fetch_job_text, UnsafeURL
     from services.llm_service import extract_job_details
-    import urllib.parse
 
     try:
-        url_to_fetch = data.url
-        # Normalize LinkedIn 'collections/easy-apply' URLs to public 'jobs/view' URLs to bypass the forced login wall
-        if "linkedin.com" in url_to_fetch and "currentJobId=" in url_to_fetch:
-            parsed_url = urllib.parse.urlparse(url_to_fetch)
-            query_params = urllib.parse.parse_qs(parsed_url.query)
-            if "currentJobId" in query_params:
-                job_id = query_params["currentJobId"][0]
-                url_to_fetch = f"https://www.linkedin.com/jobs/view/{job_id}/"
-                print(f"Normalized LinkedIn URL to bypass login: {url_to_fetch}")
-
-        # 1. Fetch page using scrapling (bypasses anti-bot)
-        fetcher = Fetcher(headless=True)
-        response = fetcher.get(url_to_fetch)
-        
-        html_content = response.body.decode('utf-8', errors='ignore')
-        
-        # 2. Extract using LLM
-        details = extract_job_details(html_content)
-        
-        return {
-            "status": "success",
-            "data": details
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch or parse job: {str(e)}")
-
-
+        details = extract_job_details(fetch_job_text(data.url))
+        return {"status": "success", "data": details}
+    except UnsafeURL as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="The job details could not be extracted. Please try again.") from exc

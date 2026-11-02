@@ -8,6 +8,7 @@ class Education(BaseModel):
     course: str = Field(max_length=150)
     location: str = Field(max_length=100)
     description: Optional[str] = None
+    date_range: Optional[str] = Field(default=None, max_length=50)
 
 class Experience(BaseModel):
     job_title: str = Field(max_length=100)
@@ -46,6 +47,7 @@ class UserProfile(BaseModel):
     skills: List[SkillItem]
     certifications: List[Certification] = []
     preset_slug: Optional[str] = Field(default="blank", max_length=50)
+    preferred_template: Optional[Literal["classic", "modern"]] = None
 
 class GenerateRequest(BaseModel):
     email: str
@@ -135,41 +137,10 @@ class PasswordResetConfirmRequest(BaseModel):
 
 
 class JobApplicationCreate(BaseModel):
-    company_name: str
-    job_title: str
+    company_name: str = Field(min_length=1, max_length=150)
+    job_title: str = Field(min_length=1, max_length=150)
     job_url: Optional[str] = None
-    job_source: Optional[str] = None
-    short_description: Optional[str] = None
-    status: Optional[str] = "Saved"
-    date_applied: Optional[DateType] = None
-    follow_up_date: Optional[DateType] = None
-    job_type: Optional[str] = None
-    location: Optional[str] = None
-    salary_range: Optional[str] = None
-    priority: Optional[str] = "Medium"
-    notes: Optional[str] = None
-
-class JobApplicationUpdate(BaseModel):
-    company_name: Optional[str] = None
-    job_title: Optional[str] = None
-    job_url: Optional[str] = None
-    job_source: Optional[str] = None
-    is_archived: Optional[bool] = None
-    short_description: Optional[str] = None
-    status: Optional[str] = None
-    date_applied: Optional[DateType] = None
-    follow_up_date: Optional[DateType] = None
-    job_type: Optional[str] = None
-    location: Optional[str] = None
-    salary_range: Optional[str] = None
-    priority: Optional[str] = None
-    notes: Optional[str] = None
-
-class JobApplicationCreate(BaseModel):
-    company_name: str
-    job_title: str
-    job_url: Optional[str] = None
-    job_source: Optional[str] = None
+    job_source: Optional[str] = Field(default=None, max_length=250)
     short_description: Optional[str] = None
     job_description: Optional[str] = None  # add
     status: Optional[str] = "Saved"
@@ -184,10 +155,10 @@ class JobApplicationCreate(BaseModel):
     template_id: Literal["classic", "modern"] = "classic"
 
 class JobApplicationUpdate(BaseModel):
-    company_name: Optional[str] = None
-    job_title: Optional[str] = None
+    company_name: Optional[str] = Field(default=None, min_length=1, max_length=150)
+    job_title: Optional[str] = Field(default=None, min_length=1, max_length=150)
     job_url: Optional[str] = None
-    job_source: Optional[str] = None
+    job_source: Optional[str] = Field(default=None, max_length=250)
     is_archived: Optional[bool] = None
     short_description: Optional[str] = None
     job_description: Optional[str] = None  # add
@@ -225,13 +196,6 @@ class JobApplicationResponse(BaseModel):
     class Config:
         from_attributes = True
 
-class InterviewAnalyzeRequest(BaseModel):
-    question: str
-    answer: str
-    job_title: str
-    jd: Optional[str] = None
-
-
 class DeliveryMetrics(BaseModel):
     eye_contact_pct: Optional[float] = None    # 0-100
     avg_smile: Optional[float] = None          # 0-1
@@ -247,8 +211,8 @@ class InterviewAnalyzeRequest(BaseModel):
     delivery: Optional[DeliveryMetrics] = None  # optional — works without MediaPipe too
 
 class CodeRunRequest(BaseModel):
-    code: str
-    stdin: Optional[str] = None          # for problems that need input
+    code: str = Field(min_length=1, max_length=100000)
+    stdin: Optional[str] = Field(default=None, max_length=64000)          # for problems that need input
 
 class CodeRunResponse(BaseModel):
     stdout: str
@@ -276,8 +240,8 @@ class CodeExplainErrorRequest(BaseModel):
 class CodeGenerateRequest(BaseModel):
     job_title: str
     jd: str
-    difficulty: str = "Medium"           # Easy / Medium / Hard
-    count: int = 3
+    difficulty: Literal["Easy", "Medium", "Hard"] = "Medium"           # Easy / Medium / Hard
+    count: int = Field(default=3, ge=1, le=5)
 
 class PresetListItem(BaseModel):
     slug: str

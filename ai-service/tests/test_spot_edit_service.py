@@ -26,7 +26,7 @@ def make_profile():
                 description="Autonomous n8n agent with RLHF self-optimisation.",
             ),
         ],
-        skills=[SimpleNamespace(skill_name="RAG Pipelines"), SimpleNamespace(skill_name="FastAPI")],
+        skills=[SimpleNamespace(skill_name="RAG Pipelines", is_confirmed=True), SimpleNamespace(skill_name="FastAPI", is_confirmed=True)],
         certifications=[SimpleNamespace(name="AWS Cloud Practitioner")],
     )
 
@@ -81,7 +81,7 @@ class BuildSpotEditPromptTests(unittest.TestCase):
             "entry_title": "A Company That Was Renamed",
         }])
 
-        self.assertIn("Do not introduce new facts", build_spot_edit_prompt(make_profile(), request))
+        self.assertIn("Do not introduce facts", build_spot_edit_prompt(make_profile(), request))
 
     def test_grounds_a_skills_row_in_the_declared_skill_list(self):
         request = make_request(blocks=[{
@@ -106,7 +106,7 @@ class BuildSpotEditPromptTests(unittest.TestCase):
 
         self.assertIn("AWS Cloud Practitioner", build_spot_edit_prompt(make_profile(), request))
 
-    def test_gives_the_summary_the_roles_and_skills_digest_not_the_whole_profile(self):
+    def test_gives_the_summary_full_personal_evidence(self):
         request = make_request(blocks=[{
             "id": "summary",
             "kind": "summary",
@@ -115,8 +115,9 @@ class BuildSpotEditPromptTests(unittest.TestCase):
         }])
         prompt = build_spot_edit_prompt(make_profile(), request)
 
-        self.assertIn("AI Engineer at AgentGenius AI", prompt)
-        self.assertNotIn("Built agent flows with Claude Code", prompt)
+        self.assertIn("AI Engineer", prompt)
+        self.assertIn("AgentGenius AI", prompt)
+        self.assertIn("Built agent flows with Claude Code", prompt)
 
     def test_caps_each_block_so_a_rewrite_cannot_break_the_one_page_rule(self):
         prompt = build_spot_edit_prompt(make_profile(), make_request())
@@ -130,6 +131,11 @@ class BuildSpotEditPromptTests(unittest.TestCase):
 
 
 class RewriteBlocksTests(unittest.TestCase):
+    def setUp(self):
+        verifier = patch("services.spot_edit_service.verify_grounded_rewrite")
+        verifier.start()
+        self.addCleanup(verifier.stop)
+
     def test_returns_rewrites_in_request_order_with_collapsed_whitespace(self):
         request = make_request(instruction="Make these more concise.", blocks=[
             {"id": "bullet:0", "kind": "bullet", "section": "Experience", "text": "First bullet."},
@@ -196,14 +202,10 @@ class RewriteBlocksTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 rewrite_blocks(make_profile(), make_request())
 
-    def test_tolerates_code_fences_around_the_json(self):
+    def test_rejects_code_fences_around_native_json(self):
         fenced = "```json\n" + json.dumps({"blocks": [{"id": "bullet:0", "text": "Rewritten."}]}) + "\n```"
-
-        with patch("services.spot_edit_service.complete", return_value=fenced):
-            result = rewrite_blocks(make_profile(), make_request(instruction="Make this concise."))
-
-        self.assertEqual(result[0]["text"], "Rewritten.")
-        self.assertEqual(result[0]["note"], "")
+        with patch("services.spot_edit_service.complete", return_value=fenced), self.assertRaises(ValueError):
+            rewrite_blocks(make_profile(), make_request(instruction="Make this concise."))
 
     def test_requires_a_note_when_metric_data_was_requested_but_unavailable(self):
         payload = {"blocks": [{"id": "bullet:0", "text": "Streamlined AI agent delivery for SMB clients.", "note": ""}]}

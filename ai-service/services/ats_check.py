@@ -36,67 +36,34 @@ def ats_check(pdf_bytes: bytes, preset_section_order: list[str] | None = None) -
             warnings.append(f"Failed to extract text using pypdf: {str(e)}")
             return {"pass": False, "warnings": warnings, "extracted_text": ""}
 
-    # Clean the extracted text
     import re
-    extracted_text = re.sub(r'\s+', ' ', extracted_text).strip()
-    extracted_lower = extracted_text.lower()
-    
-    # Check A: Section order
+    aliases = {"work experience": "experience", "skills": "technical skills", "professional summary": "summary", "profile": "summary"}
+    conventional = {"summary", "education", "experience", "projects", "technical skills", "certifications"}
+    headings = []
+    for line in extracted_text.splitlines():
+        heading = re.sub(r"\s+", " ", line).strip().lower()
+        heading = aliases.get(heading, heading)
+        if heading in conventional:
+            headings.append(heading)
+    errors = []
     if preset_section_order:
-        last_pos = -1
-        out_of_order = False
-        missing_headings = []
-        for heading in preset_section_order:
-            # Handle variants
-            search_str = heading.lower()
-            if search_str == "experience":
-                search_variants = ["experience", "work experience"]
-            elif search_str == "technical skills":
-                search_variants = ["technical skills", "skills"]
-            elif search_str == "summary":
-                search_variants = ["summary", "professional summary", "profile"]
-            else:
-                search_variants = [search_str]
-            
-            found_pos = -1
-            for variant in search_variants:
-                pos = extracted_lower.find(variant)
-                if pos != -1:
-                    found_pos = pos
-                    break
-            
-            if found_pos == -1:
-                missing_headings.append(heading)
-            else:
-                if found_pos < last_pos:
-                    out_of_order = True
-                last_pos = found_pos
-                
-        if missing_headings:
-            for h in missing_headings:
-                warnings.append(f"Required heading not found in extracted text: {h}.")
-        if out_of_order:
-            warnings.append(f"Section headings out of order in extracted text: expected {preset_section_order}.")
-
-    # Check B: Selectable text
-    num_pages = 1
-    if len(extracted_text) < 50 * num_pages:
-        warnings.append("Very little selectable text extracted — PDF may contain image-based text that ATS cannot parse.")
-        
-    # Check C: ATS-recognizable headings present
-    whitelist = {"experience", "work experience", "education", "skills", "technical skills", "summary", "professional summary", "projects", "certifications"}
-    
-    found_any = any(h in extracted_lower for h in whitelist)
-    if not found_any:
-        warnings.append("No ATS-conventional section headings found in extracted text.")
-        
-    if preset_section_order:
-        for heading in preset_section_order:
-            if heading.lower() not in whitelist:
-                warnings.append(f"Heading '{heading}' may not be ATS-recognized; consider a conventional variant.")
-
-    return {
-        "pass": len(warnings) == 0,
-        "warnings": warnings,
-        "extracted_text": extracted_text
-    }
+        expected = [aliases.get(h.lower(), h.lower()) for h in preset_section_order]
+        optional = {"projects", "certifications"}
+        for heading in expected:
+            if heading not in conventional:
+                errors.append(f"Heading '{heading}' may not be ATS-recognized.")
+            elif heading not in headings and heading not in optional:
+                errors.append(f"Required heading not found in extracted text: {heading}.")
+        present_expected = [h for h in expected if h in headings]
+        present_actual = [h for h in headings if h in expected]
+        if present_actual != present_expected:
+            errors.append(f"Section headings out of order: expected {preset_section_order}.")
+    try:
+        num_pages = max(1, len(PdfReader(io.BytesIO(pdf_bytes)).pages))
+    except Exception:
+        num_pages = 1
+    if len(re.sub(r"\s+", " ", extracted_text).strip()) < 50 * num_pages:
+        errors.append("Very little selectable text extracted; PDF may contain image-based text.")
+    if not headings:
+        errors.append("No ATS-conventional section headings found on standalone lines.")
+    return {"pass": not errors, "warnings": warnings + errors, "extracted_text": extracted_text}

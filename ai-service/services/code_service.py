@@ -1,46 +1,12 @@
-import subprocess
-import time
-import os
-import re
-import json
-from dotenv import load_dotenv
-
-load_dotenv()
-
 from services.llm_service import complete
+
 
 TIMEOUT_SECONDS = 10
 
 # ── Executor ─────────────────────────────────────────────────────
 def run_python_code(code: str, stdin: str = "") -> dict:
-    start = time.time()
-    try:
-        result = subprocess.run(
-            ["python", "-c", code],
-            input=stdin, capture_output=True, text=True,
-            timeout=TIMEOUT_SECONDS
-        )
-        elapsed_ms = int((time.time() - start) * 1000)
-        return {
-            "stdout": result.stdout,
-            "stderr": result.stderr,
-            "execution_time_ms": elapsed_ms,
-            "timed_out": False,
-        }
-    except subprocess.TimeoutExpired:
-        return {
-            "stdout": "",
-            "stderr": f"Execution timed out after {TIMEOUT_SECONDS} seconds.",
-            "execution_time_ms": TIMEOUT_SECONDS * 1000,
-            "timed_out": True,
-        }
-    except Exception as e:
-        return {
-            "stdout": "",
-            "stderr": str(e),
-            "execution_time_ms": 0,
-            "timed_out": False,
-        }
+    from services.sandbox import run_isolated
+    return run_isolated("python", {"code": code, "stdin": stdin}, TIMEOUT_SECONDS)
 
 # ── Hint ─────────────────────────────────────────────────────────
 def get_hint(problem_title: str, problem_description: str, current_code: str, hint_level: int) -> str:
@@ -91,13 +57,9 @@ Review this solution and return ONLY valid JSON — no markdown, no explanation.
   "verdict": "<one sentence overall assessment>"
 }}
 """
-    try:
-        raw = complete(prompt)
-        raw = re.sub(r"```(?:json)?\s*", "", raw).replace("```", "").strip()
-        start = raw.find("{"); end = raw.rfind("}") + 1
-        return json.loads(raw[start:end])
-    except Exception as e:
-        raise Exception(f"Review failed: {str(e)}")
+    from models.ai_responses import CodeReview
+    from services.llm_service import complete_structured
+    return complete_structured(prompt, CodeReview).model_dump()
 
 # ── Explain error ─────────────────────────────────────────────────
 def explain_error(code: str, error: str, problem_title: str = "") -> str:
@@ -147,13 +109,10 @@ Return ONLY valid JSON — no markdown, no explanation:
   }}
 ]
 """
-    try:
-        raw = complete(prompt)
-        raw = re.sub(r"```(?:json)?\s*", "", raw).replace("```", "").strip()
-        start = raw.find("["); end = raw.rfind("]") + 1
-        problems = json.loads(raw[start:end])        # Assign temporary IDs starting from 1000 to avoid collision with hardcoded
-        for i, p in enumerate(problems):
-            p["id"] = 1000 + i
-        return problems
-    except Exception as e:
-        raise Exception(f"Problem generation failed: {str(e)}")
+    from models.ai_responses import CodingProblems
+    from services.llm_service import complete_structured
+    prompt += '\nReturn an object with a "problems" array, matching the supplied schema.'
+    problems = complete_structured(prompt, CodingProblems).model_dump()["problems"]
+    for index, problem in enumerate(problems):
+        problem["id"] = 1000 + index
+    return problems

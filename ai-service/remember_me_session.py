@@ -20,6 +20,7 @@ class RememberMeSessionMiddleware:
         secret_key: str | Secret,
         session_cookie: str = "session",
         remembered_max_age: int = 30 * 24 * 60 * 60,
+        session_max_age: int = 12 * 60 * 60,
         path: str = "/",
         same_site: Literal["lax", "strict", "none"] = "lax",
         https_only: bool = False,
@@ -29,6 +30,7 @@ class RememberMeSessionMiddleware:
         self.signer = itsdangerous.TimestampSigner(str(secret_key))
         self.session_cookie = session_cookie
         self.remembered_max_age = remembered_max_age
+        self.session_max_age = session_max_age
         self.path = path
         self.security_flags = "httponly; samesite=" + same_site
         if https_only:
@@ -49,8 +51,12 @@ class RememberMeSessionMiddleware:
             try:
                 data = self.signer.unsign(data, max_age=self.remembered_max_age)
                 scope["session"] = json.loads(b64decode(data))
+                if not isinstance(scope["session"], dict):
+                    raise BadSignature("Invalid session")
+                if not scope["session"].get("remember_me", False):
+                    self.signer.unsign(connection.cookies[self.session_cookie], max_age=self.session_max_age)
                 initial_session_was_empty = False
-            except BadSignature:
+            except (BadSignature, ValueError, TypeError):
                 scope["session"] = {}
         else:
             scope["session"] = {}
