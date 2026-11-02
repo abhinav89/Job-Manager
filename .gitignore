@@ -62,3 +62,7 @@ frontend/.next-remediation/
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/cv-*/
+
+# Browser test artifacts
+landing/test-results/
+landing/playwright-report/

@@ -22,6 +22,7 @@ def parser():
         groups.add_parser(name)
     schema = groups.add_parser("schema")
     schema.add_argument("kind")
+    groups.add_parser("templates").add_subparsers(dest="action", required=True).add_parser("list")
     profile = groups.add_parser("profile").add_subparsers(dest="action", required=True)
     profile.add_parser("get")
     for action in ("set", "import"):
@@ -113,6 +114,9 @@ def dispatch(a):
     from cv_tailor.config import data_dir, capabilities
     from cv_tailor import workspace as w
     from cv_tailor.database import init_db
+    if a.group == "templates":
+        from cv_tailor.services.templates import TEMPLATE_CATALOG
+        return TEMPLATE_CATALOG
     if a.group == "schema":
         return w.schema_for(a.kind).model_json_schema()
     if a.group in {"status", "doctor"}:

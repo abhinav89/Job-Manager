@@ -37,3 +37,4 @@ jobs:
       - run: npm --prefix frontend run test:browser
       - run: npm --prefix landing ci
       - run: npm --prefix landing run build
+      - run: npm --prefix landing run test:browser

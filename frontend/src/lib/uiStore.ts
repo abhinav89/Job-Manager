@@ -1,10 +1,11 @@
+import type { ResumeTemplate } from "./resumeTemplates";
 import { create } from "zustand";
 
 type ResumeUiState = {
   editorMode: "friendly" | "preview" | "source";
-  selectedTemplate: "classic" | "modern";
+  selectedTemplate: ResumeTemplate;
   setEditorMode: (mode: "friendly" | "preview" | "source") => void;
-  setSelectedTemplate: (template: "classic" | "modern") => void;
+  setSelectedTemplate: (template: ResumeTemplate) => void;
 };
 
 export const useResumeUiStore = create<ResumeUiState>((set) => ({

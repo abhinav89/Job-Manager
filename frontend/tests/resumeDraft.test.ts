@@ -339,3 +339,18 @@ test("near-identical bullets are separated by where the selection sits on the pa
   assert.equal(nearTop[0].bulletIndex, 0);
   assert.equal(nearBottom[nearBottom.length - 1].bulletIndex, 1);
 });
+
+
+test("custom-font template names remain editable without losing their typography", () => {
+  const code = String.raw`\begin{flushleft}
+{\fontsize{28}{31}\selectfont\bfseries\textcolor{accent}{ALEX MORGAN}}\\[6pt]
+\end{flushleft}
+\section{Summary}
+Python engineer.
+\end{document}`;
+  assert.equal(parseResumeDraft(code).name, "ALEX MORGAN");
+  const edited = replaceResumeName(code, "Taylor & Lee");
+  assert.equal(parseResumeDraft(edited).name, "Taylor & Lee");
+  assert.ok(edited.includes(String.raw`\fontsize{28}{31}`));
+  assert.ok(edited.includes(String.raw`\textcolor{accent}{Taylor \& Lee}`));
+});
