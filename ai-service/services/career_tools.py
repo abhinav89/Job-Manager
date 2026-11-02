@@ -379,5 +379,7 @@ Request: {instructions[:3000]}'''
             return {"draft": ctx.save_draft("cheat_sheet", content, {})}
         return ctx.run_action(execute)
 
+    from services.career_tracker_tools import create_tracker_tools
     return [get_application_context, research_company, extract_job_url, select_search_result, tailor_resume, list_resume_blocks, check_resume,
-            revise_resume_summary, revise_resume_bullet, draft_cover_letter, prepare_interview, create_cheat_sheet]
+            revise_resume_summary, revise_resume_bullet, draft_cover_letter, prepare_interview, create_cheat_sheet,
+            *create_tracker_tools(ctx, current_job, gemini_completion)]

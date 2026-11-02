@@ -14,6 +14,7 @@ class ImportJobRequest(BaseModel):
     company_name: str
     job_title: str
     job_url: Optional[str] = ""
+    source: Optional[str] = ""
     job_description: Optional[str] = ""
     short_description: Optional[str] = ""
     location: Optional[str] = "Remote"
@@ -68,6 +69,7 @@ async def import_scraped_job(payload: ImportJobRequest, request: Request, db: Se
         company_name=payload.company_name,
         job_title=payload.job_title,
         job_url=payload.job_url,
+        job_source=payload.source or None,
         job_description=payload.job_description,
         short_description=payload.short_description or (payload.job_description[:200] if payload.job_description else ""),
         location=payload.location or "Remote",

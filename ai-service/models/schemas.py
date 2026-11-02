@@ -138,6 +138,7 @@ class JobApplicationCreate(BaseModel):
     company_name: str
     job_title: str
     job_url: Optional[str] = None
+    job_source: Optional[str] = None
     short_description: Optional[str] = None
     status: Optional[str] = "Saved"
     date_applied: Optional[DateType] = None
@@ -152,6 +153,8 @@ class JobApplicationUpdate(BaseModel):
     company_name: Optional[str] = None
     job_title: Optional[str] = None
     job_url: Optional[str] = None
+    job_source: Optional[str] = None
+    is_archived: Optional[bool] = None
     short_description: Optional[str] = None
     status: Optional[str] = None
     date_applied: Optional[DateType] = None
@@ -166,6 +169,7 @@ class JobApplicationCreate(BaseModel):
     company_name: str
     job_title: str
     job_url: Optional[str] = None
+    job_source: Optional[str] = None
     short_description: Optional[str] = None
     job_description: Optional[str] = None  # add
     status: Optional[str] = "Saved"
@@ -183,6 +187,8 @@ class JobApplicationUpdate(BaseModel):
     company_name: Optional[str] = None
     job_title: Optional[str] = None
     job_url: Optional[str] = None
+    job_source: Optional[str] = None
+    is_archived: Optional[bool] = None
     short_description: Optional[str] = None
     job_description: Optional[str] = None  # add
     status: Optional[str] = None

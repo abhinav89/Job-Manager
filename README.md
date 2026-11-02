@@ -13,6 +13,7 @@ A free, open-source CV tailoring app. Paste your profile and a job description, 
 - **Roles & Presets** — pick a role (e.g. Virtual Assistant, Data Analyst) to steer summary style, skills bank, and section emphasis.
 - **Application Tracker, Cover Letters, Interview Practice, Coding Practice** — all powered by the same AI layer.
 - **Career Agent** — a Google ADK and Gemini assistant with persistent application or general chats, sourced company research, tailored CV and cover-letter drafts, interview preparation, and downloadable interview cheat sheets. Drafts can be reviewed and versioned before being applied to a tracked application.
+- **Job fit and tracker management** — request an evidence-based fit analysis without a numerical score, and review Career Agent proposals to add, update, archive, restore, or delete tracked applications. Archived applications keep their status and documents.
 
 ## Stack
 
@@ -52,6 +53,6 @@ OPENAI_API_KEY=sk-...       # only needed if AI_PROVIDER=openai
 OPENAI_MODEL=gpt-4o-mini
 ```
 
-The Career Agent uses Gemini for conversations and tools, even if the standalone AI provider is set to OpenAI. Set `GEMINI_API_KEY` (or `GOOGLE_API_KEY` for ADK) and use a Gemini model that supports Google Search grounding for company research. Existing skills need confirmation in the profile before the agent can use them as personal evidence. Run `python migration.py` for the conversation tables and skill confirmation column when upgrading an existing database.
+The Career Agent uses Gemini for conversations and tools, even if the standalone AI provider is set to OpenAI. Set `GEMINI_API_KEY` (or `GOOGLE_API_KEY` for ADK) and use a Gemini model that supports Google Search grounding for company research. Existing skills need confirmation in the profile before the agent can use them as personal evidence. Run `python migration.py` when upgrading an existing database to add the conversation, skill confirmation, job source, and archive fields.
 
 The app does not use a credit system. AI evidence checks help catch unsupported claims, but users should review drafts before applying them.

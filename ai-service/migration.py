@@ -27,6 +27,8 @@ with engine.connect() as conn:
     conn.execute(text("ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS template_id VARCHAR(50) NOT NULL DEFAULT 'classic';"))
     conn.execute(text("ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS match_score INTEGER;"))
     conn.execute(text("ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS match_analysis JSON;"))
+    conn.execute(text("ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS job_source VARCHAR(250);"))
+    conn.execute(text("ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE;"))
     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_education_profile_id ON education (profile_id);"))
     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_experience_profile_id ON experience (profile_id);"))
     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_projects_profile_id ON projects (profile_id);"))

@@ -119,6 +119,8 @@ def init_db():
             "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS template_id VARCHAR(50) NOT NULL DEFAULT 'classic'",
             "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS match_score INTEGER",
             "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS match_analysis JSON",
+            "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS job_source VARCHAR(250)",
+            "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE",
             "CREATE INDEX IF NOT EXISTS ix_education_profile_id ON education (profile_id)",
             "CREATE INDEX IF NOT EXISTS ix_experience_profile_id ON experience (profile_id)",
             "CREATE INDEX IF NOT EXISTS ix_projects_profile_id ON projects (profile_id)",

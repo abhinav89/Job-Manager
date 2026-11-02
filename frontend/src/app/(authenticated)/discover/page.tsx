@@ -24,13 +24,14 @@ const SOURCES = [
   { id: "remoteok", name: "RemoteOK" },
   { id: "weworkremotely", name: "WeWorkRemotely" },
   { id: "remotive", name: "Remotive" },
+  { id: "arbeitnow", name: "Arbeitnow" },
   { id: "jobstreet", name: "JobStreet PH" },
   { id: "indeed-us", name: "Indeed (US)" },
   { id: "indeed-ph", name: "Indeed (PH)" },
 ];
 
 const JOB_TYPES = ["Full-Time", "Part-Time", "Contract", "Gig"];
-const DEFAULT_SOURCES = ["onlinejobs", "linkedin", "remoteok", "weworkremotely"];
+const DEFAULT_SOURCES = ["onlinejobs", "linkedin", "remoteok", "weworkremotely", "arbeitnow"];
 
 export default function DiscoverPage() {
   const router = useRouter();

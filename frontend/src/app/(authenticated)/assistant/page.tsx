@@ -10,7 +10,7 @@ import { queryKeys, useProfile, useTrackerJobs } from "@/lib/queries";
 import FormattedOutput from "@/components/FormattedOutput";
 
 type Source = { title: string; url: string };
-type DraftType = "resume" | "cover_letter" | "interview_plan" | "cheat_sheet" | "research" | "job_context" | "job_search" | "agent_activity";
+type DraftType = "resume" | "cover_letter" | "interview_plan" | "cheat_sheet" | "research" | "job_context" | "job_fit" | "tracker_action" | "job_search" | "agent_activity";
 type Draft = { id: number; type: DraftType; content: string; metadata?: { sources?: Source[]; assistant_message_id?: number; [key: string]: unknown } | null; created_at: string };
 type Activity = { tool: string; label: string; status: "started" | "completed" | "failed"; details?: { keyword?: string; results?: number; source_status?: Record<string, string>; sources?: Source[] } };
 type SearchJob = { job_title?: string; company_name?: string; job_url?: string; source?: string; location?: string; job_description?: string; jev_match?: { role?: string; experience?: string; preferences?: string } };
@@ -18,12 +18,13 @@ type Message = { id: number; role: "user" | "assistant"; content: string; create
 type ConversationSummary = { id: number; job_id: number | null; title: string; updated_at: string };
 type Conversation = ConversationSummary & { messages: Message[]; drafts: Draft[] };
 
-const labels: Record<DraftType, string> = { resume: "CV", cover_letter: "Cover letter", interview_plan: "Interview plan", cheat_sheet: "Cheat sheet", research: "Company research", job_context: "Job description", job_search: "Job search", agent_activity: "Agent activity" };
+const labels: Record<DraftType, string> = { resume: "CV", cover_letter: "Cover letter", interview_plan: "Interview plan", cheat_sheet: "Cheat sheet", research: "Company research", job_context: "Job description", job_fit: "Job fit analysis", tracker_action: "Tracker proposal", job_search: "Job search", agent_activity: "Agent activity" };
 const suggestions = [
   { icon: Sparkles, title: "Find jobs", prompt: "Find remote jobs that fit my confirmed experience. Ask about my preferences if needed." },
   { icon: Globe2, title: "Research the company", prompt: "Research this company and show me the sources." },
   { icon: FileText, title: "Tailor my application", prompt: "Write a cover letter tailored to this role using my real experience." },
   { icon: BookOpen, title: "Prepare for an interview", prompt: "Help me prepare for an interview for this role." },
+  { icon: Sparkles, title: "Analyze job fit", prompt: "Analyze my fit for this job using my confirmed experience and show the evidence, gaps, and questions." },
 ];
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -120,6 +121,7 @@ export default function AssistantPage() {
   const [jobTitle, setJobTitle] = useState("");
   const [company, setCompany] = useState("");
   const [jobDescription, setJobDescription] = useState("");
+  const [jobSource, setJobSource] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const pendingRequestRef = useRef<{ conversationId: number; content: string; id: string } | null>(null);
   const selectedJob = jobs.find(job => job.id === conversation?.job_id);
@@ -147,6 +149,10 @@ export default function AssistantPage() {
   useEffect(() => {
     if (activeId === null) return;
     sessionStorage.setItem("career-assistant-active", String(activeId));
+    if (sessionStorage.getItem("career-assistant-fit-prompt") === String(activeId)) {
+      setInput("Analyze my fit for this job using my confirmed experience and show the evidence, gaps, and questions.");
+      sessionStorage.removeItem("career-assistant-fit-prompt");
+    }
     let cancelled = false;
     api<Conversation>(`/assistant/conversations/${activeId}`)
       .then(data => { if (!cancelled) { setConversation(data); setEditingDraftId(null); } })
@@ -240,6 +246,24 @@ export default function AssistantPage() {
     finally { setBusy(false); }
   }
 
+  async function confirmTrackerAction(draft: Draft) {
+    if (!conversation || draft.metadata?.applied) return;
+    if (draft.metadata?.action === "delete" && !window.confirm("Permanently delete this application and its linked conversation and drafts?")) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const result = await api<{ conversation_deleted: boolean; conversation?: Conversation }>(`/assistant/conversations/${conversation.id}/drafts/${draft.id}/confirm-tracker-action`, { method: "POST" });
+      if (result.conversation_deleted) {
+        const remaining = await refreshList();
+        setConversation(null); setEditingDraftId(null); setActiveId(remaining[0]?.id || null);
+      } else if (result.conversation) {
+        setConversation(result.conversation); await refreshList();
+      }
+      void queryClient.invalidateQueries({ queryKey: queryKeys.tracker });
+      setNotice("Tracker updated.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not update the tracker."); }
+    finally { setBusy(false); }
+  }
+
   async function downloadCheatSheet(draft: Draft) {
     if (!conversation) return;
     setBusy(true); setError("");
@@ -264,7 +288,7 @@ export default function AssistantPage() {
     if (!conversation || !company.trim() || !jobTitle.trim() || !jobDescription.trim()) return;
     setBusy(true); setError("");
     try {
-      const job = await api<{ id: number }>("/tracker", { method: "POST", body: JSON.stringify({ company_name: company.trim(), job_title: jobTitle.trim(), job_description: jobDescription.trim() }) });
+      const job = await api<{ id: number }>("/tracker", { method: "POST", body: JSON.stringify({ company_name: company.trim(), job_title: jobTitle.trim(), job_description: jobDescription.trim(), job_source: jobSource.trim() || "unknown" }) });
       try {
         await api(`/assistant/conversations/${conversation.id}/link-job`, { method: "POST", body: JSON.stringify({ job_id: job.id }) });
       } catch (err) {
@@ -303,11 +327,13 @@ export default function AssistantPage() {
       {editing ? <textarea aria-label="Edit draft" value={draftText} onChange={event => setDraftText(event.target.value)} rows={12} className="w-full rounded-lg border border-[#cbd8c8] p-3 text-sm leading-6" /> : <FormattedOutput content={draft.content} copyLabel="Copy draft" />}
       {!!sources.length && <ul className="mt-3 space-y-1">{sources.map(source => <li key={source.url}><a href={source.url} target="_blank" rel="noopener noreferrer" className="break-words text-xs text-[#4a753c] underline">{source.title || source.url} ↗</a></li>)}</ul>}
       <div className="mt-4 flex flex-wrap gap-2">
-        {draft.type !== "research" && (editing ? <><button disabled={busy || !draftText.trim()} onClick={() => void reviseDraft(draft)} className="rounded-lg bg-[#3f5b3c] px-3 py-2 text-xs font-semibold text-white">Save new version</button><button onClick={() => setEditingDraftId(null)} className="rounded-lg border px-3 py-2 text-xs">Cancel</button></> : <button onClick={() => { setDraftText(draft.content); setEditingDraftId(draft.id); }} className="rounded-lg border border-[#d7dfd2] px-3 py-2 text-xs font-semibold text-[#557442]">Edit draft</button>)}
+        {draft.type !== "research" && draft.type !== "tracker_action" && (editing ? <><button disabled={busy || !draftText.trim()} onClick={() => void reviseDraft(draft)} className="rounded-lg bg-[#3f5b3c] px-3 py-2 text-xs font-semibold text-white">Save new version</button><button onClick={() => setEditingDraftId(null)} className="rounded-lg border px-3 py-2 text-xs">Cancel</button></> : <button onClick={() => { setDraftText(draft.content); setEditingDraftId(draft.id); }} className="rounded-lg border border-[#d7dfd2] px-3 py-2 text-xs font-semibold text-[#557442]">Edit draft</button>)}
+        {!editing && draft.type === "tracker_action" && (draft.metadata?.applied ? <span className="text-xs text-[#557442]">Applied</span> : <button disabled={busy} onClick={() => void confirmTrackerAction(draft)} className="rounded-lg bg-[#3f5b3c] px-3 py-2 text-xs font-semibold text-white">Confirm tracker change</button>)}
         {!editing && (draft.type === "interview_plan" || draft.type === "cheat_sheet") && conversation.job_id && <Link href={`/interview?job_id=${conversation.job_id}`} className="rounded-lg border px-3 py-2 text-xs font-semibold text-[#557442]">Practice interview →</Link>}
         {!editing && draft.type === "cheat_sheet" && <button disabled={busy} onClick={() => void downloadCheatSheet(draft)} className="rounded-lg bg-[#3f5b3c] px-3 py-2 text-xs font-semibold text-white">Download PDF</button>}
         {!editing && draft.type === "job_context" && !conversation.job_id && <button onClick={() => { setJobDescription(draft.content); setShowSaveJob(true); }} className="rounded-lg bg-[#3f5b3c] px-3 py-2 text-xs font-semibold text-white">Save this job</button>}
         {!editing && draft.type === "cover_letter" && conversation.job_id && <button disabled={busy} onClick={() => void applyDraft(draft)} className="rounded-lg bg-[#3f5b3c] px-3 py-2 text-xs font-semibold text-white">Save to application</button>}
+        {!editing && draft.type === "job_fit" && <button onClick={() => setInput("Reassess my fit for this job using my current profile and our conversation.")} className="rounded-lg border px-3 py-2 text-xs font-semibold text-[#557442]">Reassess fit</button>}
       </div>
     </div>;
   }
@@ -337,13 +363,14 @@ export default function AssistantPage() {
               {!conversation ? <div className="flex h-full flex-col items-center justify-center text-center"><Sparkles className="mb-4 text-[#789762]" size={25} /><p className="font-semibold">Your next step starts here.</p><p className="mt-2 max-w-xs text-sm leading-6 text-[#817c73]">Start a conversation or choose an application from the left.</p></div> : conversation.messages.length === 0 ? <div className="mx-auto max-w-2xl py-6"><div className="mb-5 inline-flex rounded-xl bg-[#e3eed9] p-3 text-[#51713f]"><Sparkles size={20} /></div><h3 className="text-2xl font-medium tracking-tight">What are you working toward?</h3><p className="mt-2 text-sm leading-6 text-[#777a70]">Find jobs, research a company, or shape your application.</p><div className="mt-6 grid gap-2 sm:grid-cols-3">{suggestions.map(({ icon: Icon, title, prompt }) => <button key={title} disabled={busy} onClick={() => setInput(prompt)} className="flex min-h-24 flex-col items-start justify-between rounded-lg border border-[#e3e4db] p-3 text-left text-xs font-semibold text-[#4e6350] hover:border-[#9ab590] hover:bg-[#f7fbf4] disabled:opacity-40"><Icon size={17} /><span>{title} ↗</span></button>)}</div></div> : <div className="mx-auto w-full max-w-3xl space-y-5">{conversation.messages.map(message => <article key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}><div className={`min-w-0 max-w-[95%] rounded-2xl px-4 py-3 text-[15px] leading-7 sm:max-w-[90%] ${message.role === "user" ? "bg-[#3f5b3c] text-white" : "border border-[#e5e8df] bg-[#f8faf5] text-[#303a32]"}`}><div className="mb-1 font-mono text-[9px] uppercase tracking-[0.15em] opacity-60">{message.role === "user" ? "You" : "Career assistant"}</div>{message.role === "assistant" ? <><FormattedOutput content={message.content} copyLabel="Copy response" />{conversation.drafts.filter(draft => draft.metadata?.assistant_message_id === message.id).map(renderDraft)}</> : <div className="whitespace-pre-wrap break-words">{message.content}</div>}</div></article>)}{conversation.drafts.filter(draft => !draft.metadata?.assistant_message_id || !conversation.messages.some(message => message.id === draft.metadata?.assistant_message_id)).map(renderDraft)}<div ref={bottomRef} /></div>}
               {(pendingMessage || (error && liveActivity.length > 0)) && <div className="mx-auto w-full max-w-3xl space-y-3">{pendingMessage && <div className="flex justify-end"><div className="min-w-0 max-w-[90%] rounded-2xl bg-[#3f5b3c] px-4 py-3 text-[15px] leading-7 text-white"><span className="mb-1 block font-mono text-[9px] uppercase tracking-wider opacity-70">You</span>{pendingMessage}</div></div>}<ActivityLog events={liveActivity} />{busy && <p role="status" className="text-sm text-[#7b8275]">Working on it…</p>}</div>}
             </div>
+            {conversation && !conversation.job_id && (conversation.drafts.some(d => d.type === "cover_letter") || conversation.messages.some(m => /cover letter/i.test(m.content))) && <div className="px-5 pb-2"><button type="button" disabled={busy} onClick={() => setInput("Add this job to my tracker.")} className="rounded-full border border-[#cbd8c8] px-3 py-1.5 text-xs font-semibold text-[#557442]">Add this job to my tracker</button></div>}
             {conversation && <form onSubmit={event => { event.preventDefault(); void send(input); }} className="flex shrink-0 items-end gap-2 border-t border-[#e7e2d9] p-3 sm:p-4"><label htmlFor="career-message" className="sr-only">Message the Career Agent</label><textarea id="career-message" value={input} maxLength={12000} onChange={event => setInput(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(input); } }} placeholder="Ask about jobs, a company, your CV, or an interview…" rows={2} className="min-w-0 flex-1 resize-none rounded-lg border border-[#e3e6dc] bg-[#fbfcf9] px-3 py-2 text-sm leading-6 outline-none focus:ring-2 focus:ring-[#a3bc95]" /><div className="flex shrink-0 justify-end"><button type="submit" disabled={busy || !input.trim()} aria-label="Send message" className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#3f5b3c] text-white hover:bg-[#304a30] disabled:opacity-40"><ArrowUp size={18} /></button></div></form>}
             {(error || notice) && <p role={error ? "alert" : "status"} className={`border-t border-[#e7e2d9] px-5 py-3 text-xs ${error ? "text-[#ae4038]" : "text-[#4e733c]"}`}>{error || notice}</p>}
           </section>
 
         </div>
       </div>
-      {showSaveJob && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><div role="dialog" aria-modal="true" aria-labelledby="save-job-title" className="w-full max-w-md rounded-xl bg-[#fffefa] p-6 shadow-xl"><div className="flex items-center justify-between"><h2 id="save-job-title" className="text-lg font-semibold">Save this application</h2><button aria-label="Close" onClick={() => setShowSaveJob(false)}><X size={18} /></button></div><p className="mt-2 text-xs leading-5 text-[#777a70]">Add the role and description to your tracker and link this conversation.</p><form onSubmit={event => void saveJob(event)} className="mt-5 space-y-3"><label className="block text-xs font-semibold text-[#5f665d]">Company<input required value={company} onChange={event => setCompany(event.target.value)} className="mt-1 w-full rounded-lg border border-[#d9ded2] p-2.5 text-sm" /></label><label className="block text-xs font-semibold text-[#5f665d]">Job title<input required value={jobTitle} onChange={event => setJobTitle(event.target.value)} className="mt-1 w-full rounded-lg border border-[#d9ded2] p-2.5 text-sm" /></label><label className="block text-xs font-semibold text-[#5f665d]">Job description<textarea required rows={5} value={jobDescription} onChange={event => setJobDescription(event.target.value)} className="mt-1 w-full resize-y rounded-lg border border-[#d9ded2] p-2.5 text-sm" /></label>{error && <p role="alert" className="text-xs text-[#ae4038]">{error}</p>}<button disabled={busy} className="rounded-lg bg-[#3f5b3c] px-4 py-2 text-xs font-semibold text-white disabled:opacity-40">Save and link</button></form></div></div>}
+      {showSaveJob && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><div role="dialog" aria-modal="true" aria-labelledby="save-job-title" className="w-full max-w-md rounded-xl bg-[#fffefa] p-6 shadow-xl"><div className="flex items-center justify-between"><h2 id="save-job-title" className="text-lg font-semibold">Save this application</h2><button aria-label="Close" onClick={() => setShowSaveJob(false)}><X size={18} /></button></div><p className="mt-2 text-xs leading-5 text-[#777a70]">Add the role and description to your tracker and link this conversation.</p><form onSubmit={event => void saveJob(event)} className="mt-5 space-y-3"><label className="block text-xs font-semibold text-[#5f665d]">Company<input required value={company} onChange={event => setCompany(event.target.value)} className="mt-1 w-full rounded-lg border border-[#d9ded2] p-2.5 text-sm" /></label><label className="block text-xs font-semibold text-[#5f665d]">Job title<input required value={jobTitle} onChange={event => setJobTitle(event.target.value)} className="mt-1 w-full rounded-lg border border-[#d9ded2] p-2.5 text-sm" /></label><label className="block text-xs font-semibold text-[#5f665d]">Where did you find it? <span className="font-normal">(optional)</span><input value={jobSource} onChange={event => setJobSource(event.target.value)} className="mt-1 w-full rounded-lg border border-[#d9ded2] p-2.5 text-sm" /></label><label className="block text-xs font-semibold text-[#5f665d]">Job description<textarea required rows={5} value={jobDescription} onChange={event => setJobDescription(event.target.value)} className="mt-1 w-full resize-y rounded-lg border border-[#d9ded2] p-2.5 text-sm" /></label>{error && <p role="alert" className="text-xs text-[#ae4038]">{error}</p>}<button disabled={busy} className="rounded-lg bg-[#3f5b3c] px-4 py-2 text-xs font-semibold text-white disabled:opacity-40">Save and link</button></form></div></div>}
     </div>
   );
 }

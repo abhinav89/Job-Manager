@@ -1,4 +1,5 @@
 import asyncio
+import json
 import httpx
 from bs4 import BeautifulSoup
 import xml.etree.ElementTree as ET
@@ -269,6 +270,50 @@ async def fetch_remotive_jobs(query: str = "", limit: int = 5) -> Tuple[List[Dic
     return jobs, ("ok" if jobs else "no_results")
 
 
+# ── Source: Arbeitnow public job feed ─────────────────────────────
+async def fetch_arbeitnow_jobs(query: str = "", limit: int = 5) -> Tuple[List[Dict[str, Any]], str]:
+    raw = await _httpx_get("https://www.arbeitnow.com/api/job-board-api")
+    if not raw:
+        return [], "blocked"
+    try:
+        data = json.loads(raw)
+        postings = data.get("data", []) if isinstance(data, dict) else []
+        if not isinstance(postings, list):
+            return [], "error"
+    except (ValueError, TypeError):
+        return [], "error"
+    terms = query.casefold().split()
+    jobs = []
+    for item in postings:
+        if not isinstance(item, dict) or item.get("remote") is not True:
+            continue
+        title = str(item.get("title") or "").strip()
+        company = str(item.get("company_name") or "").strip()
+        url = str(item.get("url") or "").strip()
+        if not title or not company or not url.startswith(("https://", "http://")):
+            continue
+        description = BeautifulSoup(str(item.get("description") or ""), "html.parser").get_text(" ", strip=True)
+        tags = item.get("tags") if isinstance(item.get("tags"), list) else []
+        search_text = " ".join([title, company, description, *[str(tag) for tag in tags]]).casefold()
+        if terms and not all(term in search_text for term in terms):
+            continue
+        job_types = item.get("job_types") if isinstance(item.get("job_types"), list) else []
+        jobs.append({
+            "company_name": company,
+            "job_title": title,
+            "job_url": url,
+            "location": str(item.get("location") or "Remote; location not specified"),
+            "salary_range": "Not specified",
+            "job_description": description[:6000],
+            "short_description": description[:200],
+            "job_type": ", ".join(str(value) for value in job_types) or "Not specified",
+            "source": "Arbeitnow",
+        })
+        if len(jobs) >= limit:
+            break
+    return jobs, "ok" if jobs else "no_results"
+
+
 # ── Source: JobStreet PH (scrapling stealth) ─────────────────────
 async def fetch_jobstreet_ph(query: str = "", limit: int = 5) -> Tuple[List[Dict[str, Any]], str]:
     search_term = query.strip() or "remote"
@@ -397,6 +442,7 @@ SOURCE_REGISTRY = {
     "remoteok": ("RemoteOK", fetch_remoteok_jobs, "httpx"),
     "weworkremotely": ("WeWorkRemotely", fetch_weworkremotely_jobs, "httpx"),
     "remotive": ("Remotive", fetch_remotive_jobs, "httpx"),
+    "arbeitnow": ("Arbeitnow", fetch_arbeitnow_jobs, "httpx"),
     "jobstreet": ("JobStreet PH", fetch_jobstreet_ph, "scrapling"),
     "indeed-us": ("Indeed (US)", fetch_indeed_us, "scrapling"),
     "indeed-ph": ("Indeed (PH)", fetch_indeed_ph, "scrapling"),
@@ -424,6 +470,7 @@ async def fetch_remote_jobs(
     all_jobs: List[Dict[str, Any]] = []
     seen = set()
     source_status: Dict[str, str] = {}
+    source_jobs = []
 
     for s, res in zip(active, results):
         label, _, _ = SOURCE_REGISTRY[s]
@@ -432,19 +479,25 @@ async def fetch_remote_jobs(
             continue
         jobs, status = res
         source_status[label] = status
-        for job in jobs:
-            key = f"{job['company_name'].lower()}_{job['job_title'].lower()}"
-            if key in seen:
-                continue
-            seen.add(key)
-            all_jobs.append(job)
+        source_jobs.append(iter(jobs))
 
-    # Apply job-type filter
+    # Interleave providers so the global limit does not hide later sources.
     allowed_types = [t.lower() for t in (job_types or []) if t]
-    if allowed_types:
-        all_jobs = [
-            j for j in all_jobs
-            if any(at in (j.get("job_type") or "").lower() for at in allowed_types)
-        ]
+    while source_jobs and len(all_jobs) < limit:
+        remaining = []
+        for jobs in source_jobs:
+            job = next(jobs, None)
+            if job is None:
+                continue
+            remaining.append(jobs)
+            if allowed_types and not any(at in (job.get("job_type") or "").lower() for at in allowed_types):
+                continue
+            key = f"{job['company_name'].lower()}_{job['job_title'].lower()}"
+            if key not in seen:
+                seen.add(key)
+                all_jobs.append(job)
+            if len(all_jobs) >= limit:
+                break
+        source_jobs = remaining
 
-    return all_jobs[:limit], source_status
+    return all_jobs, source_status

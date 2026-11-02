@@ -1,14 +1,15 @@
 import sys
+import json
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from routers import scraper_routes
-from services.job_scraper_service import fetch_remote_jobs
+from services.job_scraper_service import fetch_remote_jobs, fetch_arbeitnow_jobs
 
 
 class DiscoverJobsTests(unittest.IsolatedAsyncioTestCase):
@@ -59,6 +60,49 @@ class DiscoverJobsTests(unittest.IsolatedAsyncioTestCase):
         jobs, source_status = await fetch_remote_jobs(sources=[])
         self.assertEqual(jobs, [])
         self.assertEqual(source_status, {})
+
+    async def test_arbeitnow_returns_only_real_remote_matching_listings(self):
+        response = {"data": [
+            {"title": "Python Engineer", "company_name": "Example", "url": "https://example.com/jobs/1", "remote": True,
+             "description": "<p>Build <strong>APIs</strong> with Python.</p>", "location": "Germany", "job_types": ["Full-Time"]},
+            {"title": "Python Engineer", "company_name": "Office", "url": "https://example.com/jobs/2", "remote": False},
+            {"title": "Python Engineer", "company_name": "Unknown", "url": "https://example.com/jobs/3"},
+            {"title": "Python Engineer", "company_name": "Missing URL", "remote": True},
+        ]}
+        with patch("services.job_scraper_service._httpx_get", new=AsyncMock(return_value=json.dumps(response))):
+            jobs, status = await fetch_arbeitnow_jobs("python APIs")
+        self.assertEqual(status, "ok")
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual(jobs[0]["source"], "Arbeitnow")
+        self.assertEqual(jobs[0]["job_description"], "Build APIs with Python.")
+        self.assertEqual(jobs[0]["location"], "Germany")
+        self.assertEqual(jobs[0]["salary_range"], "Not specified")
+
+    async def test_arbeitnow_reports_feed_errors_without_fake_jobs(self):
+        with patch("services.job_scraper_service._httpx_get", new=AsyncMock(return_value="not-json")):
+            jobs, status = await fetch_arbeitnow_jobs("python")
+        self.assertEqual(jobs, [])
+        self.assertEqual(status, "error")
+
+    async def test_discovery_interleaves_sources_before_applying_result_limit(self):
+        def listing(company, job_type="Full-Time"):
+            return {"company_name": company, "job_title": "Developer", "job_type": job_type}
+        registry = {
+            "first": ("First", AsyncMock(return_value=([listing("A"), listing("B"), listing("C")], "ok")), "httpx"),
+            "second": ("Second", AsyncMock(return_value=([listing("D"), listing("E")], "ok")), "httpx"),
+        }
+        with patch("services.job_scraper_service.SOURCE_REGISTRY", registry):
+            jobs, statuses = await fetch_remote_jobs(sources=["first", "second"], limit=3)
+        self.assertEqual([job["company_name"] for job in jobs], ["A", "D", "B"])
+        self.assertEqual(statuses, {"First": "ok", "Second": "ok"})
+
+    async def test_import_records_listing_source(self):
+        db = MagicMock()
+        request = SimpleNamespace(session={"user_id": 7})
+        payload = scraper_routes.ImportJobRequest(company_name="Example", job_title="Developer", source="Arbeitnow")
+        await scraper_routes.import_scraped_job(payload, request, db)
+        self.assertEqual(db.add.call_args.args[0].job_source, "Arbeitnow")
+        self.assertEqual(db.add.call_args.args[0].user_id, 7)
 
 
 if __name__ == "__main__":

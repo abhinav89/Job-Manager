@@ -7,7 +7,6 @@ from typing import Literal
 import itsdangerous
 from itsdangerous.exc import BadSignature
 from starlette.datastructures import MutableHeaders, Secret
-from starlette.middleware.sessions import Session
 from starlette.requests import HTTPConnection
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -49,20 +48,17 @@ class RememberMeSessionMiddleware:
             data = connection.cookies[self.session_cookie].encode("utf-8")
             try:
                 data = self.signer.unsign(data, max_age=self.remembered_max_age)
-                scope["session"] = Session(json.loads(b64decode(data)))
+                scope["session"] = json.loads(b64decode(data))
                 initial_session_was_empty = False
             except BadSignature:
-                scope["session"] = Session()
+                scope["session"] = {}
         else:
-            scope["session"] = Session()
+            scope["session"] = {}
 
         async def send_wrapper(message: Message) -> None:
             if message["type"] == "http.response.start":
-                session: Session = scope["session"]
-                headers = MutableHeaders(scope=message)
-                if session.accessed:
-                    headers.add_vary_header("Cookie")
-                if session.modified and session:
+                if scope["session"]:
+                    session = scope["session"]
                     data = b64encode(json.dumps(session).encode("utf-8"))
                     signed_data = self.signer.sign(data).decode("utf-8")
                     max_age = (
@@ -70,12 +66,14 @@ class RememberMeSessionMiddleware:
                         if session.get("remember_me", False)
                         else ""
                     )
+                    headers = MutableHeaders(scope=message)
                     headers.append(
                         "Set-Cookie",
                         f"{self.session_cookie}={signed_data}; path={self.path}; "
                         f"{max_age}{self.security_flags}",
                     )
-                elif session.modified and not initial_session_was_empty:
+                elif not initial_session_was_empty:
+                    headers = MutableHeaders(scope=message)
                     headers.append(
                         "Set-Cookie",
                         f"{self.session_cookie}=null; path={self.path}; "

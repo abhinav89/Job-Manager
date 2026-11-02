@@ -10,6 +10,15 @@ A conversation with the Career Agent focused on one tracked application, bringin
 **General Conversation**:
 A conversation with the Career Agent that is not tied to a tracked application. A job description supplied there can be used before the user saves it as a tracked application.
 
+**Job Intake**:
+The information the Career Agent gathers about a job, including its title, description, and Job Source, before adding it to the tracker. The agent may ask for additional information, may use a user-reviewed description extracted from a supplied link, and allows an unknown Job Source.
+
+**Job Source**:
+Where the user found a job, such as a job board or a referral. It may be unknown and is distinct from the job posting's URL.
+
+**Suggested Message**:
+A context-specific message offered by the Career Agent for the user to place in the chat composer, review, and send. For example, a cover-letter conversation may offer to add the job to the tracker.
+
 **Confirmed Skill**:
 A skill the user has affirmed they possess. A preset's suggested skill is not a Confirmed Skill until the user confirms it, and existing skills of unknown origin require user review.
 
@@ -24,6 +33,16 @@ A reviewable version of a CV, cover letter, interview preparation plan, or inter
 
 **Personal Evidence**:
 Personal facts supported by the user's saved profile or Conversation Evidence. Earlier resumes may inform context or phrasing but do not independently establish Personal Evidence.
+
+**Job Fit Analysis**:
+An evidence-based assessment of how a user's Personal Evidence relates to a specific job's requirements, whether the job is saved in the tracker or supplied in a General Conversation. It highlights supported matches, uncertain areas, and known gaps without an overall numerical score or an apply-or-skip verdict.
+_Avoid_: match score, ATS score
+
+**Requirement Assessment**:
+The part of a Job Fit Analysis that relates one job requirement to Personal Evidence and labels it supported, needing clarification, or a known gap. The requirement's importance is required, preferred, or unclear, supported by the job's wording; missing evidence alone is not a known gap.
+
+**Practical Constraint**:
+A job condition such as location, work authorization, salary, or working hours, considered separately from qualifications in a Job Fit Analysis. Its compatibility is uncertain when the relevant job condition or user's preference is unknown.
 
 **Company Research**:
 Findings about a company or role gathered for the user's job search, with sources and a clear distinction between supported facts and inference.
@@ -102,3 +121,6 @@ A Spot Edit may reframe, re-emphasise, re-order or re-word what the user's profi
 
 **Dev**: "The user mentions managing five people in an Application Conversation. Can the cover letter use that?"
 **Domain expert**: "Yes, as Conversation Evidence. Ask before adding it to their saved profile."
+
+**Dev**: "The job requires CRM experience, but the profile doesn't mention it. Is that a known gap?"
+**Domain expert**: "No. The Requirement Assessment needs clarification; ask the user, and only use their answer in that conversation unless they add it to their profile."

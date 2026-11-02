@@ -14,6 +14,7 @@ from database import get_db
 from dependencies import get_current_user_id
 from limiter import limiter
 from models import database_models as models
+from models.schemas import JobApplicationCreate, JobApplicationUpdate
 from services.career_agent import CareerToolContext, run_career_agent, serialize_draft
 from services.agent_activity import activity_sink
 from services.pdf_service import PDFCompilationError, compile_latex_to_pdf, pdf_page_count
@@ -256,7 +257,7 @@ async def stream_message(conversation_id: int, data: SendMessage, request: Reque
 def revise_draft(conversation_id: int, draft_id: int, data: ReviseDraft, request: Request, db: Session = Depends(get_db)):
     conversation = _conversation(db, get_current_user_id(request), conversation_id)
     original = _draft(db, conversation.id, draft_id)
-    if original.type in {"job_search", "agent_activity"}:
+    if original.type in {"tracker_action", "job_search", "agent_activity"}:
         raise HTTPException(status_code=422, detail="This item cannot be edited as a draft.")
     details = {key: value for key, value in (original.details or {}).items() if key != "assistant_message_id"}
     draft = models.AssistantDraft(conversation_id=conversation.id, type=original.type,
@@ -266,6 +267,66 @@ def revise_draft(conversation_id: int, draft_id: int, data: ReviseDraft, request
     db.commit()
     db.refresh(draft)
     return serialize_draft(draft)
+
+
+@router.post("/conversations/{conversation_id}/drafts/{draft_id}/confirm-tracker-action")
+def confirm_tracker_action(conversation_id: int, draft_id: int, request: Request, db: Session = Depends(get_db)):
+    user_id = get_current_user_id(request)
+    conversation = _conversation(db, user_id, conversation_id)
+    draft = db.query(models.AssistantDraft).filter_by(id=draft_id, conversation_id=conversation.id).with_for_update().first()
+    if not draft or draft.type != "tracker_action":
+        raise HTTPException(status_code=404, detail="Tracker proposal not found.")
+    details = draft.details or {}
+    if details.get("applied"):
+        raise HTTPException(status_code=409, detail="This proposal has already been applied.")
+    action = details.get("action")
+    if action == "add":
+        if conversation.job_id is not None:
+            raise HTTPException(status_code=409, detail="This conversation is already linked to an application.")
+        payload = details.get("payload") or {}
+        if not all(str(payload.get(k) or "").strip() for k in ("company_name", "job_title", "job_description", "job_source")):
+            raise HTTPException(status_code=422, detail="The job details are incomplete.")
+        try:
+            data = JobApplicationCreate.model_validate(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="Invalid job details.") from exc
+        job = models.JobApplication(user_id=user_id, **data.model_dump())
+        db.add(job)
+        db.flush()
+        conversation.job_id = job.id
+        conversation.title = f"{job.job_title} · {job.company_name}"[:200]
+    elif action in {"update", "archive", "restore", "delete"}:
+        job = _job(db, user_id, details.get("job_id"))
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found.")
+        if action == "update":
+            changes = details.get("changes") or {}
+            allowed = {"company_name", "job_title", "job_url", "job_source", "job_description", "short_description", "status", "date_applied", "follow_up_date", "job_type", "location", "salary_range", "priority", "notes"}
+            if not isinstance(changes, dict) or not changes or set(changes) - allowed:
+                raise HTTPException(status_code=422, detail="Invalid tracker changes.")
+            if "status" in changes and changes["status"] not in {"Saved", "Applied", "Interview", "Tech Test", "Offer", "Rejected", "Ghosted"}:
+                raise HTTPException(status_code=422, detail="Invalid application status.")
+            if any(field in changes and (not isinstance(changes[field], str) or not changes[field].strip()) for field in ("company_name", "job_title")):
+                raise HTTPException(status_code=422, detail="Company and job title cannot be blank.")
+            try:
+                data = JobApplicationUpdate.model_validate(changes)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail="Invalid tracker changes.") from exc
+            for field, value in data.model_dump(exclude_unset=True).items():
+                setattr(job, field, value)
+        elif action in {"archive", "restore"}:
+            job.is_archived = action == "archive"
+        else:
+            current_deleted = conversation.job_id == job.id
+            db.delete(job)
+            if current_deleted:
+                db.commit()
+                return {"conversation_deleted": True}
+    else:
+        raise HTTPException(status_code=422, detail="Invalid tracker action.")
+    draft.details = {**details, "applied": True}
+    db.commit()
+    return {"conversation_deleted": False, "conversation": _detail(conversation, db)}
 
 
 @router.post("/conversations/{conversation_id}/drafts/{draft_id}/apply")

@@ -307,6 +307,7 @@ export default function TrackerPage() {
   const detailsQuery = useTrackerDetails(expandedJob);
   const jobs = useMemo(() => (jobsQuery.data || []) as Job[], [jobsQuery.data]);
   const [showModal, setShowModal] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const [editingJob, setEditingJob] = useState<Job | null>(null);
   const [form, setForm] = useState<JobForm>(EMPTY);
   const [generatingFor, setGeneratingFor] = useState<number | null>(null);
@@ -623,7 +624,7 @@ export default function TrackerPage() {
     const matchStatus = filterStatus === "All" || j.status === filterStatus;
     const q = searchQuery.toLowerCase();
     const matchSearch = !q || j.company_name.toLowerCase().includes(q) || j.job_title.toLowerCase().includes(q) || (j.location || "").toLowerCase().includes(q);
-    return matchStatus && matchSearch;
+    return matchStatus && matchSearch && Boolean(j.is_archived) === showArchived;
   });
 
   return (
@@ -641,6 +642,7 @@ export default function TrackerPage() {
               </p>
             </div>
             <div className="flex items-center gap-3">
+              <button type="button" onClick={() => setShowArchived(value => !value)} className="rounded-sm border border-[#d4cfc7] px-3 py-2 text-xs">{showArchived ? "Show active" : "Show archived"}</button>
               <Link href="/discover" prefetch
                 className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold tracking-[0.15em] uppercase rounded-sm border transition-colors"
                 style={{ borderColor: "#5a8a00", color: "#5a8a00", background: "transparent" }}
@@ -776,6 +778,7 @@ export default function TrackerPage() {
                         </div>
                         {expanded && <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                           {job.location && <span className="text-[10px]" style={{ color: "#a8a39c" }}>📍 {job.location}</span>}
+                          {job.job_source && <span className="text-[10px]" style={{ color: "#a8a39c" }}>Found via {job.job_source}</span>}
                           {job.job_type && <span className="text-[10px]" style={{ color: "#a8a39c" }}>{job.job_type}</span>}
                           {job.salary_range && <span className="text-[10px]" style={{ color: "#a8a39c" }}>💰 {job.salary_range}</span>}
                           {job.date_applied && <span className="text-[10px]" style={{ color: "#a8a39c" }}>Applied {job.date_applied}</span>}
@@ -789,6 +792,23 @@ export default function TrackerPage() {
 
                       {/* Right controls */}
                       {expanded && <div className="tracker-job-actions flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+                        <button type="button" onClick={async () => {
+                          try {
+                            const response = await fetch(`${API}/tracker/${job.id}`, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ is_archived: !job.is_archived }) });
+                            if (!response.ok) throw new Error(await getApiError(response, "Unable to update archive."));
+                            void queryClient.invalidateQueries({ queryKey: queryKeys.tracker });
+                          } catch (err) { toast.error(err instanceof Error ? err.message : "Unable to update archive."); }
+                        }} className="rounded-sm border border-[#d4cfc7] px-2 py-1 text-[10px]">{job.is_archived ? "Restore" : "Archive"}</button>
+                        <button type="button" onClick={async () => {
+                          try {
+                            const response = await fetch(`${API}/assistant/conversations`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ job_id: job.id }) });
+                            if (!response.ok) throw new Error(await getApiError(response, "Unable to open the assistant."));
+                            const conversation = await response.json();
+                            sessionStorage.setItem("career-assistant-active", String(conversation.id));
+                            sessionStorage.setItem("career-assistant-fit-prompt", String(conversation.id));
+                            router.push("/assistant");
+                          } catch (err) { toast.error(err instanceof Error ? err.message : "Unable to open the assistant."); }
+                        }} className="rounded-sm border border-[#d4cfc7] px-2 py-1 text-[10px]">Analyze fit</button>
                         <PriorityBadge priority={job.priority} />
                         <StatusBadge status={job.status} />
 

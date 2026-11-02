@@ -45,6 +45,8 @@ export type JobSummary = {
   company_name: string;
   job_title: string;
   job_url?: string;
+  job_source?: string;
+  is_archived?: boolean;
   short_description?: string;
   has_pdf: boolean;
   pdf_generated_at?: string;

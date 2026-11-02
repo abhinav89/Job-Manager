@@ -103,6 +103,8 @@ class JobApplication(Base):
     company_name = Column(String(150), nullable=False)
     job_title = Column(String(150), nullable=False)
     job_url = Column(Text)  # Changed from String(500) to Text to support long URLs (e.g., Indeed URLs with many parameters)
+    job_source = Column(String(250))
+    is_archived = Column(Boolean, nullable=False, default=False, server_default="false")
     short_description = Column(Text)       # keep for display
     job_description = Column(Text)         # full JD for AI
     pdf_data = Column(LargeBinary)         # stored PDF bytes
