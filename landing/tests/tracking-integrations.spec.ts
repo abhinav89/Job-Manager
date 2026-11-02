@@ -7,8 +7,8 @@ test("each destination copies its setup wizard and local credential instructions
   await page.goto("/#integrations");
   const section = page.locator("#integrations");
   await expect(section.getByRole("heading", { name: "Connect it anywhere." })).toBeVisible();
-  await expect(section.locator("article")).toHaveCount(4);
-  for (const name of ["Obsidian", "Notion", "Google Sheets", "Markdown"]) {
+  await expect(section.locator("article")).toHaveCount(7);
+  for (const name of ["Obsidian", "Notion", "Google Sheets", "Markdown", "Airtable", "HubSpot", "GoHighLevel"]) {
     const card = section.getByRole("article").filter({ has: page.getByRole("heading", { name, exact: true }) });
     await expect(card.getByRole("img", { name: `${name} logo` })).toBeVisible();
     expect(await card.locator("img").evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
@@ -22,6 +22,14 @@ test("each destination copies its setup wizard and local credential instructions
     expect(prompt).toContain("untracked and ignored");
     expect(prompt).toContain("Never ask me to paste credentials into agent chat");
     expect(prompt).toContain("dry run before the first publish");
+    if (name === "HubSpot") {
+      expect(prompt).toContain("supported objects and API access");
+      expect(prompt).toContain("Do not assume paid custom objects");
+    }
+    if (name === "GoHighLevel") {
+      expect(prompt).toContain("GoHighLevel (GHL)");
+      expect(prompt).toContain("Never invent contacts, merge applications that share a contact");
+    }
   }
 });
 
@@ -52,6 +60,6 @@ test("connection cards and navigation fit mobile, tablet, and desktop", async ({
     await expect(page).toHaveURL(/#integrations$/);
     await expect(page.getByRole("heading", { name: "Connect it anywhere." })).toBeInViewport();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await expect(page.locator(".integration-card .copy-button")).toHaveCount(4);
+    await expect(page.locator(".integration-card .copy-button")).toHaveCount(7);
   }
 });

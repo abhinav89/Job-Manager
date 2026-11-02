@@ -1,6 +1,6 @@
 ---
 name: cv-connect
-description: Guide setup of optional application-tracking publishing to Obsidian, Notion, Google Sheets, or another chosen tool. Use when connecting a tracker, exporting to notes, or configuring integration credentials.
+description: Guide optional application-tracking publishing to notes, spreadsheets, Airtable, HubSpot, GoHighLevel (GHL), or another chosen tool. Use when connecting a tracker or CRM, exporting to notes, or configuring integration credentials.
 ---
 
 # cv-connect
@@ -12,7 +12,7 @@ Create a guided, local setup and publishing workflow for the user's chosen tool.
 1. Read the root AGENTS.md. Run `cv-tailor --json status` and retain its actual `data_dir`; pass that same `--data-dir` on every subsequent CLI call.
 2. Identify the destination and selected application fields. Ask only for missing choices. A named provider in the user's prompt is already a provider choice.
 3. Inspect existing nonsecret setup state under the Git-ignored `.cv-tailor-integrations/` directory. Reuse existing scripts and mappings when appropriate. Credential presence can be checked with `python scripts/integration_env.py status`; never read or print the credential file into model context.
-4. Read only the relevant provider reference: [local Markdown / Obsidian](references/markdown.md), [Notion](references/notion.md), or [Google Sheets](references/google-sheets.md). For another tool, verify its current official documentation and capabilities before designing a connector.
+4. Read only the relevant provider reference: [local Markdown / Obsidian](references/markdown.md), [Notion](references/notion.md), [Google Sheets](references/google-sheets.md), [Airtable](references/airtable.md), [HubSpot](references/hubspot.md), or [GoHighLevel / GHL](references/gohighlevel.md). For another tool, verify its current official documentation and capabilities before designing a connector.
 
 ## Guided setup
 
@@ -22,6 +22,7 @@ Create a guided, local setup and publishing workflow for the user's chosen tool.
 - For OAuth, the human-run local authorization script must pass returned credentials directly in memory to `save_env_values` from `scripts/integration_env.py`. Never print authorization codes, provider token responses, headers, or exception payloads. Persist credentials in `.env.integrations`, not another token file.
 - Scripts load `.env.integrations` explicitly with `dotenv_values(path, interpolate=False)`. Keep credentials out of URLs, notes, spreadsheets, exported JSON, generated prompts, logs, and Git. Do not move existing platform-managed credentials into this file.
 - Keep nonsecret destination, field mapping, a persistent workspace UUID, and the explicit data directory in `.cv-tailor-integrations/config.json`. Resume saved stages without exposing saved values.
+- For CRMs, verify the account's object, pipeline, property, and API capabilities before selecting a schema. Use a dedicated approved tracker destination. Explain any automation triggered by writes; stop if isolation from messaging, campaigns, or sales workflows cannot be verified. Never enable, disable, or run unrelated CRM automations to make tracking work.
 
 ## Publishing contract
 
