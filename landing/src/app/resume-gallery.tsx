@@ -10,7 +10,7 @@ import CopyButton from "./copy-button";
 const PdfPreview = dynamic(() => import("./pdf-preview"), { ssr: false, loading: () => <p role="status" className="pdf-preview-message">Loading PDF…</p> });
 
 function promptFor(id: ResumeTemplate, name: string) {
-  return `Use CV Tailor's cv-resume skill with the ${name} template (template_id: ${id}). Ask which application to use if I haven't specified one. Save that template choice on the application using its current revision before exporting context. Tailor a one-page resume using only my confirmed profile facts and the job description. Save a draft, check the page count and extracted text, and export the PDF for my review.`;
+  return `Use CV Tailor's cv-resume skill with the ${name} template (template_id: ${id}). Remember this as my default resume format using preferences get and preferences set with its current revision, unless I explicitly request an application-only choice. Ask which application to use if I haven't specified one. Save that template choice on the application using its current revision before exporting context. Tailor a one-page resume using only my confirmed profile facts and the job description. Save a draft, check the page count and extracted text, and export the PDF for my review.`;
 }
 
 export default function ResumeGallery() {

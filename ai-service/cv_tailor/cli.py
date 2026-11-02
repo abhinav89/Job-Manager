@@ -23,6 +23,11 @@ def parser():
     schema = groups.add_parser("schema")
     schema.add_argument("kind")
     groups.add_parser("templates").add_subparsers(dest="action", required=True).add_parser("list")
+    preferences = groups.add_parser("preferences").add_subparsers(dest="action", required=True)
+    preferences.add_parser("get")
+    preference_set = preferences.add_parser("set")
+    preference_set.add_argument("--input", required=True, help="Nonsecret preference JSON file or - for stdin")
+    preference_set.add_argument("--revision", type=int)
     profile = groups.add_parser("profile").add_subparsers(dest="action", required=True)
     profile.add_parser("get")
     for action in ("set", "import"):
@@ -121,8 +126,11 @@ def dispatch(a):
         return w.schema_for(a.kind).model_json_schema()
     if a.group in {"status", "doctor"}:
         from cv_tailor.dashboard import assets_dir
+        initialized = (data_dir()/"cv-tailor.sqlite3").exists()
+        if initialized:
+            init_db()
         return {"data_dir": str(data_dir()), "database": str(data_dir()/"cv-tailor.sqlite3"),
-                "initialized": (data_dir()/"cv-tailor.sqlite3").exists(), "ai": capabilities(),
+                "initialized": initialized, "preferences": w.preferences_get() if initialized else None, "ai": capabilities(),
                 "dashboard_installed": assets_dir().joinpath("index.html").exists() and importlib.util.find_spec("fastapi") is not None,
                 "python": sys.version.split()[0], "node": shutil.which("node"),
                 "execution": os.getenv("EXECUTION_BACKEND", "local"),
@@ -133,6 +141,8 @@ def dispatch(a):
     init_db()
     if a.group == "init":
         return {"initialized": True, "data_dir": str(data_dir()), "ai": capabilities()}
+    if a.group == "preferences":
+        return w.preferences_get() if a.action == "get" else w.preferences_update(input_json(a.input), a.revision)
     if a.group == "profile":
         if a.action == "get":
             return w.profile_get()

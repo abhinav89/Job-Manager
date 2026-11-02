@@ -2,7 +2,13 @@ import type { ResumeTemplate } from "./resumeTemplates";
 import { queryOptions, useQuery, type QueryClient } from "@tanstack/react-query";
 import { API_URL, getApiError } from "@/lib/api";
 
-export type Workspace = { name: string; email: string; profile_exists: boolean; data_dir: string; ai: {mode: string; generation: boolean; assistant: boolean; research: boolean; ranking: boolean} };
+export type WorkspacePreferences = {
+  revision: number;
+  workspace_uuid: string;
+  resume_template: ResumeTemplate;
+  tracking_connection: { provider: string; config_path: string | null } | null;
+};
+export type Workspace = { name: string; email: string; profile_exists: boolean; data_dir: string; preferences?: WorkspacePreferences; ai: {mode: string; generation: boolean; assistant: boolean; research: boolean; ranking: boolean} };
 
 export type ApplicationStatus = "Saved" | "Applied" | "Interview" | "Tech Test" | "Offer" | "Rejected" | "Ghosted";
 export type ApplicationPriority = "High" | "Medium" | "Low";

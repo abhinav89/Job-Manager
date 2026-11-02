@@ -161,6 +161,12 @@ The landing page gallery uses actual one-page PDFs with fictional sample data. I
 
 ## Guided tracking connections
 
+### Remembered preferences
+
+SQLite stores your default resume template and preferred tracking connection across CLI agents and sessions. `cv-tailor --json status` and context exports include them. Read `cv-tailor --json preferences get`, then update only the chosen fields with `cv-tailor --json preferences set --revision N --input preferences.json` (use the returned revision). For example, `{ "resume_template": "modern", "tracking_connection": { "provider": "notion", "config_path": null } }` remembers choices before setup; the wizard later saves an absolute path to its nonsecret JSON setup file. Use `{ "tracking_connection": null }` for SQLite-only tracking. Existing profile defaults remain supported, new applications inherit the default, and existing application choices remain unchanged. The dashboard loads the default and provides **Save as my default** in the resume template picker.
+
+Credentials are never preference fields: they stay in the Git-ignored environment file. Remembering a tool does not authorize publishing or prove that the connection is ready. A saved setup path lets the wizard resume configuration without repeating choices or duplicating an external tracker. Pass `--data-dir` consistently to keep separate workspaces independent.
+
 Copy an Obsidian, Notion, Google Sheets, Markdown, Airtable, HubSpot, or GoHighLevel (GHL) connection prompt from the landing page into your coding agent in this checkout. The `cv-connect` skill guides setup and prepares reusable local setup/publishing scripts; these are agent-configured connections, not a preconfigured background sync service. SQLite remains primary, publishing is one-way and manual, and personal notes/custom fields are preserved. CRM setup verifies account capabilities, maps pipeline stages, and avoids unintended outreach or sales automations.
 
 Any needed credentials are entered in your own terminal and saved in the Git-ignored `.env.integrations` file. Do not paste credentials into agent chat. For example, run `python scripts/integration_env.py set CV_TAILOR_NOTION_TOKEN` yourself for hidden token entry; `python scripts/integration_env.py status` reports configured key names only. OAuth setup scripts can call `save_env_values` from that helper directly in memory. The helper refuses to write a tracked or unignored environment file. Load values with `dotenv_values(path, interpolate=False)`.

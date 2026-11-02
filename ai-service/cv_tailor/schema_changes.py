@@ -3,8 +3,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
 import json
+from uuid import uuid4
+from contextlib import closing
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 PRESETS = [{'core_skills_bank': ['Email & Calendar Management',
                        'Customer Service / Live Chat',
@@ -152,13 +154,14 @@ def apply_schema_changes(engine):
         return
     if version and version < SCHEMA_VERSION and database:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-        with sqlite3.connect(database) as source, sqlite3.connect(database + ".backup-" + stamp) as dest:
+        with closing(sqlite3.connect(database)) as source, closing(sqlite3.connect(database + ".backup-" + stamp)) as dest:
             source.backup(dest)
     with engine.begin() as connection:
         # Serialize first-run initialization across independent CLI processes.
         connection.exec_driver_sql("BEGIN IMMEDIATE")
         Base.metadata.create_all(bind=connection)
         connection.exec_driver_sql("INSERT OR IGNORE INTO workspaces (id) VALUES (1)")
+        connection.exec_driver_sql("INSERT OR IGNORE INTO workspace_preferences (workspace_id, revision, workspace_uuid) VALUES (1, 1, ?)", (uuid4().hex,))
         table = ResumePreset.__table__
         for preset in PRESETS:
             connection.exec_driver_sql("INSERT OR IGNORE INTO resume_presets (slug, display_name, target_summary_prompt, core_skills_bank, metric_prompts, section_order, recommended_template, lever_guidance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",

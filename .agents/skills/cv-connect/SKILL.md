@@ -10,8 +10,8 @@ Create a guided, local setup and publishing workflow for the user's chosen tool.
 ## Scope and resume
 
 1. Read the root AGENTS.md. Run `cv-tailor --json status` and retain its actual `data_dir`; pass that same `--data-dir` on every subsequent CLI call.
-2. Identify the destination and selected application fields. Ask only for missing choices. A named provider in the user's prompt is already a provider choice.
-3. Inspect existing nonsecret setup state under the Git-ignored `.cv-tailor-integrations/` directory. Reuse existing scripts and mappings when appropriate. Credential presence can be checked with `python scripts/integration_env.py status`; never read or print the credential file into model context.
+2. Load `cv-tailor --json --data-dir PATH preferences get`. Reuse its `tracking_connection` unless the user chooses another tool. A named provider in the prompt overrides this run's destination. Remember the chosen connection after setup unless the user requests a one-off connection. Ask only for missing destination and field choices.
+3. Inspect the saved nonsecret `tracking_connection.config_path` when present; otherwise use the Git-ignored `.cv-tailor-integrations/` directory. Reuse matching scripts and mappings. If a path moved or belongs to another workspace, report it and repair only with the user's chosen destination; do not silently create another external tracker. Credential presence can be checked with `python scripts/integration_env.py status`; never read or print the credential file into model context.
 4. Read only the relevant provider reference: [local Markdown / Obsidian](references/markdown.md), [Notion](references/notion.md), [Google Sheets](references/google-sheets.md), [Airtable](references/airtable.md), [HubSpot](references/hubspot.md), or [GoHighLevel / GHL](references/gohighlevel.md). For another tool, verify its current official documentation and capabilities before designing a connector.
 
 ## Guided setup
@@ -21,7 +21,7 @@ Create a guided, local setup and publishing workflow for the user's chosen tool.
 - Use `python scripts/integration_env.py set CV_TAILOR_PROVIDER_TOKEN` with the actual variable names. Only key names go on the command line. The helper captures values through hidden terminal input and refuses tracked or unignored environment files.
 - For OAuth, the human-run local authorization script must pass returned credentials directly in memory to `save_env_values` from `scripts/integration_env.py`. Never print authorization codes, provider token responses, headers, or exception payloads. Persist credentials in `.env.integrations`, not another token file.
 - Scripts load `.env.integrations` explicitly with `dotenv_values(path, interpolate=False)`. Keep credentials out of URLs, notes, spreadsheets, exported JSON, generated prompts, logs, and Git. Do not move existing platform-managed credentials into this file.
-- Keep nonsecret destination, field mapping, a persistent workspace UUID, and the explicit data directory in `.cv-tailor-integrations/config.json`. Resume saved stages without exposing saved values.
+- Keep nonsecret destination, field mapping, and explicit data directory in a connection-specific JSON file under `.cv-tailor-integrations/`. New connections use the SQLite preference's stable `workspace_uuid`; existing connections retain their saved UUID to avoid duplicating published records. After setup, save `{ "tracking_connection": { "provider": "PROVIDER_ID", "config_path": "ABSOLUTE_JSON_PATH" } }` with `preferences set --revision N --input preferences.json --data-dir PATH` unless the user requested a one-off connection. Use `schema preferences` for provider IDs. Preserve their resume default. Never put credentials in SQLite, preference input, or config JSON. Reuse saved stages without exposing secret values.
 - For CRMs, verify the account's object, pipeline, property, and API capabilities before selecting a schema. Use a dedicated approved tracker destination. Explain any automation triggered by writes; stop if isolation from messaging, campaigns, or sales workflows cannot be verified. Never enable, disable, or run unrelated CRM automations to make tracking work.
 
 ## Publishing contract
@@ -32,6 +32,7 @@ Create a guided, local setup and publishing workflow for the user's chosen tool.
 - Generate a dry-run mode showing destinations, fields, and proposed changes without sending application data. Confirm the first publish scope unless the user has already approved it. Existing approved configurations can be reused for later requested publishes.
 - Treat unavailable destinations as a retryable publish failure; local applications remain saved and usable. Stop on conflicting edits to managed fields. Do not silently overwrite external edits or implement two-way imports.
 - Archive rather than delete external entries by default. Disconnecting removes only the connection, leaving SQLite and external records intact.
+- To clear the remembered connection, save `{ "tracking_connection": null }` through the preferences CLI. This does not delete external data, revoke provider credentials, or remove local applications.
 
 ## Validate and hand back
 

@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Date, LargeBinary, JSON, Boolean, Index, UniqueConstraint, CheckConstraint
 from sqlalchemy.orm import relationship, deferred, column_property
 from sqlalchemy.sql import func
+from uuid import uuid4
 from cv_tailor.database import Base
 
 class Workspace(Base):
@@ -33,6 +34,16 @@ class Profile(Base):
     projects = relationship("Project", back_populates="owner", cascade="all, delete")
     skills = relationship("Skill", back_populates="owner", cascade="all, delete")
     certifications = relationship("Certification", back_populates="owner", cascade="all, delete")
+
+
+class WorkspacePreferences(Base):
+    __tablename__ = "workspace_preferences"
+    workspace_id = Column(Integer, ForeignKey("workspaces.id"), primary_key=True, default=1)
+    revision = Column(Integer, nullable=False, default=1)
+    workspace_uuid = Column(String(32), nullable=False, default=lambda: uuid4().hex)
+    # Null preserves the existing profile default until an explicit choice is saved.
+    resume_template = Column(String(50), nullable=True)
+    tracking_connection = Column(JSON, nullable=True)
 
 class Education(Base):
     __tablename__ = "education"

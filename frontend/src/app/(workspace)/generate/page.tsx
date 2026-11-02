@@ -15,7 +15,7 @@ import InlineQueryError from "@/components/InlineQueryError";
 import RouteLoading from "@/components/RouteLoading";
 import Alert from "@/components/Alert";
 import { ButtonLink } from "@/components/Button";
-import { ApiQueryError, queryKeys, type JobDetails, useWorkspace, usePresets, useProfile, useTrackerDetails } from "@/lib/queries";
+import { ApiQueryError, queryKeys, type JobDetails, type Workspace, type WorkspacePreferences, type ResumeTemplate, useWorkspace, usePresets, useProfile, useTrackerDetails } from "@/lib/queries";
 import { applyBlockText, formatEducationDetails, replaceProjectHeading, parseResumeBlocks, parseResumeDraft, replaceCommandArgument, replaceResumeItem, replaceResumeName, replaceSectionDetail, replaceSummary, resolveSelectionToBlocks, type ResumeBlock, type ResumeDraft } from "@/lib/resumeDraft";
 
 const Document = dynamic(() => import("react-pdf").then(m => m.Document), { ssr: false });
@@ -599,6 +599,8 @@ function GeneratePageContent() {
 
   const [jd, setJd] = useState("");
   const { selectedTemplate, setSelectedTemplate, editorMode, setEditorMode } = useResumeUiStore();
+  const initializedTemplateScope = useRef<string | null>(null);
+  const [savingDefault, setSavingDefault] = useState(false);
   const [latex, setLatex] = useState("");
   const loadedJobRevision = useRef<number | undefined>(undefined);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -830,6 +832,33 @@ function GeneratePageContent() {
   useEffect(() => {
     if (profileQuery.data?.preset_slug) setPresetSlug(profileQuery.data.preset_slug);
   }, [profileQuery.data]);
+
+  useEffect(() => {
+    const scope = jobId || "workspace";
+    if (!userQuery.data || profileQuery.isPending || (jobId && !jobDetailsQuery.data) || initializedTemplateScope.current === scope) return;
+    setSelectedTemplate(jobDetailsQuery.data?.template_id || userQuery.data.preferences?.resume_template || profileQuery.data?.preferred_template || "classic");
+    initializedTemplateScope.current = scope;
+  }, [jobId, jobDetailsQuery.data, userQuery.data, profileQuery.data, profileQuery.isPending, setSelectedTemplate]);
+
+  const saveDefaultTemplate = async () => {
+    const preferences = userQuery.data?.preferences;
+    if (!preferences) return;
+    setSavingDefault(true);
+    try {
+      const response = await fetch(`${API_URL}/preferences`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ revision: preferences.revision, resume_template: selectedTemplate }),
+      });
+      if (!response.ok) throw new Error(await getApiError(response, "Unable to save the default template."));
+      const saved: WorkspacePreferences = await response.json();
+      queryClient.setQueryData<Workspace>(queryKeys.workspace, current => current ? { ...current, preferences: saved } : current);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.profile });
+      toast.success("Default resume template saved.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to save the default template.");
+      void userQuery.refetch();
+    } finally { setSavingDefault(false); }
+  };
 
   useEffect(() => {
     if (presetsQuery.data) setPresets(presetsQuery.data.map(preset => ({
@@ -1341,7 +1370,7 @@ function GeneratePageContent() {
                   setPresetSlug(val || 'blank');
                   const p = presets.find(x => x.display_name.toLowerCase() === val.toLowerCase());
                    const recommended = RESUME_TEMPLATES.find(template => template.id === p?.recommended_template);
-                   if (recommended) setSelectedTemplate(recommended.id);
+                   if (recommended && !userQuery.data?.preferences?.resume_template && !profileQuery.data?.preferred_template) setSelectedTemplate(recommended.id as ResumeTemplate);
                 }}
                 placeholder="e.g. Full Stack Developer, Marketing Manager..."
               />
@@ -1366,6 +1395,13 @@ function GeneratePageContent() {
                     <span className="text-[12px] font-bold" style={{ color: selectedTemplate === tpl.id ? C.green : C.text }}>{tpl.name}{selectedTemplate === tpl.id ? " ✓" : ""}</span>
                   </button>
                 ))}
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-3 text-xs" style={{ color: C.textMuted }}>
+                <span>Default: {RESUME_TEMPLATES.find(template => template.id === userQuery.data?.preferences?.resume_template)?.name || "Classic"}</span>
+                <button type="button" onClick={() => void saveDefaultTemplate()} disabled={savingDefault || !userQuery.data?.preferences || selectedTemplate === userQuery.data.preferences.resume_template}
+                  className="underline underline-offset-4 disabled:opacity-50 disabled:no-underline">
+                  {savingDefault ? "Saving default…" : "Save as my default"}
+                </button>
               </div>
             </div>
 

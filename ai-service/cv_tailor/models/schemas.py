@@ -5,6 +5,37 @@ from typing import Optional
 
 ResumeTemplate = Literal["classic", "modern", "minimal", "serif", "executive", "technical", "compact", "sidebar"]
 
+
+class TrackingConnectionPreference(BaseModel):
+    model_config = {"extra": "forbid"}
+    provider: Literal["obsidian", "notion", "googlesheets", "markdown", "airtable", "hubspot", "gohighlevel", "custom"]
+    config_path: Optional[str] = Field(default=None, max_length=4096)
+
+    @field_validator("config_path")
+    @classmethod
+    def local_config_file(cls, value):
+        if value is not None:
+            from pathlib import Path
+            path = Path(value).expanduser()
+            if not path.is_absolute() or any(part.startswith(".env") for part in path.parts) or path.suffix.lower() != ".json":
+                raise ValueError("Use an absolute path to a nonsecret JSON setup file, never a URL or environment file.")
+            return str(path)
+        return value
+
+
+class PreferencesUpdate(BaseModel):
+    model_config = {"extra": "forbid"}
+    revision: Optional[int] = Field(default=None, ge=1)
+    resume_template: Optional[ResumeTemplate] = None
+    tracking_connection: Optional[TrackingConnectionPreference] = None
+
+    @field_validator("resume_template")
+    @classmethod
+    def require_template(cls, value):
+        if value is None:
+            raise ValueError("Choose a supported resume template.")
+        return value
+
 class Education(BaseModel):
     school_name: str = Field(max_length=150)
     course: str = Field(max_length=150)
