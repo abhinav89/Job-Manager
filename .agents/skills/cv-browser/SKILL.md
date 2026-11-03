@@ -5,6 +5,8 @@ description: Set up browser-independent application tools and local-only job-sit
 
 # cv-browser
 
+This is optional setup. For application filling, first follow [cv-apply](../cv-apply/SKILL.md) and use working native browser/computer tools when they support the user's chosen browser/session. Do not install or configure this adapter merely because an agent uses Gemini, Claude, Codex or another model. Use it when native access is unavailable/incompatible, the user explicitly chooses its restricted interface, or the task resumes a session created by this wizard. A compatible native browser session needs no wizard or MCP setup.
+
 Never request passwords, MFA codes, recovery codes, cookies or sign-in tokens in chat, files, command arguments or environment variables. Do not read browser profiles or use general browser tools to extract session state. The user types credentials directly into the visible sign-in browser.
 
 Run `cv-tailor browser status`. If automation dependencies are missing, install `python -m pip install -e "ai-service[automation]"` using this repository's environment. Brave, Edge and Chrome use the installed browser; Chromium, Firefox and WebKit use Playwright builds installed with `python -m playwright install BROWSER`. Brave is discovered in standard Windows/macOS locations or on PATH; `CV_TAILOR_BRAVE_PATH` can specify its executable. Never silently substitute another browser when Brave is missing.
