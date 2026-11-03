@@ -21,6 +21,7 @@ Reuse saved `calendar_connections` for calendar requests through cv-calendar. Ca
 - Optional tracking connections and publishing setup: cv-connect
 - Calendar connections, interviews, deadlines, and reminders: cv-calendar
 - Employer form filling and application answers: cv-apply
+- Browser setup and local-only job-site sign-in: cv-browser
 - Interview preparation/practice: cv-interview
 - Coding exercises/review: cv-code-practice
 For a multi-step request, save the application when requested, export its context, produce the requested documents, and save each as a draft. Report real command results and document IDs. Applying drafts is a separate operation. The CLI and optional dashboard use the same local SQLite data; no account or CV Tailor AI API key is required.

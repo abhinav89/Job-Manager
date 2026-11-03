@@ -69,3 +69,11 @@ landing/playwright-report/
 
 # Local agent-generated integration scripts and destination configuration
 .cv-tailor-integrations/
+
+# Private browser profiles and machine-specific Gemini MCP configuration
+.cv-tailor/
+.cv-tailor-browser/
+.gemini/
+**/browser/profiles/
+**/browser/uploads/
+**/browser/sites.json

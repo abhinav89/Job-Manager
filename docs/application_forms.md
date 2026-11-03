@@ -1,6 +1,6 @@
 # Application form assistance
 
-`cv-apply` runs through a browser-capable local agent. It combines the saved profile, a tracked job and explicit document selections with the agent's supported browser/computer tools. There is no new browser daemon, provider API requirement or database migration. The dashboard copies a handoff prompt and renders saved form checkpoints in the application conversation.
+`cv-apply` runs through a browser-capable local agent. It combines the saved profile, a tracked job and explicit document selections with supported browser/computer tools. Hosts can use their existing tools or the optional [local sign-in wizard and restricted MCP adapter](browser_setup.md), which supports multiple browser engines without a provider API key or database migration. The dashboard copies a handoff prompt and renders saved form checkpoints in the application conversation.
 
 ## Commands
 

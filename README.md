@@ -100,7 +100,7 @@ Resumes are assembled from structured plain-text content, compiled with Tectonic
 
 ## Included skills
 
-`cv-tailor`, `cv-profile`, `cv-jobs`, `cv-job-fit`, `cv-company-research`, `cv-resume`, `cv-resume-edit`, `cv-cover-letter`, `cv-tracker`, `cv-snapshot`, `cv-apply`, `cv-interview`, `cv-code-practice`, `cv-connect`, `cv-calendar`.
+`cv-tailor`, `cv-profile`, `cv-jobs`, `cv-job-fit`, `cv-company-research`, `cv-resume`, `cv-resume-edit`, `cv-cover-letter`, `cv-tracker`, `cv-snapshot`, `cv-apply`, `cv-browser`, `cv-interview`, `cv-code-practice`, `cv-connect`, `cv-calendar`.
 
 Canonical skills live in `.agents/skills`, with Claude entrypoints in `.claude/skills`. They share the same CLI and output schemas. Company research uses the harness's browsing tools, or user-provided sources when browsing is unavailable. Factual grounding guidance and deterministic checks help catch unsupported claims; review generated documents.
 
@@ -110,7 +110,9 @@ Ask **“Create a snapshot of my job applications”** or **“Use cv-snapshot t
 
 Ask your local agent: **“Use cv-apply for application #42. Fill the employer form using my selected CV and cover letter, then stop for my review.”** The optional dashboard's **Work with your CLI agent → Assist with application** copies a prompt for this workflow.
 
-The agent uses its own supported browser/computer tools to inspect and fill the form. CV Tailor saves versioned answer checkpoints, validates reported readbacks and field limits, and pins selected documents by draft ID and file fingerprint. Browser access is a host capability, not provided by the CLI or dashboard. Without it, the agent can prepare copyable answers and save a draft. Portal support depends on the host and controls; unreadable controls and attachments remain unverified.
+The agent uses supported browser/computer tools to inspect and fill the form. CV Tailor saves versioned answer checkpoints, validates reported readbacks and field limits, and pins selected documents by draft ID and file fingerprint. Without browser tools, the agent can prepare copyable answers and save a draft. Portal support depends on the host and controls; unreadable controls and attachments remain unverified.
+
+For browser-independent local sessions, install `python -m pip install -e "ai-service[automation]"` and run `cv-tailor browser setup`. The native wizard lets you sign in directly in Edge, Chrome, or a Playwright-managed Chromium/Firefox/WebKit browser. Never put passwords or MFA codes in chat. A restricted MCP adapter reuses the session for application fields without exposing password, cookie, arbitrary JavaScript or screenshot tools. It can connect to Gemini and other MCP hosts; local profiles are not isolated from unrestricted processes running as your OS user. See [browser setup and the credential boundary](docs/browser_setup.md).
 
 You review and submit in the employer's form. After you explicitly confirm submission, `forms confirm-submission` records the actual date and marks the application Applied; it does not send the form. `drafts apply` still only selects a current CV or cover letter. See [the workflow and commands](docs/application_forms.md).
 

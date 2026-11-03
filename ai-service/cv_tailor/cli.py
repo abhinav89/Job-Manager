@@ -120,6 +120,11 @@ def parser():
     dashboard.add_argument("action", nargs="?", choices=["install", "start"], default="start")
     dashboard.add_argument("--port", type=int, default=8000)
     dashboard.add_argument("--no-open", action="store_true")
+    browser = groups.add_parser("browser", help="Local sign-in wizard and restricted application browser tools").add_subparsers(dest="action", required=True)
+    browser.add_parser("status")
+    browser.add_parser("setup", help="Open a local window; never enter credentials in chat")
+    for action in ("login", "mcp-config", "serve"):
+        browser.add_parser(action).add_argument("--site", required=True)
     return p
 
 
@@ -135,6 +140,17 @@ def dispatch(a):
     from cv_tailor.config import data_dir, capabilities
     from cv_tailor import workspace as w
     from cv_tailor.database import init_db
+    if a.group == "browser":
+        from cv_tailor import browser
+        if a.action == "status":
+            return browser.status()
+        if a.action in {"setup", "login"}:
+            return browser.open_wizard(getattr(a, "site", None))
+        if a.action == "mcp-config":
+            return browser.mcp_config(a.site)
+        from cv_tailor.browser_mcp import serve
+        serve(a.site)
+        return None
     if a.group == "templates":
         from cv_tailor.services.templates import TEMPLATE_CATALOG
         return TEMPLATE_CATALOG
@@ -259,7 +275,7 @@ def main(argv=None):
         return 0
     except (ValueError, OSError, RuntimeError, ImportError, SQLAlchemyError, subprocess.SubprocessError, PyPdfError) as exc:
         if isinstance(exc, ImportError):
-            message = f"Optional dependency missing: {exc}. Install the corresponding dashboard, ai, or browser extra."
+            message = f"Optional dependency missing: {exc}. Install the corresponding dashboard, ai, browser, or automation extra."
         elif isinstance(exc, SQLAlchemyError):
             message = "Workspace write could not complete. Refresh the record before retrying; reuse the request ID for an identical create/import."
         else:

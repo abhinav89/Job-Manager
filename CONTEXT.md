@@ -10,6 +10,7 @@ A single-user, local career workspace: an agent-friendly Python CLI, SQLite, and
 - CLI and HTTP adapters share services in the `cv_tailor` package. The CLI never requires a web server or Node.js.
 - SQLite uses foreign keys, WAL, short write transactions, request receipts for idempotent creates/imports, and revision checks for edits. Slow external work runs outside write transactions.
 - External-agent mode is the default. Skills export context and output schemas, then import typed results. API calls require `AI_MODE=api` and suitable optional dependencies/keys.
+- Optional application browser automation (`[automation]`) adds a native local sign-in wizard and restricted stdio MCP tools for Edge, Chrome, Chromium, Firefox and WebKit. Per-site/browser profiles live outside SQLite under the workspace's `browser/` directory. Passwords are entered directly in the browser, never supplied to the agent. The adapter exposes native application operations without arbitrary JavaScript, screenshots or session export. This interface is not OS isolation from unrestricted same-user agents; final consent/submission remain user actions. See `docs/browser_setup.md`.
 - The optional dashboard is a static export served by FastAPI; HTTP endpoints are under `/api`. The server accepts local connections and same-origin browser requests only.
 - Public landing assets are built independently from `landing/`; the application is not hosted.
 - Fresh workspaces are supported; legacy PostgreSQL/account migration is deferred.
