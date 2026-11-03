@@ -2,6 +2,8 @@
 
 CV Tailor's optional application browser works with any MCP-capable AI agent host. The local host selects the tools; the model vendor does not select the browser. Brave, Edge and Chrome use installed browsers. Chromium, Firefox and WebKit use Playwright-managed builds. WebKit is an engine, not an attachment to Safari; arbitrary existing browser tabs are not supported by this adapter. Agents with their own documented browser/computer tools can also use the shared `cv-apply` workflow; private wizard-created profiles stay behind the restricted adapter.
 
+**Use working native tools first.** If your Claude, Codex, Antigravity or other agent session already exposes browser/computer tools compatible with your chosen browser/session, use `cv-apply` directly. You do not need this extra, wizard or MCP server. Use the optional adapter when native access fails or is incompatible, you explicitly choose the restricted interface, or you are resuming a wizard-created session. Capabilities depend on the running host and its connected tools, not the model name. On both paths, enter credentials directly in the local browser, never in chat.
+
 Brave uses Playwright's Chromium engine with its installed executable. It is detected in standard Windows/macOS locations or on PATH; set `CV_TAILOR_BRAVE_PATH` for a nonstandard installation. There is no silent browser fallback. Compatibility depends on Brave's Chromium version; local fixture tests do not establish compatibility with every Brave release or job portal.
 
 ## Install and sign in
@@ -40,6 +42,12 @@ cv-tailor --json browser mcp-config --site onlinejobs --host opencode
 Standard output uses the `mcpServers` JSON shape and absolute executable/workspace paths. OpenCode output uses its `mcp` object with a local command array. The wizard offers both formats. Merge the server entry into your chosen host's project MCP settings, preserving other settings. Gemini CLI uses `.gemini/settings.json`; Claude Code uses its project MCP configuration; other hosts should register the same executable and argument list through their documented MCP setup. This server is not tied to Gemini: Claude Code, Codex, OpenCode, Antigravity and other compatible agents can use it. Windows configurations must use `python.exe` for MCP stdio, even when the wizard runs under `pythonw.exe`. Do not install a second unrestricted browser MCP server against the private profile. The repository ignores machine-specific `.gemini/` configuration.
 
 Restart the host's MCP connection and verify that the `cv-browser-SITE` tools are discovered. The server command is `cv-tailor browser serve --site SITE`, using stdio; it starts a visible task browser. It begins on a blank page without inspecting restored tabs. Use `browser_open` with the intended application URL. The server does not expose an HTTP debugging port.
+
+### Antigravity fallback setup
+
+If Antigravity's native browser works for your chosen browser, use it with `cv-apply` directly. If you need this adapter instead, place the generated standard JSON in the workspace's `.agents/mcp_config.json`, merging its server entry with any existing servers. This local configuration is ignored by Git. In Antigravity CLI, use `/mcp` to reload configurations and check that `cv-browser-onlinejobs` is connected. In the IDE, open the agent panel's **… → MCP Servers → Manage MCP Servers**, then refresh the server. Antigravity documents its workspace configuration and management UI in the [official MCP guide](https://antigravity.google/docs/mcp/).
+
+Finish local sign-in and close the wizard browser before connecting the server. Ask the agent to use `cv-apply` with the `cv-browser-onlinejobs` tools and the tracked application/document IDs you selected; invoking Antigravity's native `/browser` command is unnecessary for this adapter. Native and wizard profiles do not share logins.
 
 ## Application tools
 
