@@ -1,9 +1,9 @@
 .section { padding-bottom: 90px; scroll-margin-top: 15px; }
 .layout { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 34px; align-items: start; }
 .preview { min-width: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--white); overflow: hidden; }
-.previewHeader { display: flex; justify-content: space-between; gap: 12px; padding: 18px 22px; border-bottom: 1px solid var(--line-soft); font-size: 10px; }
+.previewHeader { display: flex; justify-content: space-between; gap: 12px; padding: 18px 22px; border-bottom: 1px solid var(--line-soft); font-size: 13px; }
 .previewHeader > span:first-child { display: inline-flex; align-items: center; gap: 8px; font-weight: 500; }
-.previewHeader > span:last-child { font-size: 8px; color: var(--muted); }
+.previewHeader > span:last-child { font-size: 11px; color: var(--muted); }
 .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--green); }
 .chartScroll { overflow-x: auto; padding: 14px 8px 4px; }
 .chartScroll:focus-visible { outline: 2px solid var(--green); outline-offset: -3px; }
@@ -11,31 +11,31 @@
 .chartLabel { fill: var(--ink); font-size: 16px; }
 .total { fill: var(--ink); font-size: 39px; font-weight: 600; }
 .count { font-size: 20px; font-weight: 500; }
-.percentage { fill: var(--muted); font-size: 12px; font-weight: 400; }
-.preview figcaption { padding: 15px 22px; border-top: 1px solid var(--line-soft); color: var(--muted); font-size: 8px; line-height: 1.8; }
+.percentage { fill: var(--muted); font-size: 14px; font-weight: 400; }
+.preview figcaption { padding: 15px 22px; border-top: 1px solid var(--line-soft); color: var(--muted); font-size: 11px; line-height: 1.8; }
 .mobileHint { display: none; }
 .guide { padding-top: 2px; min-width: 0; }
-.guide > :global(.eyebrow) { font-size: 8px; }
+.guide > :global(.eyebrow) { font-size: 11px; }
 .guide h3 { margin-top: 10px; font: 400 28px/1.2 var(--display); letter-spacing: -.03em; }
-.steps { display: grid; gap: 8px; margin: 18px 0 0; padding-left: 19px; list-style: decimal; font-size: 10px; line-height: 1.8; color: var(--muted); }
+.steps { display: grid; gap: 8px; margin: 18px 0 0; padding-left: 19px; list-style: decimal; font-size: 13px; line-height: 1.8; color: var(--muted); }
 .steps li::marker { color: var(--green); }
 .prompt { margin-top: 22px; }
-.prompt blockquote { min-height: 0; padding: 19px 15px; font-size: 10px; line-height: 1.95; overflow-wrap: anywhere; }
+.prompt blockquote { min-height: 0; padding: 19px 15px; font-size: 13px; line-height: 1.95; overflow-wrap: anywhere; }
 .prompt :global(.prompt-window-header) { padding-inline: 12px; }
-.prompt :global(.prompt-window-header) > span { font-size: 8px; }
+.prompt :global(.prompt-window-header) > span { font-size: 11px; }
 .prompt :global(.prompt-window-header):has(:global(.copy-fallback)) { flex-wrap: wrap; }
 .prompt :global(.copy-control):has(:global(.copy-fallback)) { flex-basis: 100%; min-width: 0; }
-.prompt :global(.prompt-result) { font-size: 8px; align-items: flex-start; line-height: 1.8; }
+.prompt :global(.prompt-result) { font-size: 11px; align-items: flex-start; line-height: 1.8; }
 .prompt :global(.prompt-result) svg { margin-top: 1px; }
-.archiveNote { margin-top: 16px; color: var(--muted); font-size: 9px; line-height: 1.9; }
+.archiveNote { margin-top: 16px; color: var(--muted); font-size: 12px; line-height: 1.9; }
 .archiveNote strong { font-weight: 400; color: var(--ink); }
 .details { display: flex; align-items: center; justify-content: space-between; gap: 26px; margin-top: 26px; padding-top: 21px; border-top: 1px solid var(--line); }
 .details > div { display: flex; align-items: flex-start; gap: 10px; }
 .details > div > svg { margin-top: 2px; color: var(--green); }
-.details p { font-size: 9px; line-height: 1.9; color: var(--muted); }
-.details strong { display: block; font-size: 10px; font-weight: 500; color: var(--ink); }
+.details p { font-size: 12px; line-height: 1.9; color: var(--muted); }
+.details strong { display: block; font-size: 13px; font-weight: 500; color: var(--ink); }
 .details p span { display: block; margin-top: 3px; }
-.details a { flex-shrink: 0; font-size: 9px; }
+.details a { flex-shrink: 0; font-size: 12px; }
 @media (max-width: 1000px) {
   .layout { grid-template-columns: 1fr; gap: 30px; }
   .guide { display: grid; grid-template-columns: 1fr 1.15fr; column-gap: 32px; }
@@ -50,7 +50,7 @@
   .prompt { margin-top: 20px; }
   .previewHeader { padding: 15px; }
   .preview figcaption { padding: 12px 15px 4px; border-top: 0; }
-  .mobileHint { display: block; padding: 0 15px 13px; color: var(--muted); font-size: 8px; line-height: 1.8; }
+  .mobileHint { display: block; padding: 0 15px 13px; color: var(--muted); font-size: 11px; line-height: 1.8; }
   .details { align-items: flex-start; flex-direction: column; gap: 16px; }
-  .details strong { font-size: 9px; }
+  .details strong { font-size: 12px; }
 }
