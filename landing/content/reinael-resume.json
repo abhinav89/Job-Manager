@@ -1,0 +1,105 @@
+{
+  "source": "Reinael_Yabut CV.pdf (provided November 3, 2026)",
+  "profile": {
+    "first_name": "Reinael",
+    "last_name": "Yabut",
+    "mobile_no": "+63 939 943 1580",
+    "email": "reinaelyabut.work@gmail.com",
+    "linkedin": "https://linkedin.com/in/reinaelyabut",
+    "github": "https://github.com/yabswannalearn",
+    "portfolio": "https://www.reinaelyabut.dev",
+    "education": [{
+      "school_name": "Holy Angel University",
+      "course": "Bachelor of Science in Computer Engineering",
+      "location": "Angeles City, Philippines",
+      "description": "Dean's Lister, President's Lister, Best Software Design",
+      "date_range": ""
+    }],
+    "experience": [],
+    "projects": [],
+    "skills": []
+  },
+  "content": {
+    "summary": "Full Stack AI Engineer with experience building end-to-end applications and AI-driven automation systems. Comfortable across the stack, from React/Next.js frontends and FastAPI/Django/Flask backends to n8n workflows and LLM integrations. Proven track record designing scalable data pipelines, unified analytics dashboards, and agentic AI systems, and translating business requirements into production-ready tools.",
+    "experience": [
+      {
+        "company": "Freelance & Consulting",
+        "location": "Remote",
+        "title": "Full Stack & AI Automation Engineer",
+        "date": "Feb 2026 - Present",
+        "bullets": [
+          "Delivered production web apps and AI automations for SMB and enterprise clients across the US, Canada, Australia, and Thailand.",
+          "Automated an end-to-end logistics pipeline in Python (order intake, delivery dispatch, driver paperwork, and billing reconciliation), saving approximately $1,000/week in operational overhead.",
+          "Developed full-stack web and mobile budget tracking applications with real-time sync. Stack: Next.js, React Native, PostgreSQL.",
+          "Engineered automated QA pipelines and SEO content engines using n8n, OpenAI, and LangChain to eliminate manual regression checks."
+        ]
+      },
+      {
+        "company": "Parallaxx",
+        "location": "Auckland, New Zealand (Remote)",
+        "title": "AI Developer Intern",
+        "date": "Dec 2025 - Feb 2026",
+        "bullets": [
+          "Built an AI Agent market intelligence pipeline using Python, FastAPI, and the Gemini API. Cut reporting time from 3-5 days to under 30 seconds.",
+          "Built an autonomous AI agent workflow in n8n. Drove internal adoption by making the tool easy to use for operations staff.",
+          "Engineered a 1.5TB data migration script and automated validation checks, collaborating directly with the New Zealand client team."
+        ]
+      },
+      {
+        "company": "Silicon Barracks",
+        "location": "Central Luzon, Philippines (Remote)",
+        "title": "AI Developer (Freelance)",
+        "date": "Jun 2022 - Nov 2024",
+        "bullets": [
+          "Designed and optimized prompt engineering pipelines for large language models to improve output accuracy and reduce token latency.",
+          "Fine-tuned open-source models on domain-specific datasets and implemented RAG (Retrieval-Augmented Generation) systems for client applications.",
+          "Evaluated model performance, validated raw SQL datasets, and maintained 100% data integrity across all client deliverables."
+        ]
+      }
+    ],
+    "projects": [
+      {
+        "name": "Jimojim: Workout Split & Progress Tracker",
+        "tech": "Next.js, TypeScript, TailwindCSS, Supabase, Zustand",
+        "date": "2026",
+        "bullets": [
+          "Architected a full-stack workout tracking platform with dynamic PPL + Core split builders, live set loggers, and a drag-and-drop plan editor.",
+          "Integrated real-time exercise progress analytics and responsive volume tracking charts with Recharts, backed by Supabase for instant data sync."
+        ]
+      },
+      {
+        "name": "CV Tailor",
+        "tech": "Next.js, FastAPI, Go, PostgreSQL, Gemini API, LaTeX",
+        "date": "2026",
+        "bullets": [
+          "Built a full-stack career platform end to end with Next.js frontend, FastAPI backend, Go microservices, and PostgreSQL database.",
+          "Implemented AI resume tailoring, job tracking, and AI interview practice using the Gemini API and MediaPipe delivery metrics."
+        ]
+      },
+      {
+        "name": "PXX Spark Autonomous Agent",
+        "tech": "n8n, Docker, RLHF, Context Prompting, PostgreSQL",
+        "date": "2025 - 2026",
+        "bullets": [
+          "Built an autonomous AI agent using n8n and RLHF to automate operational tasks, achieving 100% operational uptime via proactive monitoring.",
+          "Cut market research turnaround from a full week to minutes by automating data collection and analysis end to end."
+        ]
+      },
+      {
+        "name": "O'Key-Ask AI Assessment Platform",
+        "tech": "React, NodeJS, Gemini, OCR, RAG, GCP, NLP, PostgreSQL",
+        "date": "2025 - 2026",
+        "bullets": [
+          "Developed a full-stack AI assessment kiosk aligned with DepEd and CHED standards, cutting assessment cycles by 97.78 percent.",
+          "Consolidated grading metrics into a unified dashboard, integrating LLMs for automated test generation and OCR-based grading."
+        ]
+      }
+    ],
+    "skills": {
+      "Full-Stack Development": "Python, JavaScript, TypeScript, React, Next.js, Node.js, FastAPI, Django, Flask, PostgreSQL, Supabase, pgvector, TailwindCSS",
+      "Automation & AI": "n8n, Zapier, LLM Engineering, Agentic AI, Prompt Engineering, RAG Pipelines, LangChain, GoHighLevel, Airtable, Make",
+      "Tools & Data": "Docker, Git, Playwright, SQL, Power BI, Google Colab, Data Validation, Raspberry Pi, CI/CD, Claude, Codex"
+    },
+    "certifications": "Data Engineering Associate | Azure AI Fundamentals (AI-900) | Machine Learning Fundamentals | Data Analyst Associate | AI Fundamentals | SQL (Advanced) | Lean Six Sigma Yellow Belt"
+  }
+}

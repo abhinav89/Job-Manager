@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import Image from "next/image";
 import ThemeToggle from "./theme-toggle";
 import CopyButton from "./copy-button";
 import ResumeGallery from "./resume-gallery";
@@ -81,7 +82,7 @@ function ResumePreview() {
   return <div className="demo-resume">
     <div className="demo-page-heading"><div><span className="eyebrow">TAILORED TO THE ROLE</span><h3>CV Studio</h3></div><span className="status status-ready"><Check size={11} />ATS check passed</span></div>
     <div className="resume-toolbar"><span className="active">Edit</span><span>Preview</span><span>LaTeX</span><span className="resume-page-count">1 / 1</span></div>
-    <div className="resume-paper"><div className="resume-name">ALEX RIVERA</div><div className="resume-contact">Product engineer · alex@example.com</div><div className="resume-section-name">Summary</div><p>Engineer building thoughtful tools with Python, TypeScript, and a clear understanding of the people who use them.</p><div className="resume-section-name">Experience</div><div className="resume-experience"><strong>Software developer</strong><span>Studio Co.</span></div><ul><li>Built internal reporting tools that made the team’s daily work easier to follow.</li><li>Worked across product and engineering to turn user feedback into useful features.</li></ul><div className="resume-section-name">Technical skills</div><p>Python · TypeScript · React · SQL</p></div>
+    <a className="resume-paper" href="/resume-templates/classic.pdf" target="_blank" rel="noreferrer" aria-label="Open Reinael Yabut’s Classic resume PDF"><Image src="/resume-templates/classic.png" width={850} height={1100} alt="Reinael Yabut’s complete one-page resume in the Classic format" sizes="210px" /></a>
   </div>;
 }
 
@@ -99,9 +100,9 @@ function WorkspacePreview() {
   const views: { value: View; label: string; icon: LucideIcon }[] = [{ value: "tracker", label: "Job tracker", icon: LayoutDashboard }, { value: "resume", label: "CV studio", icon: FileText }, { value: "interview", label: "Interview prep", icon: MessageSquare }];
   return <figure className="workspace-preview">
     <div className="window-bar"><span className="window-dots"><i /><i /><i /></span><span>cv_tailor / local workspace</span><span className="window-local"><span />On your machine</span></div>
-    <div className="demo-workspace"><aside className="demo-sidebar"><span className="demo-brand"><FileText size={16} />cv_tailor</span><span className="demo-nav-label">WORKSPACE</span><div className="demo-nav" aria-label="Workspace preview views">{views.map(({ value, label, icon: Icon }) => <button type="button" key={value} aria-pressed={view === value} onClick={() => setView(value)}><Icon size={14} /><span>{label}</span></button>)}</div><div className="demo-profile"><span>AR</span><div>Alex Rivera<small>Local profile</small></div></div></aside><div className="demo-main" aria-live="polite">{view === "tracker" ? <TrackerPreview /> : view === "resume" ? <ResumePreview /> : <InterviewPreview />}</div></div>
+    <div className="demo-workspace"><aside className="demo-sidebar"><span className="demo-brand"><FileText size={16} />cv_tailor</span><span className="demo-nav-label">WORKSPACE</span><div className="demo-nav" aria-label="Workspace preview views">{views.map(({ value, label, icon: Icon }) => <button type="button" key={value} aria-pressed={view === value} onClick={() => setView(value)}><Icon size={14} /><span>{label}</span></button>)}</div><div className="demo-profile"><span>RY</span><div>Reinael Yabut<small>Local profile</small></div></div></aside><div className="demo-main" aria-live="polite">{view === "tracker" ? <TrackerPreview /> : view === "resume" ? <ResumePreview /> : <InterviewPreview />}</div></div>
     <div className="agent-receipt"><span className="receipt-icon"><Terminal size={16} /></span><div><span className="eyebrow">FROM YOUR AGENT, TO YOUR WORKSPACE</span><p>{view === "tracker" ? "Application saved. Everything is right where you left it." : view === "resume" ? "CV draft saved. Ready for your review." : "Preparation saved. Your next session starts here."}</p></div><Check size={16} className="receipt-check" /></div>
-    <figcaption><span className="sample-dot" />Interactive preview · Sample data</figcaption>
+    <figcaption><span className="sample-dot" />Interactive preview · {view === "resume" ? "Reinael Yabut’s resume" : "Sample applications"}</figcaption>
   </figure>;
 }
 

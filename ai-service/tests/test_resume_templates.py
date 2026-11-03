@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import unicodedata
 
 import pytest
 from pydantic import ValidationError
@@ -31,8 +32,8 @@ def test_gallery_is_a_real_one_page_text_pdf_for_each_template(template_id):
         folder = ROOT / app / "public" / "resume-templates"
         reader = PdfReader(folder / f"{template_id}.pdf")
         assert len(reader.pages) == 1
-        text = reader.pages[0].extract_text()
-        assert all(word in text for word in ("ALEX", "MORGAN", "Northstar", "Python", "Coastal"))
+        text = "".join(unicodedata.normalize("NFKC", reader.pages[0].extract_text()).split())
+        assert all(word in text for word in ("REINAEL", "YABUT", "Parallaxx", "Python", "HolyAngelUniversity"))
         assert (folder / f"{template_id}.png").read_bytes().startswith(b"\x89PNG")
     assert (ROOT / "landing/public/resume-templates" / f"{template_id}.pdf").read_bytes() == (ROOT / "frontend/public/resume-templates" / f"{template_id}.pdf").read_bytes()
 

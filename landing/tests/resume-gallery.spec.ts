@@ -10,8 +10,8 @@ test("gallery opens the actual PDF, renders its text, and restores focus on Esca
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("heading", { name: "Minimal", exact: true })).toBeVisible();
   await expect(dialog.locator("canvas")).toBeVisible({ timeout: 20000 });
-  await expect(dialog.locator(".textLayer")).toContainText("ALEX MORGAN");
-  await expect(dialog.locator(".textLayer")).toContainText("Northstar Studio");
+  await expect(dialog.locator(".textLayer")).toContainText("REINAEL YABUT");
+  await expect(dialog.locator(".textLayer")).toContainText("Parallaxx");
   await page.keyboard.press("Escape");
   await expect(dialog).not.toBeVisible();
   await expect(trigger).toBeFocused();
@@ -29,7 +29,7 @@ test("mobile cards copy the chosen template prompt and render the Sidebar PDF", 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole("button", { name: "Preview Sidebar PDF", exact: true }).click();
   await expect(page.getByRole("dialog").locator("canvas")).toBeVisible({ timeout: 20000 });
-  await expect(page.getByRole("dialog").locator(".textLayer")).toContainText(/Coastal State\s*University/);
+  await expect(page.getByRole("dialog").locator(".textLayer")).toContainText(/Holy\s*Angel\s*University/);
   await page.getByRole("button", { name: "Close PDF preview", exact: true }).click();
   await expect(page.getByRole("dialog")).not.toBeVisible();
 });
