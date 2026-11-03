@@ -6,7 +6,7 @@ import json
 from uuid import uuid4
 from contextlib import closing
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 PRESETS = [{'core_skills_bank': ['Email & Calendar Management',
                        'Customer Service / Live Chat',
@@ -160,6 +160,9 @@ def apply_schema_changes(engine):
         # Serialize first-run initialization across independent CLI processes.
         connection.exec_driver_sql("BEGIN IMMEDIATE")
         Base.metadata.create_all(bind=connection)
+        columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(workspace_preferences)")}
+        if "calendar_connections" not in columns:
+            connection.exec_driver_sql("ALTER TABLE workspace_preferences ADD COLUMN calendar_connections JSON NOT NULL DEFAULT '[]'")
         connection.exec_driver_sql("INSERT OR IGNORE INTO workspaces (id) VALUES (1)")
         connection.exec_driver_sql("INSERT OR IGNORE INTO workspace_preferences (workspace_id, revision, workspace_uuid) VALUES (1, 1, ?)", (uuid4().hex,))
         table = ResumePreset.__table__

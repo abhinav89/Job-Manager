@@ -8,6 +8,8 @@ description: Set up and operate the local CV Tailor career workspace. Use for on
 Run `cv-tailor --json status` first. If no workspace exists, run `cv-tailor init`. The default installation is CLI only; add the optional UI with `cv-tailor dashboard install` and launch it with `cv-tailor dashboard`.
 Load `cv-tailor --json preferences get` after initialization. Reuse the saved resume default and tracking connection without repeating setup questions. During first onboarding, offer a resume default and optional tracking tool (SQLite-only is valid); save choices the user provides with `preferences set --revision N --input preferences.json`, preserving other fields. Do not treat a saved connection preference as proof that authorization or publishing succeeded. A preference never authorizes an automatic publish.
 Load the saved profile using `profile get`; gather missing facts through conversation and use cv-profile to save them. Use `applications list` to identify a requested existing application; pass its explicit ID to subsequent commands. Route the requested task to the focused skills below. Read only the skill you need.
+
+Reuse saved `calendar_connections` for calendar requests through cv-calendar. Calendar setup is separate from `tracking_connection`; preserve both providers when updating the replacement list, and do not treat remembered setup as permission to publish events.
 - Profile: cv-profile
 - Job discovery/intake: cv-jobs
 - Requirement comparison: cv-job-fit
@@ -17,6 +19,7 @@ Load the saved profile using `profile get`; gather missing facts through convers
 - Application management: cv-tracker
 - Visual application snapshots and pipeline charts: cv-snapshot
 - Optional tracking connections and publishing setup: cv-connect
+- Calendar connections, interviews, deadlines, and reminders: cv-calendar
 - Employer form filling and application answers: cv-apply
 - Interview preparation/practice: cv-interview
 - Coding exercises/review: cv-code-practice

@@ -44,6 +44,7 @@ class WorkspacePreferences(Base):
     # Null preserves the existing profile default until an explicit choice is saved.
     resume_template = Column(String(50), nullable=True)
     tracking_connection = Column(JSON, nullable=True)
+    calendar_connections = Column(JSON, nullable=False, default=list, server_default="[]")
 
 class Education(Base):
     __tablename__ = "education"

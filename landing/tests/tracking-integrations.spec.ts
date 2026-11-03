@@ -7,7 +7,7 @@ test("each destination copies its setup wizard and local credential instructions
   await page.goto("/#integrations");
   const section = page.locator("#integrations");
   await expect(section.getByRole("heading", { name: "Connect it anywhere." })).toBeVisible();
-  await expect(section.locator("article")).toHaveCount(7);
+  await expect(section.locator("article")).toHaveCount(9);
   for (const name of ["Obsidian", "Notion", "Google Sheets", "Markdown", "Airtable", "HubSpot", "GoHighLevel"]) {
     const card = section.getByRole("article").filter({ has: page.getByRole("heading", { name, exact: true }) });
     await expect(card.getByRole("img", { name: `${name} logo` })).toBeVisible();
@@ -62,6 +62,28 @@ test("connection cards and navigation fit mobile, tablet, and desktop", async ({
     await expect(page).toHaveURL(/#integrations$/);
     await expect(page.getByRole("heading", { name: "Connect it anywhere." })).toBeInViewport();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await expect(page.locator(".integration-card .copy-button")).toHaveCount(7);
+    await expect(page.locator(".integration-card .copy-button")).toHaveCount(9);
+  }
+});
+
+test("calendar prompts choose the provider and preserve existing connections", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: async (value: string) => { (window as Window & { copiedPrompt?: string }).copiedPrompt = value; } } });
+  });
+  await page.goto("/#integrations");
+  for (const name of ["Google Calendar", "Outlook"]) {
+    const card = page.getByRole("article").filter({ has: page.getByRole("heading", { name, exact: true }) });
+    await expect(card.getByRole("img", { name: `${name} calendar icon` })).toBeVisible();
+    await card.getByRole("button", { name: `Copy ${name} connection prompt`, exact: true }).click();
+    await expect(card.getByRole("status")).toHaveText("Copied to clipboard.");
+    const prompt = await page.evaluate(() => (window as Window & { copiedPrompt?: string }).copiedPrompt);
+    expect(prompt).toContain(`Connect ${name}`);
+    expect(prompt).toContain(".agents/skills/cv-calendar/SKILL.md");
+    expect(prompt).toContain("calendar_connections");
+    expect(prompt).toContain("preserving my other calendar and tracking connections");
+    expect(prompt).toContain("dry run before the first publish");
+    expect(prompt).toContain("ask for missing dates and interview times rather than guessing");
+    expect(prompt).toContain(".env.integrations");
+    expect(prompt).toContain("Connecting alone must not create events");
   }
 });

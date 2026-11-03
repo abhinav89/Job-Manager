@@ -7,6 +7,8 @@ description: Guide optional application-tracking publishing to notes, spreadshee
 
 Create a guided, local setup and publishing workflow for the user's chosen tool. SQLite remains the source of truth. This skill supplies the setup process; it does not imply a preconfigured connection or a built-in background sync service.
 
+For Google Calendar or Outlook event publishing, use [cv-calendar](../cv-calendar/SKILL.md). Calendar connections are saved separately and can coexist with the tracking connection.
+
 ## Scope and resume
 
 1. Read the root AGENTS.md. Run `cv-tailor --json status` and retain its actual `data_dir`; pass that same `--data-dir` on every subsequent CLI call.

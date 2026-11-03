@@ -14,6 +14,7 @@ def test_preferences_work_before_profile_and_new_applications_inherit(local_work
     initial = w.preferences_get()
     assert initial["resume_template"] == "classic"
     assert initial["tracking_connection"] is None
+    assert initial["calendar_connections"] == []
     saved = w.preferences_update({"resume_template": "sidebar", "tracking_connection": {"provider": "notion"}}, initial["revision"])
     assert saved["workspace_uuid"] == initial["workspace_uuid"]
     assert saved["tracking_connection"] == {"provider": "notion", "config_path": None}
@@ -62,6 +63,12 @@ def test_profile_and_default_template_stay_compatible_without_overwriting_applic
     {"tracking_connection": {"provider": "unknown"}},
     {"tracking_connection": {"provider": "notion", "config_path": ".env.integrations"}},
     {"tracking_connection": {"provider": "notion", "config_path": "https://example.com/config.json"}},
+    {"calendar_connections": None},
+    {"calendar_connections": [{"provider": "unknown"}]},
+    {"calendar_connections": [{"provider": "googlecalendar", "token": "fictional-private-value"}]},
+    {"calendar_connections": [{"provider": "outlook", "config_path": ".env.integrations"}]},
+    {"calendar_connections": [{"provider": "outlook", "config_path": "https://example.com/config.json"}]},
+    {"calendar_connections": [{"provider": "googlecalendar"}, {"provider": "googlecalendar"}]},
 ])
 def test_preference_schema_rejects_credentials_and_invalid_values(local_workspace, payload):
     w = local_workspace
@@ -107,11 +114,15 @@ def test_new_cli_processes_reload_preferences_and_isolate_workspaces(tmp_path):
     assert run(first, "status")["preferences"] is None
     initial = run(first, "preferences", "get")
     saved = run(first, "preferences", "set", "--revision", str(initial["revision"]), "--input", "-",
-        payload={"resume_template": "minimal", "tracking_connection": {"provider": "airtable"}})
+        payload={"resume_template": "minimal", "tracking_connection": {"provider": "airtable"},
+                 "calendar_connections": [{"provider": "googlecalendar"}, {"provider": "outlook"}]})
     assert run(first, "status")["preferences"] == saved
     assert run(first, "preferences", "get") == saved
+    assert saved["calendar_connections"] == [
+        {"provider": "googlecalendar", "config_path": None}, {"provider": "outlook", "config_path": None}]
     other = run(second, "preferences", "get")
     assert other["resume_template"] == "classic"
+    assert other["calendar_connections"] == []
     assert other["workspace_uuid"] != saved["workspace_uuid"]
     invalid = run(first, "preferences", "set", "--revision", str(saved["revision"]), "--input", "-",
         payload={"tracking_connection": {"provider": "notion", "token": "fictional-private-value"}}, success=False)
@@ -124,11 +135,62 @@ def test_http_and_cli_share_revisioned_preferences(local_workspace):
     w = local_workspace
     with TestClient(app) as client:
         initial = client.get("/api/preferences").json()
-        response = client.patch("/api/preferences", json={"revision": initial["revision"], "resume_template": "compact"})
+        response = client.patch("/api/preferences", json={"revision": initial["revision"], "resume_template": "compact",
+                                                        "calendar_connections": [{"provider": "outlook"}]})
         assert response.status_code == 200, response.text
         assert w.preferences_get() == response.json()
+        assert response.json()["calendar_connections"] == [{"provider": "outlook", "config_path": None}]
         assert client.get("/api/workspace").json()["preferences"] == response.json()
         assert client.patch("/api/preferences", json={"revision": initial["revision"], "resume_template": "modern"}).status_code == 409
         rejected = client.patch("/api/preferences", json={"revision": response.json()["revision"], "token": "fictional-private-value"})
         assert rejected.status_code == 422
         assert "fictional-private-value" not in rejected.text
+
+
+def test_both_calendars_coexist_with_tracking_and_disconnect_independently(local_workspace, tmp_path):
+    w = local_workspace
+    tracking = {"provider": "notion", "config_path": str(tmp_path / "tracker.json")}
+    google = {"provider": "googlecalendar", "config_path": str(tmp_path / "google.json")}
+    outlook = {"provider": "outlook", "config_path": str(tmp_path / "outlook.json")}
+    initial = w.preferences_update({"resume_template": "modern", "tracking_connection": tracking}, 1)
+    connected = w.preferences_update({"calendar_connections": [google, outlook]}, initial["revision"])
+    assert connected["tracking_connection"] == tracking
+    assert connected["resume_template"] == "modern"
+    assert w.context_export()["preferences"]["calendar_connections"] == [google, outlook]
+    with pytest.raises(w.WorkspaceError, match="Refresh"):
+        w.preferences_update({"calendar_connections": []}, initial["revision"])
+    changed = w.preferences_update({"resume_template": "classic"}, connected["revision"])
+    assert changed["calendar_connections"] == [google, outlook]
+    disconnected = w.preferences_update({"calendar_connections": [outlook]}, changed["revision"])
+    assert disconnected["calendar_connections"] == [outlook]
+    assert disconnected["tracking_connection"] == tracking
+    cleared = w.preferences_update({"calendar_connections": []}, disconnected["revision"])
+    assert cleared["calendar_connections"] == []
+    assert cleared["tracking_connection"] == tracking
+    assert cleared["workspace_uuid"] == initial["workspace_uuid"]
+
+
+def test_version_two_upgrade_preserves_preferences_and_backs_up_before_alter(local_workspace):
+    from cv_tailor import database
+    from cv_tailor.schema_changes import apply_schema_changes, SCHEMA_VERSION
+    w = local_workspace
+    saved = w.preferences_update({"resume_template": "modern", "tracking_connection": {"provider": "notion"}}, 1)
+    application = w.application_add({"company_name": "Example", "job_title": "Engineer"})
+    with database.engine.begin() as connection:
+        connection.exec_driver_sql("ALTER TABLE workspace_preferences DROP COLUMN calendar_connections")
+        connection.exec_driver_sql("PRAGMA user_version=2")
+    apply_schema_changes(database.engine)
+    assert w.preferences_get() == {**saved, "calendar_connections": []}
+    assert w.application_get(application["id"])["company_name"] == "Example"
+    database_path = Path(database.engine.url.database)
+    backups = list(database_path.parent.glob(database_path.name + ".backup-*"))
+    assert len(backups) == 1
+    with closing(sqlite3.connect(backups[0])) as backup:
+        assert backup.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert "calendar_connections" not in {row[1] for row in backup.execute("PRAGMA table_info(workspace_preferences)")}
+    updated = w.preferences_update({"calendar_connections": [{"provider": "googlecalendar"}]}, saved["revision"])
+    apply_schema_changes(database.engine)
+    assert w.preferences_get() == updated
+    assert len(list(database_path.parent.glob(database_path.name + ".backup-*"))) == 1
+    with database.engine.connect() as connection:
+        assert connection.exec_driver_sql("PRAGMA user_version").scalar_one() == SCHEMA_VERSION
