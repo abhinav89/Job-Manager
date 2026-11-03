@@ -126,6 +126,8 @@ h1 { font-family: var(--display); font-size: clamp(42px, 4.4vw, 61px); line-heig
 h1 em { font-weight: 400; color: var(--sage); }
 .hero-description { max-width: 430px; margin-top: 24px; font-size: 15px; line-height: 1.95; color: var(--secondary); }
 .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 23px; margin-top: 30px; }
+.hero-watch-link { display: inline-flex; align-items: center; gap: 9px; margin-top: 18px; color: var(--sage); font-size: 13px; line-height: 1.7; text-decoration: underline; text-underline-offset: 4px; }
+.hero-watch-link:hover { color: var(--green); }
 .hero-note { display: flex; align-items: flex-start; gap: 7px; color: var(--muted); font-size: 12px; line-height: 1.7; margin-top: 23px; }
 .hero-note svg { margin-top: 1px; color: var(--green); }
 .workspace-preview { position: relative; align-self: center; border: 1px solid var(--line-strong); background: var(--white); border-radius: 9px; box-shadow: 0 12px 35px -14px var(--preview-shadow), 0 1px 3px var(--small-shadow); }

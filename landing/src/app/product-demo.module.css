@@ -1,0 +1,14 @@
+.section { display: grid; grid-template-columns: minmax(0, 1fr); gap: 32px; padding-top: 88px; }
+.copy { min-width: 0; text-align: center; }
+.copy a { margin-top: 25px; color: var(--sage); font-size: 13px; }
+.player { min-width: 0; width: 100%; max-width: 1080px; justify-self: center; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--panel); box-shadow: 0 12px 35px -22px var(--preview-shadow); }
+.player video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; background: #f2f2e8; }
+.player video:focus-visible { outline: 2px solid var(--green); outline-offset: -3px; }
+@media (max-width: 1000px) {
+  .section { gap: 28px; padding-top: 68px; }
+}
+@media (max-width: 600px) {
+  .section { gap: 26px; padding-top: 56px; }
+  .copy h2 { font-size: clamp(25px, 8vw, 32px); }
+  .copy a { margin-top: 18px; }
+}
