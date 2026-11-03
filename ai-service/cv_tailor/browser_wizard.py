@@ -1,14 +1,14 @@
 """Native local wizard. Passwords are entered directly in the browser, never here."""
 import argparse
 import asyncio
-import json
 import os
+from pathlib import Path
 import queue
 import threading
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
 
-from cv_tailor.browser import (BROWSERS, BrowserError, launch_context, mcp_config,
+from cv_tailor.browser import (AGENT_CONFIGS, BROWSERS, BrowserError, connect_agent, launch_context,
                                profile_lease, save_site, site_settings, upload_dir)
 from cv_tailor.config import configure
 
@@ -29,11 +29,11 @@ async def sign_in(site, config, finished, events):
                 await context.close()
 
 
-def run(site=None):
+def run(site=None, agent=None, project=None):
     root = tk.Tk()
     root.title("CV Tailor — local browser sign-in")
-    root.geometry("680x700")
-    root.minsize(620, 670)
+    root.geometry("680x780")
+    root.minsize(620, 740)
     frame = ttk.Frame(root, padding=22)
     frame.pack(fill="both", expand=True)
     ttk.Label(frame, text="Connect a job site", font=("Segoe UI", 18, "bold")).pack(anchor="w")
@@ -45,14 +45,25 @@ def run(site=None):
     browser = tk.StringVar(value=configured["browser"])
     url = tk.StringVar(value=configured["url"])
     extra = tk.StringVar(value=", ".join(configured["allowed_origins"]))
-    host = tk.StringVar(value="standard")
+    apps = {"Antigravity": "antigravity", "Gemini CLI": "gemini", "Claude Code": "claude", "Codex": "codex", "OpenCode": "opencode"}
+    host = tk.StringVar(value=next((label for label, key in apps.items() if key == agent), "Antigravity"))
+    project_folder = tk.StringVar(value=str(Path(project or Path.cwd()).expanduser().resolve()))
     for label, variable in (("Site name", name), ("Start URL", url), ("Additional allowed origins (optional, comma separated)", extra)):
         ttk.Label(frame, text=label).pack(anchor="w")
         ttk.Entry(frame, textvariable=variable).pack(fill="x", pady=(3, 10))
     ttk.Label(frame, text="Browser").pack(anchor="w")
     ttk.Combobox(frame, textvariable=browser, values=BROWSERS, state="readonly").pack(fill="x", pady=(3, 10))
-    ttk.Label(frame, text="Agent configuration format (standard MCP JSON or OpenCode)").pack(anchor="w")
-    ttk.Combobox(frame, textvariable=host, values=("standard", "opencode"), state="readonly").pack(fill="x", pady=(3, 10))
+    ttk.Label(frame, text="Your AI app (only needed for the optional browser connection)").pack(anchor="w")
+    ttk.Combobox(frame, textvariable=host, values=tuple(apps), state="readonly").pack(fill="x", pady=(3, 10))
+    project_row = ttk.Frame(frame)
+    project_row.pack(fill="x", pady=(0, 8))
+    ttk.Label(project_row, textvariable=project_folder, wraplength=470).pack(side="left", anchor="w")
+
+    def choose_project():
+        chosen = filedialog.askdirectory(parent=root, title="Choose your project folder", initialdir=project_folder.get())
+        if chosen:
+            project_folder.set(chosen)
+    ttk.Button(project_row, text="Change project", command=choose_project).pack(side="right")
     message = tk.StringVar(value="Sign in, return to the job page, then save and close the browser.")
     ttk.Label(frame, textvariable=message, wraplength=590).pack(anchor="w", pady=8)
     events = queue.Queue()
@@ -89,10 +100,14 @@ def run(site=None):
         message.set("Closing the browser and saving its local session…")
         finished.set()
 
-    def copy_config():
-        root.clipboard_clear()
-        root.clipboard_append(json.dumps(mcp_config(active["site"] or name.get().strip(), host.get()), indent=2))
-        message.set("MCP configuration copied. Add it to your agent's project MCP settings; restart its MCP connection.")
+    def connect():
+        try:
+            connect_agent(active["site"] or name.get().strip(), apps[host.get()], project_folder.get())
+        except (BrowserError, OSError, UnicodeError) as exc:
+            messagebox.showerror("Connection setup", str(exc) if isinstance(exc, BrowserError) else
+                                 "Could not save this project's settings. Check the folder permissions and retry.", parent=root)
+            return
+        message.set(f"Setup saved for {host.get()}. Reload its browser connection or restart the AI app, then ask it to continue your application.")
 
     def poll():
         while not events.empty():
@@ -109,7 +124,7 @@ def run(site=None):
                     save_site(active["site"], config["browser"], config["url"], config["allowed_origins"], login_saved=True)
                     upload_dir(active["site"])
                     config_button.configure(state="normal")
-                    message.set("Session saved locally. Passwords were not read. Copy the MCP configuration to connect your agent.")
+                    message.set("Login session saved locally. Click Connect to my AI app to finish setup.")
                 elif event == "error":
                     message.set(detail or "Could not open this browser. Close its MCP session and check its installation. Brave, Edge and Chrome must be installed locally; other engines use python -m playwright install BROWSER.")
                 else:
@@ -120,7 +135,7 @@ def run(site=None):
     start_button.pack(fill="x", pady=3)
     finish_button = ttk.Button(frame, text="Save session and close browser", command=finish, state="disabled")
     finish_button.pack(fill="x", pady=3)
-    config_button = ttk.Button(frame, text="Copy agent MCP configuration", command=copy_config,
+    config_button = ttk.Button(frame, text="Connect to my AI app", command=connect,
                                state="normal" if site else "disabled")
     config_button.pack(fill="x", pady=3)
 
@@ -139,9 +154,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-dir")
     parser.add_argument("--site")
+    parser.add_argument("--agent", choices=AGENT_CONFIGS)
+    parser.add_argument("--project")
     args = parser.parse_args()
     configure(args.data_dir)
-    run(args.site)
+    run(args.site, args.agent, args.project)
 
 
 if __name__ == "__main__":

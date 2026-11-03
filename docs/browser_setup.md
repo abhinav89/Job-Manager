@@ -31,7 +31,33 @@ Browser state is kept under `DATA_DIR/browser/profiles/SITE/BROWSER/`, outside t
 
 ## Connect the agent
 
-The wizard can copy an MCP configuration snippet. You can also generate it with:
+Choose your AI app in the wizard and click **Connect to my AI app**. It saves the connection in the displayed project without copying JSON or editing settings. The agent can preselect the app and project when opening the wizard:
+
+```text
+cv-tailor browser login --site onlinejobs --agent antigravity --project ABSOLUTE_PROJECT_FOLDER
+```
+
+The agent can also finish that setup directly, without another user step:
+
+```text
+cv-tailor browser connect --site onlinejobs --agent antigravity --project ABSOLUTE_PROJECT_FOLDER
+```
+
+Supported app choices and project targets:
+
+| App | `--agent` | Project settings |
+| --- | --- | --- |
+| Antigravity | `antigravity` | `.agents/mcp_config.json` |
+| Gemini CLI | `gemini` | `.gemini/settings.json` |
+| Claude Code | `claude` | `.mcp.json` |
+| Codex | `codex` | `.codex/config.toml` |
+| OpenCode | `opencode` | `opencode.json` |
+
+Existing unrelated settings and servers are preserved. Reconnecting an identical entry makes no changes. Conflicting entries, malformed settings, configurations pointing outside the project, and home/drive-root targets are rejected without replacement. Existing OpenCode JSONC files are left intact; use OpenCode's connection manager for that case. Codex TOML is extended with one validated table, preserving its comments; layouts that cannot accept that table stay unchanged. No global agent settings are modified. Codex loads project configuration only for trusted projects, and hosts may ask you to approve project tools. Connection setup does not change those controls.
+
+Reload the connection or restart the AI app once if it does not discover the tools automatically. The wizard reports **setup saved**, not a verified connection. Native browser/computer sessions still need none of this setup.
+
+For advanced/manual setup, generate a snippet with:
 
 ```text
 cv-tailor --json browser mcp-config --site onlinejobs
@@ -39,13 +65,13 @@ cv-tailor --json browser mcp-config --site onlinejobs
 cv-tailor --json browser mcp-config --site onlinejobs --host opencode
 ```
 
-Standard output uses the `mcpServers` JSON shape and absolute executable/workspace paths. OpenCode output uses its `mcp` object with a local command array. The wizard offers both formats. Merge the server entry into your chosen host's project MCP settings, preserving other settings. Gemini CLI uses `.gemini/settings.json`; Claude Code uses its project MCP configuration; other hosts should register the same executable and argument list through their documented MCP setup. This server is not tied to Gemini: Claude Code, Codex, OpenCode, Antigravity and other compatible agents can use it. Windows configurations must use `python.exe` for MCP stdio, even when the wizard runs under `pythonw.exe`. Do not install a second unrestricted browser MCP server against the private profile. The repository ignores machine-specific `.gemini/` configuration.
+Standard output uses the `mcpServers` JSON shape and absolute executable/workspace paths. OpenCode output uses its `mcp` object with a local command array. Windows configurations must use `python.exe` for MCP stdio, even when the wizard runs under `pythonw.exe`. Do not install a second unrestricted browser MCP server against the private profile. Machine-specific configuration is ignored in this repository; keep personal executable paths private in other projects too.
 
 Restart the host's MCP connection and verify that the `cv-browser-SITE` tools are discovered. The server command is `cv-tailor browser serve --site SITE`, using stdio; it starts a visible task browser. It begins on a blank page without inspecting restored tabs. Use `browser_open` with the intended application URL. The server does not expose an HTTP debugging port.
 
 ### Antigravity fallback setup
 
-If Antigravity's native browser works for your chosen browser, use it with `cv-apply` directly. If you need this adapter instead, place the generated standard JSON in the workspace's `.agents/mcp_config.json`, merging its server entry with any existing servers. This local configuration is ignored by Git. In Antigravity CLI, use `/mcp` to reload configurations and check that `cv-browser-onlinejobs` is connected. In the IDE, open the agent panel's **… → MCP Servers → Manage MCP Servers**, then refresh the server. Antigravity documents its workspace configuration and management UI in the [official MCP guide](https://antigravity.google/docs/mcp/).
+If Antigravity's native browser works for your chosen browser, use it with `cv-apply` directly. If you need this adapter instead, select Antigravity and click **Connect to my AI app**, or have the agent run `browser connect --site onlinejobs --agent antigravity --project ABSOLUTE_PROJECT_FOLDER`. In Antigravity CLI, use `/mcp` to reload configurations and check that `cv-browser-onlinejobs` is connected. In the IDE, open the agent panel's **… → MCP Servers → Manage MCP Servers**, then refresh the server. Antigravity documents its workspace configuration and management UI in the [official MCP guide](https://antigravity.google/docs/mcp/).
 
 Finish local sign-in and close the wizard browser before connecting the server. Ask the agent to use `cv-apply` with the `cv-browser-onlinejobs` tools and the tracked application/document IDs you selected; invoking Antigravity's native `/browser` command is unnecessary for this adapter. Native and wizard profiles do not share logins.
 
