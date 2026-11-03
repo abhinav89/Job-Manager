@@ -56,10 +56,6 @@ const questions = [
   { title: "Can I switch between agents?", answer: "Yes. Claude Code, Codex, OpenCode, and Antigravity can use the included skills and CLI commands against the same workspace. CV Tailor reloads your saved career data; each harness keeps its own chat history." },
 ];
 
-function Brand() {
-  return <span className="brand"><span className="brand-mark"><FileText size={20} strokeWidth={1.6} /></span><span>cv_tailor<span className="brand-dot">.</span></span></span>;
-}
-
 function ArrowLink({ children, href }: { children: ReactNode; href: string }) {
   return <a className="button button-secondary" href={href}>{children}<ArrowRight size={15} /></a>;
 }
@@ -102,8 +98,8 @@ function WorkspacePreview() {
   const [view, setView] = useState<View>("tracker");
   const views: { value: View; label: string; icon: LucideIcon }[] = [{ value: "tracker", label: "Job tracker", icon: LayoutDashboard }, { value: "resume", label: "CV studio", icon: FileText }, { value: "interview", label: "Interview prep", icon: MessageSquare }];
   return <figure className="workspace-preview">
-    <div className="window-bar"><span className="window-dots"><i /><i /><i /></span><span>cv_tailor / local workspace</span><span className="window-local"><span />On your machine</span></div>
-    <div className="demo-workspace"><aside className="demo-sidebar"><span className="demo-brand"><FileText size={16} />cv_tailor</span><span className="demo-nav-label">WORKSPACE</span><div className="demo-nav" aria-label="Workspace preview views">{views.map(({ value, label, icon: Icon }) => <button type="button" key={value} aria-pressed={view === value} onClick={() => setView(value)}><Icon size={14} /><span>{label}</span></button>)}</div><div className="demo-profile"><span>RY</span><div>Reinael Yabut<small>Local profile</small></div></div></aside><div className="demo-main" aria-live="polite">{view === "tracker" ? <TrackerPreview /> : view === "resume" ? <ResumePreview /> : <InterviewPreview />}</div></div>
+    <div className="window-bar"><span className="window-dots"><i /><i /><i /></span><span>CV Tailor / local workspace</span><span className="window-local"><span />On your machine</span></div>
+    <div className="demo-workspace"><aside className="demo-sidebar"><span className="demo-brand">CV Tailor</span><span className="demo-nav-label">WORKSPACE</span><div className="demo-nav" aria-label="Workspace preview views">{views.map(({ value, label, icon: Icon }) => <button type="button" key={value} aria-pressed={view === value} onClick={() => setView(value)}><Icon size={14} /><span>{label}</span></button>)}</div><div className="demo-profile"><span>RY</span><div>Reinael Yabut<small>Local profile</small></div></div></aside><div className="demo-main" aria-live="polite">{view === "tracker" ? <TrackerPreview /> : view === "resume" ? <ResumePreview /> : <InterviewPreview />}</div></div>
     <div className="agent-receipt"><span className="receipt-icon"><Terminal size={16} /></span><div><span className="eyebrow">FROM YOUR AGENT, TO YOUR WORKSPACE</span><p>{view === "tracker" ? "Application saved. Everything is right where you left it." : view === "resume" ? "CV draft saved. Ready for your review." : "Preparation saved. Your next session starts here."}</p></div><Check size={16} className="receipt-check" /></div>
     <figcaption><span className="sample-dot" />Interactive preview · {view === "resume" ? "Reinael Yabut’s resume" : "Sample applications"}</figcaption>
   </figure>;
@@ -125,7 +121,7 @@ export default function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   return <>
     <a className="skip-link" href="#main">Skip to content</a>
-    <header className="site-header"><div className="header-inner"><a href="#" aria-label="CV Tailor home"><Brand /></a><nav className="desktop-nav" aria-label="Main navigation"><a href="#workflow">How it works</a><a href="#features">Features</a><a href="#templates">Templates</a><a href="#apply">Apply</a><a href="#integrations">Connect</a><a href="#skills">The skills</a></nav><div className="header-actions"><ThemeToggle /><StarLink className="header-star" /><button className="menu-toggle" type="button" aria-label={menuOpen ? "Close menu" : "Open menu"} aria-expanded={menuOpen} aria-controls="mobile-navigation" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X size={20} /> : <Menu size={20} />}</button></div></div><nav hidden={!menuOpen} id="mobile-navigation" className="mobile-nav" aria-label="Mobile navigation">{[["#workflow", "How it works"], ["#features", "Features"], ["#templates", "Templates"], ["#apply", "Application forms"], ["#integrations", "Connect your tools"], ["#skills", "The skills"], ["#install", "Get started"]].map(([href, label]) => <a key={href} href={href} onClick={() => setMenuOpen(false)}>{label}<ArrowUpRight size={15} /></a>)}</nav></header>
+    <header className="site-header"><div className="header-inner"><a className="brand" href="#" aria-label="CV Tailor home">CV Tailor</a><nav className="desktop-nav" aria-label="Main navigation"><a href="#workflow">How it works</a><a href="#features">Features</a><a href="#templates">Templates</a><a href="#apply">Apply</a><a href="#integrations">Connect</a><a href="#skills">The skills</a></nav><div className="header-actions"><ThemeToggle /><StarLink className="header-star" /><button className="menu-toggle" type="button" aria-label={menuOpen ? "Close menu" : "Open menu"} aria-expanded={menuOpen} aria-controls="mobile-navigation" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X size={20} /> : <Menu size={20} />}</button></div></div><nav hidden={!menuOpen} id="mobile-navigation" className="mobile-nav" aria-label="Mobile navigation">{[["#workflow", "How it works"], ["#features", "Features"], ["#templates", "Templates"], ["#apply", "Application forms"], ["#integrations", "Connect your tools"], ["#skills", "The skills"], ["#install", "Get started"]].map(([href, label]) => <a key={href} href={href} onClick={() => setMenuOpen(false)}>{label}<ArrowUpRight size={15} /></a>)}</nav></header>
     <main id="main">
       <section className="hero section" aria-labelledby="hero-title"><div className="hero-copy"><span className="hero-eyebrow"><span />YOUR AGENT. YOUR MACHINE.</span><h1 id="hero-title">Your career workspace,<br /><em>open source.</em></h1><p className="hero-description">Tailor CVs, fill application forms, and prepare for interviews with the AI agent you already use. Keep your applications together in a local workspace.</p><div className="hero-actions"><StarLink className="button" /><ArrowLink href="#install">Get started</ArrowLink></div><div className="hero-note"><Check size={13} /><span>MIT licensed. Local data. No CV Tailor account.</span></div></div><WorkspacePreview /></section>
       <div className="agent-strip section"><span>AT HOME IN YOUR AGENT</span><div><span><Terminal size={15} />Claude Code</span><span><Terminal size={15} />Codex</span><span><Terminal size={15} />OpenCode</span><span><Terminal size={15} />Antigravity</span></div><p>Your agent. Your choice.</p></div>
@@ -145,6 +141,17 @@ export default function LandingPage() {
       <section className="faq-section section" aria-labelledby="faq-title"><div><span className="eyebrow">A FEW THINGS TO KNOW</span><h2 id="faq-title">Before you<br />make yourself at home.</h2><p>CLI-friendly. Dashboard-ready.<br />Built around your own workspace.</p></div><div className="faq-list">{questions.map(question => <details key={question.title}><summary>{question.title}<ChevronDown size={16} /></summary><p>{question.answer}</p></details>)}</div></section>
       <section className="closing-section section" id="open-source" aria-labelledby="open-source-title"><div className="closing-mark"><GitBranch size={26} strokeWidth={1.4} /></div><a className="license-badge" href={`${REPO}/blob/main/LICENSE`} target="_blank" rel="noreferrer"><span />OPEN SOURCE · MIT LICENSE</a><h2 id="open-source-title">Make it yours.<br />Help make it better.</h2><p>Read the code, share an idea, or contribute a fix.<br />A star helps more people find their own career workspace.</p><div className="community-actions"><StarLink className="button" /><ArrowLink href="#install">Start locally</ArrowLink></div><nav className="community-links" aria-label="Contribute to CV Tailor"><a href={REPO} target="_blank" rel="noreferrer">Browse the code<ArrowUpRight size={12} /></a><a href={`${REPO}/issues`} target="_blank" rel="noreferrer">Report a bug or share an idea<ArrowUpRight size={12} /></a><a href={`${REPO}/pulls`} target="_blank" rel="noreferrer">Explore pull requests<ArrowUpRight size={12} /></a></nav></section>
     </main>
-    <footer className="site-footer section"><a href="#" aria-label="CV Tailor home"><Brand /></a><p>Open source. Local by default. MIT licensed.</p><nav aria-label="Footer navigation"><a href={README} target="_blank" rel="noreferrer">Documentation<ArrowUpRight size={12} /></a><a href={REPO} target="_blank" rel="noreferrer">Star on GitHub<Star size={12} /></a><a href={`${REPO}/issues`} target="_blank" rel="noreferrer">Feedback<ArrowUpRight size={12} /></a></nav></footer>
+    <footer className="site-footer" id="footer">
+      <div className="footer-content section">
+        <p className="footer-message">Your next chapter starts here.</p>
+        <p className="footer-note">Open source. Local by default.</p>
+        <nav aria-label="Footer navigation">
+          <a href={README} target="_blank" rel="noreferrer">Documentation<ArrowUpRight size={12} /></a>
+          <a href={REPO} target="_blank" rel="noreferrer">Star on GitHub<Star size={12} /></a>
+          <a href={`${REPO}/issues`} target="_blank" rel="noreferrer">Feedback<ArrowUpRight size={12} /></a>
+        </nav>
+      </div>
+      <div className="footer-landscape" aria-hidden="true" />
+    </footer>
   </>;
 }
