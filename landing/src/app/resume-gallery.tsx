@@ -26,12 +26,13 @@ export default function ResumeGallery() {
     <section id="templates" className="resume-gallery section" aria-labelledby="templates-title">
       <div className="section-heading">
         <div><span className="eyebrow">{RESUME_TEMPLATES.length} RESUME FORMATS</span><h2 id="templates-title">Find your format.</h2></div>
+        <p>Every format uses Reinael Yabut’s resume. Preview the full PDF to compare.</p>
       </div>
       <div className="resume-gallery-grid">
         {RESUME_TEMPLATES.map(template => (
           <article className="resume-template-card" key={template.id}>
             <button type="button" className="resume-template-thumbnail" aria-label={`Enlarge ${template.name} resume PDF`} onClick={() => preview(template)}>
-              <Image src={`/resume-templates/${template.id}.png`} alt={`${template.name} resume sample`} width={850} height={1100} />
+              <Image src={`/resume-templates/${template.id}.png`} alt={`Reinael Yabut’s resume in the ${template.name} format`} width={850} height={1100} />
               <span className="thumbnail-expand" aria-hidden="true"><Expand size={16} /></span>
             </button>
             <div className="resume-template-controls">
@@ -48,7 +49,7 @@ export default function ResumeGallery() {
         <div className="pdf-preview-content">
           <header><h3 id="resume-preview-title">{selected?.name}</h3><button type="button" aria-label="Close PDF preview" onClick={() => dialog.current?.close()}><X size={20} /></button></header>
           {selected && <PdfPreview key={selected.id} file={`/resume-templates/${selected.id}.pdf`} />}
-          <footer><span>Sample resume</span>{selected && <a href={`/resume-templates/${selected.id}.pdf`} target="_blank" rel="noreferrer">Open PDF<ArrowUpRight size={13} /></a>}</footer>
+          <footer><span>Reinael Yabut’s resume</span>{selected && <a href={`/resume-templates/${selected.id}.pdf`} target="_blank" rel="noreferrer">Open PDF<ArrowUpRight size={13} /></a>}</footer>
         </div>
       </dialog>
     </section>

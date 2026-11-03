@@ -1,7 +1,7 @@
-"""Render gallery assets from the real templates and a fictional sample profile.
+"""Render every gallery format from the owner's supplied resume.
 
-Run with Python 3.12+, the backend dependencies, Tectonic, and Poppler installed.
-The same PDFs and thumbnails are published by the landing page and local dashboard.
+Run Python with -X utf8, backend dependencies, Tectonic, and Poppler installed.
+The landing page and dashboard share the same PDFs and thumbnails.
 """
 from pathlib import Path
 import os
@@ -10,44 +10,55 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import unicodedata
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "ai-service"))
 
 from cv_tailor.models.schemas import UserProfile
-from cv_tailor.services.latex_assembly import assemble_latex
+from cv_tailor.services.latex_assembly import assemble_latex, _build_education, _escape_latex
 from cv_tailor.services.pdf_service import compile_latex_to_pdf, pdf_page_count
 from cv_tailor.services.templates import TEMPLATES, TEMPLATE_CATALOG
 
-PROFILE = UserProfile(
-    first_name="Alex", last_name="Morgan", mobile_no="(555) 014-0190",
-    email="alex.morgan@example.com", github="https://github.com/alexmorgan",
-    portfolio="https://alexmorgan.example.com", education=[dict(
-        school_name="Coastal State University", course="B.S. Computer Science",
-        location="Portland, OR", date_range="2017 - 2021", description="")],
-    experience=[], projects=[], skills=[], certifications=[],
-)
-CONTENT = {
-    "summary": "Software engineer building useful tools for product and operations teams. Works across Python, TypeScript, and SQL, with a focus on reliable services, clear interfaces, and thoughtful documentation.",
-    "experience": [
-        dict(company="Northstar Studio", title="Software Engineer", location="Remote", date="2023 - Present", bullets=[
-            "Built a reporting workspace with Python and React that brought customer and operations data into one view.",
-            "Reduced report preparation time by 35% through scheduled data checks and reusable export workflows.",
-            "Partnered with designers and support teams to turn customer feedback into focused product improvements."]),
-        dict(company="Fieldwork Labs", title="Junior Developer", location="Portland, OR", date="2021 - 2023", bullets=[
-            "Developed REST endpoints and internal dashboards for a small product team using TypeScript and PostgreSQL.",
-            "Added integration tests and release documentation to make changes easier to review and maintain."]),
-    ],
-    "projects": [
-        dict(name="Open Notes", tech="Python, SQLite, React", date="2024", bullets=[
-            "Created a local research notebook with full-text search, Markdown export, and a keyboard-friendly interface."]),
-        dict(name="Community Transit Map", tech="TypeScript, Public Data", date="2023", bullets=[
-            "Built an accessible route explorer with saved stops and clear service information for local commuters."]),
-    ],
-    "skills": {"Languages": "Python, TypeScript, SQL", "Frameworks": "React, FastAPI, Node.js",
-               "Tools": "Git, Docker, Linux", "Practice": "Testing, API design, documentation"},
-    "certifications": "AWS Certified Cloud Practitioner - 2024",
-}
+
+def normalize(text):
+    # TeX may hyphenate words at line breaks, depending on the format's width.
+    return "".join(unicodedata.normalize("NFKC", text).replace("\u2019", "'").split()).replace("-", "").replace("\u00ad", "")
+
+
+def gallery_latex(profile, content, template_id):
+    latex = assemble_latex(profile, content, template_id)
+    latex = latex.replace("[letterpaper,11pt]", "[letterpaper,10pt]")
+    if template_id in {"classic", "modern"}:
+        latex = latex.replace(r"\vspace{-13pt}", r"\vspace{0pt}")
+    if template_id == "modern":
+        # Helvetica needs T1 encoding; small caps split extracted heading words.
+        latex = latex.replace(r"\usepackage{helvet}", "\\usepackage[T1]{fontenc}\n" + r"\usepackage{helvet}")
+        latex = latex.replace(r"\scshape", "")
+    if template_id == "sidebar":
+        # Stack education details so long locations have the full sidebar width.
+        education = []
+        for entry in profile.education:
+            degree = entry.course + (" --- " + entry.description if entry.description else "")
+            education.append(r"\item\textbf{" + _escape_latex(entry.school_name) + r"}\\ "
+                             + _escape_latex(entry.location) + r"\\ \emph{" + _escape_latex(degree) + "}")
+        latex = latex.replace(_build_education(profile), "\n".join(education))
+    # Fit the complete composed resume rather than shortening facts or letting
+    # a second page disappear from the thumbnail.
+    layout = "\\usepackage{adjustbox}\n"
+    if template_id not in {"classic", "modern"}:
+        layout += r"""\setlength{\parskip}{1pt}
+\setlist[itemize]{itemsep=1pt,parsep=0pt,topsep=2pt,partopsep=0pt}
+\titlespacing*{\section}{0pt}{6pt}{3pt}
+"""
+    layout += r"""\begin{document}
+\begin{adjustbox}{max totalsize={\textwidth}{0.98\textheight},center}
+\begin{minipage}{\textwidth}
+"""
+    if template_id not in {"classic", "modern"}:
+        layout += "\\small\n"
+    latex = latex.replace(r"\begin{document}", layout)
+    return latex.replace(r"\end{document}", "\\end{minipage}\n\\end{adjustbox}\n\\end{document}")
 
 
 def write_catalogs():
@@ -62,30 +73,39 @@ def main():
     write_catalogs()
     os.environ.setdefault("EXECUTION_BACKEND", "local")
     os.environ.setdefault("ENVIRONMENT", "development")
-    poppler = shutil.which("pdftoppm")
-    if not poppler:
-        raise SystemExit("Install Poppler (pdftoppm) to render gallery thumbnails.")
-    from pypdf import PdfReader
+    poppler, pdftotext = shutil.which("pdftoppm"), shutil.which("pdftotext")
+    if not poppler or not pdftotext:
+        raise SystemExit("Install Poppler (pdftoppm and pdftotext) to render and check the gallery.")
+    resume = json.loads((ROOT / "landing/content/reinael-resume.json").read_text(encoding="utf-8"))
+    profile = UserProfile.model_validate(resume["profile"])
+    content = resume["content"]
+    expected = ["REINAEL YABUT", content["summary"], profile.email]
+    for entry in content["experience"] + content["projects"]:
+        expected.extend(value for value in entry.values() if isinstance(value, str))
+        expected.extend(entry["bullets"])
+    expected.extend(content["skills"].values())
+    expected.extend(content["certifications"].split(" | "))
+    expected.extend([profile.education[0].school_name, profile.education[0].course])
     destinations = [ROOT / app / "public" / "resume-templates" for app in ("landing", "frontend")]
     for destination in destinations:
         destination.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="cv-tailor-gallery-") as temporary:
         work = Path(temporary)
         for template_id in TEMPLATES:
-            pdf = compile_latex_to_pdf(assemble_latex(PROFILE, CONTENT, template_id))
+            pdf = compile_latex_to_pdf(gallery_latex(profile, content, template_id))
             if pdf_page_count(pdf) != 1:
-                raise ValueError(f"{template_id} sample does not fit one page")
+                raise ValueError(f"{template_id} resume does not fit one page")
             source = work / f"{template_id}.pdf"
             source.write_bytes(pdf)
-            text = PdfReader(source).pages[0].extract_text()
-            for expected in ("ALEX", "MORGAN", "Northstar", "Python", "Coastal"):
-                if expected not in text:
-                    raise ValueError(f"{template_id} PDF is missing extractable text: {expected}")
+            text = subprocess.run([pdftotext, "-raw", str(source), "-"], capture_output=True, encoding="utf-8", check=True).stdout
+            for fact in expected:
+                if normalize(fact) not in normalize(text):
+                    raise ValueError(f"{template_id} PDF is missing resume content: {fact}")
             subprocess.run([poppler, "-f", "1", "-singlefile", "-r", "100", "-png", str(source), str(work / template_id)], check=True)
             for destination in destinations:
                 shutil.copyfile(source, destination / source.name)
                 shutil.copyfile(work / f"{template_id}.png", destination / f"{template_id}.png")
-            print(f"{template_id}: one page; sample text extracted; thumbnail rendered", flush=True)
+            print(f"{template_id}: one page; complete resume text verified; thumbnail rendered", flush=True)
 
 
 if __name__ == "__main__":
