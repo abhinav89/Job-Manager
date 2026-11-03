@@ -13,11 +13,15 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
+import tomllib
 from urllib.parse import urlsplit
 
 from cv_tailor.config import data_dir
 
 BROWSERS = ("brave", "msedge", "chrome", "chromium", "firefox", "webkit")
+AGENT_CONFIGS = {"antigravity": ".agents/mcp_config.json", "gemini": ".gemini/settings.json",
+                 "claude": ".mcp.json", "codex": ".codex/config.toml", "opencode": "opencode.json"}
 
 
 class BrowserError(ValueError):
@@ -210,7 +214,73 @@ def mcp_config(site, host="standard"):
     return {"mcpServers": {f"cv-browser-{site}": {"command": str(executable), "args": args}}}
 
 
-def open_wizard(site=None):
+def connect_agent(site, agent, project):
+    """Add one local server without exposing or replacing other agent settings."""
+    if agent not in AGENT_CONFIGS:
+        raise BrowserError("Choose Antigravity, Gemini CLI, Claude Code, Codex or OpenCode.")
+    project = Path(project).expanduser().resolve()
+    if not project.is_dir() or project == Path.home().resolve() or project == Path(project.anchor):
+        raise BrowserError("Choose the project folder, not your home folder or a drive root.")
+    target = (project / AGENT_CONFIGS[agent]).resolve()
+    if not target.is_relative_to(project):
+        raise BrowserError("The project's configuration points outside this project. No settings were changed.")
+    if agent == "opencode" and target.with_suffix(".jsonc").exists():
+        raise BrowserError("This project uses OpenCode JSONC settings. Use OpenCode's MCP manager to preserve those comments; no settings were changed.")
+    name, entry = next(iter(mcp_config(site)["mcpServers"].items()))
+    original = target.read_bytes() if target.exists() else None
+    try:
+        text = original.decode("utf-8-sig") if original is not None else ""
+        if agent == "codex":
+            config = tomllib.loads(text)
+            servers = config.get("mcp_servers", {})
+            entry = {**entry, "startup_timeout_sec": 60}
+            # ponytail: append a new table; preserve existing TOML and comments.
+            # Conflicting/inline tables stay unchanged instead of rewriting TOML.
+            updated = text.rstrip() + f'\n\n[mcp_servers."{name}"]\n' + "\n".join(
+                f"{key} = {json.dumps(value, ensure_ascii=False)}" for key, value in entry.items()) + "\n"
+        else:
+            config = json.loads(text) if text.strip() else {}
+            key = "mcp" if agent == "opencode" else "mcpServers"
+            if agent == "opencode":
+                entry = mcp_config(site, "opencode")["mcp"][name]
+            elif agent == "claude":
+                entry = {"type": "stdio", **entry}
+            servers = config.setdefault(key, {})
+            updated = None
+        if not isinstance(servers, dict):
+            raise ValueError
+        existing = servers.get(name)
+        if existing is not None:
+            if not isinstance(existing, dict) or any(existing.get(k) != v for k, v in entry.items()):
+                raise BrowserError("A different connection already uses this site name. Existing settings were left unchanged.")
+            return {"state": "already_configured", "agent": agent, "config": str(target),
+                    "next": "Reload the connection in your AI app; configuration alone does not prove it is connected."}
+        if agent == "codex":
+            tomllib.loads(updated)  # Reject a conflicting table before writing.
+        else:
+            servers[name] = entry
+            updated = json.dumps(config, ensure_ascii=False, indent=2) + "\n"
+    except BrowserError:
+        raise
+    except (ValueError, TypeError, AttributeError):
+        raise BrowserError("The existing project settings could not be safely updated. No settings were changed; use the AI app's connection manager.") from None
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="", dir=target.parent, delete=False) as handle:
+            temporary = Path(handle.name)
+            handle.write(updated)
+        if (target.read_bytes() if target.exists() else None) != original:
+            raise BrowserError("Project settings changed while connecting. Retry; no settings were replaced.")
+        temporary.replace(target)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    return {"state": "configuration_saved", "agent": agent, "config": str(target),
+            "next": "Reload the connection in your AI app; configuration alone does not prove it is connected."}
+
+
+def open_wizard(site=None, agent=None, project=None):
     if importlib.util.find_spec("playwright") is None:
         raise BrowserError('Install browser automation first: python -m pip install -e "ai-service[automation]"')
     if site:
@@ -220,6 +290,9 @@ def open_wizard(site=None):
     if os.name == "nt" and pythonw.exists():
         executable = pythonw
     args = [str(executable), "-m", "cv_tailor.browser_wizard", "--data-dir", str(data_dir())]
+    args.extend(["--project", str(Path(project or Path.cwd()).expanduser().resolve())])
+    if agent:
+        args.extend(["--agent", agent])
     if site:
         args.extend(["--site", site])
     subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,

@@ -122,9 +122,18 @@ def parser():
     dashboard.add_argument("--no-open", action="store_true")
     browser = groups.add_parser("browser", help="Local sign-in wizard and restricted application browser tools").add_subparsers(dest="action", required=True)
     browser.add_parser("status")
-    browser.add_parser("setup", help="Open a local window; never enter credentials in chat")
-    for action in ("login", "serve"):
-        browser.add_parser(action).add_argument("--site", required=True)
+    from cv_tailor.browser import AGENT_CONFIGS
+    for action in ("setup", "login"):
+        command = browser.add_parser(action, help="Open the local sign-in and connection window")
+        if action == "login":
+            command.add_argument("--site", required=True)
+        command.add_argument("--agent", choices=AGENT_CONFIGS)
+        command.add_argument("--project", help="Project folder for the optional connection")
+    browser.add_parser("serve").add_argument("--site", required=True)
+    connect = browser.add_parser("connect", help="Configure this site's tools for one AI app in one project")
+    connect.add_argument("--site", required=True)
+    connect.add_argument("--agent", required=True, choices=AGENT_CONFIGS)
+    connect.add_argument("--project", required=True)
     mcp = browser.add_parser("mcp-config")
     mcp.add_argument("--site", required=True)
     mcp.add_argument("--host", choices=["standard", "opencode"], default="standard")
@@ -148,7 +157,9 @@ def dispatch(a):
         if a.action == "status":
             return browser.status()
         if a.action in {"setup", "login"}:
-            return browser.open_wizard(getattr(a, "site", None))
+            return browser.open_wizard(getattr(a, "site", None), a.agent, a.project)
+        if a.action == "connect":
+            return browser.connect_agent(a.site, a.agent, a.project)
         if a.action == "mcp-config":
             return browser.mcp_config(a.site, a.host)
         from cv_tailor.browser_mcp import serve

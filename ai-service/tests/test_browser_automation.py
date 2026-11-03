@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import sys
 import threading
+import tomllib
 
 import pytest
 
@@ -57,6 +58,76 @@ def test_brave_path_override_is_validated(monkeypatch, tmp_path):
     with pytest.raises(BrowserError, match="installed Brave executable"):
         browser.brave_executable()
     assert browser.validate_site("brave", "https://jobs.example/")["browser"] == "brave"
+
+
+@pytest.mark.parametrize("agent", browser.AGENT_CONFIGS)
+def test_connect_saves_project_settings_preserves_existing_and_is_idempotent(configured_site, tmp_path, agent):
+    project = tmp_path / "project"
+    project.mkdir()
+    target = project / browser.AGENT_CONFIGS[agent]
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if agent == "codex":
+        before = '# Preserve this comment\nmodel = "keep"\n[mcp_servers.existing]\ncommand = "old"\n'
+        target.write_text(before, encoding="utf-8")
+    else:
+        key = "mcp" if agent == "opencode" else "mcpServers"
+        before = {"theme": "keep", key: {"existing": {"command": "old", "env": {"SYNTHETIC_SECRET": "do-not-export"}}}}
+        target.write_text(json.dumps(before), encoding="utf-8")
+    result = browser.connect_agent("example", agent, project)
+    assert result["state"] == "configuration_saved"
+    assert "do-not-export" not in json.dumps(result)
+    after_bytes = target.read_bytes()
+    if agent == "codex":
+        assert target.read_text(encoding="utf-8").startswith(before)
+        config = tomllib.loads(target.read_text(encoding="utf-8"))
+        assert config["model"] == "keep"
+        assert config["mcp_servers"]["existing"]["command"] == "old"
+        entry = config["mcp_servers"]["cv-browser-example"]
+        assert entry["startup_timeout_sec"] == 60
+    else:
+        config = json.loads(after_bytes)
+        assert config["theme"] == "keep"
+        assert config[key]["existing"] == before[key]["existing"]
+        entry = config[key]["cv-browser-example"]
+    expected = browser.mcp_config("example")["mcpServers"]["cv-browser-example"]
+    assert entry["command"] == ([expected["command"], *expected["args"]] if agent == "opencode" else expected["command"])
+    assert browser.connect_agent("example", agent, project)["state"] == "already_configured"
+    assert target.read_bytes() == after_bytes
+
+
+def test_connect_never_overwrites_conflicting_or_malformed_settings(configured_site, tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    target = project / ".mcp.json"
+    conflict = json.dumps({"mcpServers": {"cv-browser-example": {"command": "other"}}}).encode()
+    for content in (conflict, b"invalid JSON", b'\xff'):
+        target.write_bytes(content)
+        with pytest.raises(BrowserError):
+            browser.connect_agent("example", "claude", project)
+        assert target.read_bytes() == content
+
+
+def test_connect_refuses_global_and_escaping_configuration(configured_site, tmp_path, monkeypatch):
+    with pytest.raises(BrowserError, match="home folder"):
+        browser.connect_agent("example", "gemini", Path.home())
+    project = tmp_path / "project"
+    project.mkdir()
+    monkeypatch.setitem(browser.AGENT_CONFIGS, "antigravity", "../outside.json")
+    with pytest.raises(BrowserError, match="outside this project"):
+        browser.connect_agent("example", "antigravity", project)
+    assert not (tmp_path / "outside.json").exists()
+
+
+def test_connect_leaves_opencode_jsonc_untouched(configured_site, tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    target = project / "opencode.jsonc"
+    original = '// Keep comments\n{"theme": "keep"}\n'
+    target.write_text(original, encoding="utf-8")
+    with pytest.raises(BrowserError, match="JSONC"):
+        browser.connect_agent("example", "opencode", project)
+    assert target.read_text(encoding="utf-8") == original
+    assert not (project / "opencode.json").exists()
 
 
 @pytest.mark.parametrize("url", ["https://user:password@jobs.example/", "file:///passwords", "http://jobs.example/", "javascript:alert(1)"])

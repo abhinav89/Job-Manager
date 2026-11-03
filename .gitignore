@@ -77,3 +77,6 @@ landing/playwright-report/
 **/browser/profiles/
 **/browser/uploads/
 **/browser/sites.json
+/.codex/config.toml
+/.mcp.json
+/opencode.json
