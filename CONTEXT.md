@@ -14,6 +14,7 @@ A single-user, local career workspace: an agent-friendly Python CLI, SQLite, and
 - Public landing assets are built independently from `landing/`; the application is not hosted.
 - Fresh workspaces are supported; legacy PostgreSQL/account migration is deferred.
 - SQLite workspace preferences store a default resume template, preferred tracking provider and nonsecret setup-file reference, revision, and stable workspace UUID. CLI status/context and the local dashboard load them. Changing a default does not rewrite existing applications; credentials remain in the Git-ignored environment file. Existing profile template defaults remain compatible.
+- Calendar setup is agent-guided through `cv-calendar`, like tracking connections. Workspace preferences keep a separate `calendar_connections` list (Google Calendar and Outlook, one setup reference per provider), so both can coexist with a tracking connection. Publishing is one-way and manual. Follow-up dates come from SQLite; interview/deadline schedules confirmed by the user live in nonsecret connection event plans. There is no built-in calendar sync worker or interview scheduling table.
 
 ## Language
 

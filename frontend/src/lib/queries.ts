@@ -7,6 +7,7 @@ export type WorkspacePreferences = {
   workspace_uuid: string;
   resume_template: ResumeTemplate;
   tracking_connection: { provider: string; config_path: string | null } | null;
+  calendar_connections: { provider: "googlecalendar" | "outlook"; config_path: string | null }[];
 };
 export type Workspace = { name: string; email: string; profile_exists: boolean; data_dir: string; preferences?: WorkspacePreferences; ai: {mode: string; generation: boolean; assistant: boolean; research: boolean; ranking: boolean} };
 

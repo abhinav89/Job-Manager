@@ -73,7 +73,8 @@ def preferences_dict(db):
     profile = db.scalar(select(m.Profile).where(m.Profile.workspace_id == 1))
     return {"revision": row.revision if row else 1, "workspace_uuid": row.workspace_uuid if row else None,
             "resume_template": (row.resume_template if row else None) or (profile.preferred_template if profile else None) or "classic",
-            "tracking_connection": row.tracking_connection if row else None}
+            "tracking_connection": row.tracking_connection if row else None,
+            "calendar_connections": row.calendar_connections if row else []}
 
 
 def preferences_get():
@@ -87,8 +88,10 @@ def preferences_update(payload, revision=None):
         values = validated.model_dump(exclude_unset=True)
         if validated.tracking_connection is not None:
             values["tracking_connection"] = validated.tracking_connection.model_dump()
+        if "calendar_connections" in values:
+            values["calendar_connections"] = [connection.model_dump() for connection in validated.calendar_connections]
     except ValidationError:
-        raise WorkspaceError("Use a supported resume_template and tracking_connection (provider and absolute nonsecret JSON config_path only). Credentials belong in the Git-ignored environment file.") from None
+        raise WorkspaceError("Use a supported resume_template, tracking_connection, or calendar_connections (one per provider, with an absolute nonsecret JSON config_path only). Credentials belong in the Git-ignored environment file.") from None
     revision = revision if revision is not None else values.pop("revision", None)
     values.pop("revision", None)
     def save(db):

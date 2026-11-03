@@ -6,9 +6,8 @@ from typing import Optional
 ResumeTemplate = Literal["classic", "modern", "minimal", "serif", "executive", "technical", "compact", "sidebar"]
 
 
-class TrackingConnectionPreference(BaseModel):
+class ConnectionPreference(BaseModel):
     model_config = {"extra": "forbid"}
-    provider: Literal["obsidian", "notion", "googlesheets", "markdown", "airtable", "hubspot", "gohighlevel", "custom"]
     config_path: Optional[str] = Field(default=None, max_length=4096)
 
     @field_validator("config_path")
@@ -23,11 +22,27 @@ class TrackingConnectionPreference(BaseModel):
         return value
 
 
+class TrackingConnectionPreference(ConnectionPreference):
+    provider: Literal["obsidian", "notion", "googlesheets", "markdown", "airtable", "hubspot", "gohighlevel", "custom"]
+
+
+class CalendarConnectionPreference(ConnectionPreference):
+    provider: Literal["googlecalendar", "outlook"]
+
+
 class PreferencesUpdate(BaseModel):
     model_config = {"extra": "forbid"}
     revision: Optional[int] = Field(default=None, ge=1)
     resume_template: Optional[ResumeTemplate] = None
     tracking_connection: Optional[TrackingConnectionPreference] = None
+    calendar_connections: List[CalendarConnectionPreference] = Field(default_factory=list, max_length=2)
+
+    @field_validator("calendar_connections")
+    @classmethod
+    def unique_calendars(cls, value):
+        if len({connection.provider for connection in value}) != len(value):
+            raise ValueError("Save one connection per calendar provider.")
+        return value
 
     @field_validator("resume_template")
     @classmethod
