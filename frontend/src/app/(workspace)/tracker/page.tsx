@@ -14,6 +14,7 @@ import { patchJob, prependJob, removeJob, replaceJob } from "@/lib/trackerCache"
 import { setExpandedJob, setFilterStatus, setSearchQuery, setStatsOpen, type RootState } from "@/lib/store";
 import { useDispatch, useSelector } from "react-redux";
 import InlineQueryError from "@/components/InlineQueryError";
+import ApplicationDocuments from "@/components/ApplicationDocuments";
 
 const Document = dynamic(() => import("react-pdf").then(m => m.Document), { ssr: false });
 const Page = dynamic(() => import("react-pdf").then(m => m.Page), { ssr: false });
@@ -768,7 +769,7 @@ export default function TrackerPage() {
                   <div key={job.id} className="tracker-job-card rounded-xl sm:rounded-sm" style={{ background: "#edeae4", border: "1px solid #d4cfc7" }}>
 
                     {/* Main row */}
-                    <div className="tracker-job-main flex flex-col gap-3 rounded-xl px-3 py-3 sm:flex-row sm:items-center sm:px-4">
+                    <div className="tracker-job-main flex flex-col gap-3 rounded-xl px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:px-4">
                       <div className="tracker-job-dot w-2 h-2 rounded-full shrink-0" style={{ background: SC[job.status].dot }} />
 
                       {/* Info */}
@@ -793,7 +794,7 @@ export default function TrackerPage() {
                       </div>
 
                       {/* Right controls */}
-                      {expanded && <div className="tracker-job-actions flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+                      {expanded && <div className="tracker-job-actions flex w-full flex-wrap items-center justify-start gap-2 sm:order-last sm:basis-full">
                         <button type="button" onClick={async () => {
                           try {
                             const response = await fetch(`${API}/tracker/${job.id}`, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ is_archived: !job.is_archived }) });
@@ -929,12 +930,15 @@ export default function TrackerPage() {
                           </svg>
                         </IconBtn>
                       </div>}
-                      <IconBtn onClick={() => dispatch(setExpandedJob(expanded ? null : job.id))} title={expanded ? "Collapse details" : "Show details"}>
+                      <button type="button" onClick={() => dispatch(setExpandedJob(expanded ? null : job.id))}
+                        title={expanded ? "Collapse details" : "Show details"} aria-expanded={expanded} aria-controls={`application-details-${job.id}`}
+                        className="col-span-2 inline-flex shrink-0 items-center justify-center gap-2 justify-self-end rounded-sm border border-[#d4cfc7] bg-[#f5f2ed] px-3 py-2 text-[10px] font-semibold text-[#3d6600] hover:border-[#8ab030] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5a8a00]">
+                        Documents & details
                         <svg width="11" height="11" viewBox="0 0 11 11" fill="none"
                           style={{ transform: expanded ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }}>
                           <path d="M2 4L5.5 7L9 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
                         </svg>
-                      </IconBtn>
+                      </button>
                     </div>
 
                     {/* Error toast */}
@@ -948,7 +952,8 @@ export default function TrackerPage() {
 
                     {/* Expanded */}
                     {expanded && (
-                      <div className="px-4 pb-4 pt-2" style={{ borderTop: "1px solid #d4cfc7" }}>
+                      <div id={`application-details-${job.id}`} className="px-4 pb-4 pt-4" style={{ borderTop: "1px solid #d4cfc7" }}>
+                        <ApplicationDocuments key={job.id} applicationId={job.id} />
                         {detailsQuery.isPending ? (
                           <div role="status" className="grid grid-cols-1 gap-3 md:grid-cols-2">
                             <span className="h-20 animate-pulse rounded-sm bg-[#ddd8d0]" />

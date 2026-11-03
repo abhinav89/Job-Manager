@@ -12,7 +12,7 @@ from cv_tailor.database import get_db
 from cv_tailor.dependencies import get_workspace_id
 from cv_tailor.models import database_models as db_models
 from cv_tailor.models.schemas import JobApplicationCreate, JobApplicationUpdate
-from pydantic import BaseModel as PydanticBaseModel
+from pydantic import BaseModel as PydanticBaseModel, Field
 from cv_tailor.services.pdf_service import PDFCompilationError, compile_latex_to_pdf
 
 router = APIRouter(prefix="/tracker", tags=["tracker"])
@@ -47,6 +47,22 @@ def get_stats():
 @router.get("/{job_id}/details")
 def get_job_details(job_id: int):
     return w.application_get(job_id)
+
+
+class DocumentRevision(PydanticBaseModel):
+    content: str = Field(min_length=1, max_length=100000)
+
+
+@router.get("/{job_id}/documents")
+def get_application_documents(job_id: int):
+    from cv_tailor.services.application_documents import list_documents
+    return list_documents(job_id)
+
+
+@router.post("/{job_id}/documents/{draft_id}/revise")
+def revise_application_document(job_id: int, draft_id: int, data: DocumentRevision, request: Request):
+    from cv_tailor.services.application_documents import revise_document
+    return revise_document(job_id, draft_id, data.content, request.headers.get("Idempotency-Key"))
 
 # ── PDF + LaTeX endpoints ─────────────────────────────────────────
 

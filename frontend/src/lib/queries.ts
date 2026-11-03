@@ -71,6 +71,18 @@ export type JobDetails = JobSummary & {
 
 export type TrackerStats = { total: number; by_status: Partial<Record<ApplicationStatus, number>> };
 
+export type ApplicationDocument = {
+  id: number;
+  conversation_id: number;
+  type: "interview_plan" | "cheat_sheet" | "research";
+  content: string;
+  created_at: string;
+  metadata: {
+    parent_id?: number | null;
+    sources?: { title: string; url: string }[];
+  } | null;
+};
+
 export class ApiQueryError extends Error {
   constructor(message: string, readonly status: number) {
     super(message);
@@ -93,6 +105,7 @@ export const queryKeys = {
   trackerJobs: ["workspace-data", "tracker", "jobs"] as const,
   trackerStats: ["workspace-data", "tracker", "stats"] as const,
   trackerDetails: (id: number) => ["workspace-data", "tracker", "details", id] as const,
+  applicationDocuments: (id: number) => ["workspace-data", "tracker", "documents", id] as const,
 };
 
 export const workspaceQueryOptions = () => queryOptions({
@@ -155,6 +168,13 @@ export function useTrackerDetails(id: number | null) {
     queryKey: id === null ? ["workspace-data", "tracker", "details", "none"] : queryKeys.trackerDetails(id),
     queryFn: () => readJson<JobDetails>(`/tracker/${id}/details`, "Unable to load application details."),
     enabled: id !== null,
+  });
+}
+
+export function useApplicationDocuments(id: number) {
+  return useQuery({
+    queryKey: queryKeys.applicationDocuments(id),
+    queryFn: () => readJson<ApplicationDocument[]>(`/tracker/${id}/documents`, "Unable to load application documents."),
   });
 }
 
