@@ -103,9 +103,7 @@ svg { flex-shrink: 0; }
 
 .site-header { position: sticky; top: 0; z-index: 30; background: var(--header); border-bottom: 1px solid var(--line); backdrop-filter: blur(12px); }
 .header-inner { max-width: 1248px; height: 79px; padding-inline: 40px; margin: auto; display: flex; align-items: center; justify-content: space-between; gap: 22px; }
-.brand { display: inline-flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 600; letter-spacing: -.04em; }
-.brand-mark { display: grid; place-items: center; width: 32px; height: 35px; border-radius: 4px; background: var(--ink); color: var(--paper); }
-.brand-dot { color: var(--green); }
+.brand { display: inline-flex; align-items: center; font-size: 17px; font-weight: 600; letter-spacing: -.04em; }
 .desktop-nav { display: flex; align-items: center; gap: 30px; margin-left: 50px; }
 .desktop-nav a { font-size: 10px; letter-spacing: .025em; color: var(--muted); }
 .desktop-nav a:hover { color: var(--ink); }
@@ -139,7 +137,6 @@ h1 em { font-weight: 400; color: var(--sage); }
 .demo-workspace { display: grid; grid-template-columns: 119px minmax(0,1fr); min-height: 351px; }
 .demo-sidebar { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 22px 8px 15px; }
 .demo-brand { display: flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600; padding-left: 5px; letter-spacing: -.04em; }
-.demo-brand svg { color: var(--green); }
 .demo-nav-label { font-size: 6px; letter-spacing: .16em; color: var(--muted); padding: 27px 7px 10px; }
 .demo-nav { display: grid; gap: 5px; }
 .demo-nav button { display: flex; align-items: center; gap: 6px; min-height: 32px; background: none; border: 1px solid transparent; padding: 6px 7px; border-radius: 4px; color: var(--muted); font-size: 8px; text-align: left; }
@@ -298,7 +295,7 @@ h2 { font-family: var(--display); font-size: clamp(31px,3.2vw,43px); font-weight
 .faq-list summary > svg { color: var(--subtle); transition: transform .2s; }
 .faq-list details[open] summary > svg { transform: rotate(180deg); }
 .faq-list details p { font-size: 12px; line-height: 1.95; color: var(--muted); padding: 0 25px 22px 0; }
-.closing-section { text-align: center; padding-bottom: 79px; padding-top: 48px; border-top: 1px solid var(--line); }
+.closing-section { text-align: center; padding-bottom: 32px; padding-top: 48px; border-top: 1px solid var(--line); }
 .closing-mark { width: 49px; height: 52px; display: grid; place-items: center; margin: 0 auto 23px; border-radius: 6px; background: var(--lime); color: #354a10; box-shadow: 3px 3px 0 var(--selected-line); transform: rotate(-5deg); }
 .closing-section .eyebrow { font-size: 8px; }
 .closing-section h2 { font-size: 47px; margin-top: 13px; }
@@ -310,14 +307,15 @@ h2 { font-family: var(--display); font-size: clamp(31px,3.2vw,43px); font-weight
 .community-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px 24px; margin-top: 25px; }
 .community-links a { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 10px; line-height: 1.8; }
 .community-links a:hover { color: var(--green); text-decoration: underline; text-underline-offset: 4px; }
-.site-footer { border-top: 1px solid var(--line); padding-block: 29px; display: flex; align-items: center; justify-content: space-between; gap: 25px; }
-.site-footer .brand { font-size: 13px; gap: 8px; }
-.site-footer .brand-mark { width: 24px; height: 26px; }
-.site-footer .brand-mark svg { width: 15px; }
-.site-footer > p { font-size: 8px; color: var(--subtle); }
+.site-footer { position: relative; isolation: isolate; overflow: hidden; min-height: clamp(360px, 40vw, 780px); background: var(--paper); }
+.footer-content { position: relative; z-index: 1; padding-top: clamp(32px, 4vw, 64px); display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
+.footer-message { font-family: var(--display); font-size: clamp(28px, 3.5vw, 44px); line-height: 1.15; letter-spacing: -.035em; text-wrap: balance; }
+.footer-note { font-size: 10px; line-height: 1.8; color: var(--muted); }
 .site-footer nav { display: flex; align-items: center; gap: 24px; }
-.site-footer nav a { display: flex; align-items: center; gap: 4px; font-size: 8px; color: var(--muted); }
+.site-footer nav a { display: flex; align-items: center; min-height: 44px; gap: 4px; font-size: 10px; color: var(--muted); }
 .site-footer nav a:hover { color: var(--green); }
+.footer-landscape { position: absolute; inset: 0; background: url("/images/footer-mountain-light.png") center bottom / cover no-repeat; mix-blend-mode: multiply; mask-image: linear-gradient(to bottom, transparent, #000 26%); pointer-events: none; }
+:root[data-theme="dark"] .footer-landscape { background-image: url("/images/footer-mountain-dark.png"); mix-blend-mode: lighten; }
 
 
 .resume-gallery { padding-bottom: 90px; scroll-margin-top: 15px; }
@@ -404,7 +402,6 @@ html:has(.pdf-preview-dialog[open]) { overflow: hidden; }
   .demo-main { padding-inline: 14px; }
   .demo-nav button { font-size: 7px; padding-inline: 5px; gap: 5px; }
   .demo-brand { font-size: 8px; }
-  .demo-brand svg { width: 13px; }
   .demo-page-heading h3 { font-size: 18px; }
   .demo-add { font-size: 5px; padding: 6px; }
   .demo-job > div strong { font-size: 7px; }
@@ -436,7 +433,6 @@ html:has(.pdf-preview-dialog[open]) { overflow: hidden; }
   .demo-main { padding: 26px 25px 20px; }
   .demo-sidebar { padding: 24px 9px 17px; }
   .demo-brand { font-size: 12px; gap: 7px; }
-  .demo-brand svg { width: 17px; }
   .demo-nav-label { font-size: 8px; padding-top: 30px; }
   .demo-nav button { min-height: 37px; font-size: 9px; padding: 8px; gap: 8px; }
   .demo-page-heading h3 { font-size: 23px; }
@@ -484,14 +480,12 @@ html:has(.pdf-preview-dialog[open]) { overflow: hidden; }
   .after-install p { font-size: 10px; }
   .faq-section { gap: 35px; }
   .faq-section h2 { font-size: 32px; }
-  .site-footer > p { display: none; }
 }
 @media (max-width: 600px) {
   html { scroll-padding-top: 83px; }
   .section, .header-inner { padding-inline: 21px; }
   .header-inner { height: 67px; gap: 10px; }
-  .brand { font-size: 15px; gap: 8px; }
-  .brand-mark { width: 28px; height: 31px; }
+  .brand { font-size: 15px; }
   .desktop-nav { display: none; }
   .header-actions { gap: 10px; }
   .header-star { padding: 10px; font-size: 9px; gap: 7px; }
@@ -601,12 +595,12 @@ html:has(.pdf-preview-dialog[open]) { overflow: hidden; }
   .faq-section > div > p { margin-top: 15px; font-size: 9px; }
   .faq-list summary { padding-block: 20px; font-size: 10px; }
   .faq-list details p { font-size: 12px; }
-  .closing-section { padding-top: 39px; padding-bottom: 57px; }
+  .closing-section { padding-top: 39px; padding-bottom: 24px; }
   .closing-section h2 { font-size: 40px; }
   .closing-section > p { max-width: 270px; margin-inline: auto; font-size: 9px; line-height: 1.9; }
   .closing-section .button { font-size: 9px; }
-  .site-footer { padding-block: 25px; flex-direction: column; gap: 20px; }
-  .site-footer nav { gap: 25px; }
+  .footer-message { max-width: 260px; }
+  .site-footer nav { gap: 20px; }
 }
 @media (max-width: 360px) {
   .header-star .star-full-label { display: none; }
