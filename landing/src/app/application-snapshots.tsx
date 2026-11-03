@@ -50,8 +50,7 @@ function SnapshotPreview() {
 export default function ApplicationSnapshots() {
   return <section className={`section ${styles.section}`} id="snapshots" aria-labelledby="snapshots-title">
     <div className="section-heading">
-      <div><span className="eyebrow">APPLICATION SNAPSHOTS</span><h2 id="snapshots-title">See where<br />your search stands.</h2></div>
-      <p>Turn the applications in your local tracker into a clear status flow. Ask your agent for a snapshot, or explore your pipeline in the dashboard’s Insights view.</p>
+      <div><span className="eyebrow">APPLICATION SNAPSHOTS</span><h2 id="snapshots-title">Your search at a glance.</h2></div>
     </div>
     <div className={styles.layout}>
       <SnapshotPreview />

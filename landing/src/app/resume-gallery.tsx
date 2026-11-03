@@ -26,7 +26,7 @@ export default function ResumeGallery() {
     <section id="templates" className="resume-gallery section" aria-labelledby="templates-title">
       <div className="section-heading">
         <div><span className="eyebrow">{RESUME_TEMPLATES.length} RESUME FORMATS</span><h2 id="templates-title">Find your format.</h2></div>
-        <p>Every format uses Reinael Yabut’s resume. Preview the full PDF to compare.</p>
+        <p>Preview each format with the same resume.</p>
       </div>
       <div className="resume-gallery-grid">
         {RESUME_TEMPLATES.map(template => (

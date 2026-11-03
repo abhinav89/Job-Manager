@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { ArrowUpRight, HardDrive, KeyRound } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import CopyButton from "./copy-button";
 
 const destinations = [
@@ -28,7 +28,7 @@ function setupPrompt(instruction: string) {
 
 export default function TrackingIntegrations() {
   return <section className="tracking-integrations section" id="integrations" aria-labelledby="integrations-title">
-    <div className="section-heading"><div><span className="eyebrow">YOUR DATA. YOUR TOOLS.</span><h2 id="integrations-title">Connect it anywhere.</h2></div><p>Keep tracking locally. Copy a prompt and let your AI agent guide the connection to your notes, spreadsheets, CRM, or calendar.</p></div>
+    <div className="section-heading"><div><span className="eyebrow">YOUR DATA. YOUR TOOLS.</span><h2 id="integrations-title">Connect it anywhere.</h2><a className="text-link integration-setup-link" href="https://github.com/yabswannalearn/CV-Tailor/tree/main/.agents/skills/cv-connect" target="_blank" rel="noreferrer">Explore the setup skill<ArrowUpRight size={13} /></a></div></div>
     <div className="integration-grid">
       {destinations.map(destination => <article className="integration-card" key={destination.id}>
         <div className="integration-logo"><Image className={destination.id === "gohighlevel" ? "integration-logo-padded" : undefined} src={`/integrations/${destination.logo || `${destination.id}.svg`}`} alt={`${destination.name} logo`} width={49} height={49} /></div>
@@ -41,7 +41,5 @@ export default function TrackingIntegrations() {
         <CopyButton text={calendarPrompt(calendar.name)} label={`Copy ${calendar.name} connection prompt`} caption="Copy prompt" />
       </article>)}
     </div>
-    <div className="integration-details"><span><HardDrive size={14} />SQLite stays primary</span><span><KeyRound size={14} />Credentials in a Git-ignored .env file</span><a href="https://github.com/yabswannalearn/CV-Tailor/tree/main/.agents/skills/cv-connect" target="_blank" rel="noreferrer">Explore the setup skill<ArrowUpRight size={13} /></a></div>
-    <p className="integration-note">Setup runs on your machine. Your agent prepares the connection; you choose when to publish. Calendars can hold interviews, deadlines, and follow-up reminders.</p>
   </section>;
 }
