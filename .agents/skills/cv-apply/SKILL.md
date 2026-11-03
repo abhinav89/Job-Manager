@@ -7,6 +7,8 @@ description: Assist with a tracked job's live application form using the local a
 
 CV Tailor supplies facts, selected documents, validated checkpoints and tracking. Your host agent supplies browser/computer access. A dashboard handoff does not itself control the PC. Use the host's browser/computer skill and supported APIs; do not assume every agent has them. Without browser access, draft from pasted questions and supply copyable answers; retain unknown observations and never report the form filled.
 
+For browser-independent local sessions, use [cv-browser](../cv-browser/SKILL.md). Never ask for passwords, MFA/recovery codes, cookies or sign-in tokens in chat. The local wizard accepts sign-in directly in a visible browser; the restricted MCP adapter reuses its session without a credential-read API. Prefer that adapter for wizard-created sessions and never bypass its sign-in block with general browser or shell tools. This is an interface restriction, not OS isolation from an unrestricted local agent.
+
 ## Select the application and documents
 
 Run `cv-tailor --json status` and use the same `--data-dir` throughout. Load `applications get ID`, `profile get`, and `drafts list --application ID`. Require an explicit application ID and selected resume/cover-letter draft IDs; use the user's choice or ask when ambiguous. Never pick a document just because it is newest or shares a company name. If documents are needed, use cv-resume/cv-cover-letter first.

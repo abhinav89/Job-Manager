@@ -2,6 +2,16 @@
  * browser evaluation API; never import it as an automatic page content script. */
 export async function inspectApplicationForm(step = "Application") {
   const visible = el => !!el && !!el.getClientRects().length && getComputedStyle(el).visibility !== "hidden";
+  // Do not read any field values on a credential/verification step. Passwords
+  // must never become a text field in an application checkpoint.
+  const credential = el => el.type === "password" ||
+    /current-password|new-password|one-time-code|webauthn|username/i.test(el.autocomplete || "") ||
+    /password|passwd|one.?time|otp|2fa|mfa|authenticator|api.?key|access.?token|secret|security.?code|verification.?code/i
+      .test([el.name, el.id, el.getAttribute("aria-label"), ...Array.from(el.labels || []).map(l => l.textContent)].join(" "));
+  if (/(?:^|\/)(?:login|log-in|signin|sign-in|oauth|password|mfa|2fa|verify)(?:\/|$)/i.test(location.pathname) ||
+      Array.from(document.querySelectorAll("input, textarea")).some(el => visible(el) && credential(el))) {
+    return {form_url: location.origin + location.pathname, login_required: true, fields: []};
+  }
   const clean = text => (text || "").replace(/\s+/g, " ").trim();
   const labelText = node => {
     const copy = node.cloneNode(true);
@@ -30,7 +40,7 @@ export async function inspectApplicationForm(step = "Application") {
   for (const el of document.querySelectorAll("input, textarea, select, [role=combobox]")) {
     const tag = el.tagName.toLowerCase();
     const type = (el.getAttribute("type") || "text").toLowerCase();
-    if (el.disabled || ["hidden", "button", "submit", "reset", "image"].includes(type)) continue;
+    if (el.disabled || credential(el) || ["hidden", "button", "submit", "reset", "image"].includes(type)) continue;
     if (!visible(el) && !Array.from(el.labels || []).some(visible)) continue;
     const groupSection = section(el);
     let kind = tag === "select" ? "select" : tag === "textarea" ? "textarea" :

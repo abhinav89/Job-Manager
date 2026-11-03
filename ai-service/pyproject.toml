@@ -13,6 +13,7 @@ dependencies = ["sqlalchemy>=2.0,<3", "pydantic>=2,<3", "python-dotenv", "httpx"
 dashboard = ["fastapi[standard]", "slowapi", "python-multipart"]
 ai = ["openai", "google-genai", "google-adk>=2.12,<2.13"]
 browser = ["scrapling", "camoufox", "curl_cffi"]
+automation = ["playwright>=1.51,<2", "mcp>=1.12,<2"]
 test = ["pytest", "fastapi[standard]", "slowapi", "python-multipart"]
 
 [project.scripts]
@@ -23,4 +24,4 @@ where = ["."]
 include = ["cv_tailor*"]
 
 [tool.setuptools.package-data]
-cv_tailor = ["static/dashboard/**/*", "sandbox/Dockerfile"]
+cv_tailor = ["static/dashboard/**/*", "sandbox/Dockerfile", "browser_dom.js"]
