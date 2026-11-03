@@ -15,6 +15,7 @@ Load the saved profile using `profile get`; gather missing facts through convers
 - Resume creation/editing: cv-resume, cv-resume-edit
 - Cover letters: cv-cover-letter
 - Application management: cv-tracker
+- Visual application snapshots and pipeline charts: cv-snapshot
 - Optional tracking connections and publishing setup: cv-connect
 - Employer form filling and application answers: cv-apply
 - Interview preparation/practice: cv-interview

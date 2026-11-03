@@ -1,0 +1,4 @@
+interface:
+  display_name: "Application Snapshot"
+  short_description: "Create a visual snapshot of your job applications"
+  default_prompt: "Use $cv-snapshot to create a fresh application-status snapshot from my local database."

@@ -1,6 +1,7 @@
 """Agent-friendly commands; the dashboard is not needed for any command here."""
 import argparse
 import asyncio
+from datetime import date
 from contextlib import redirect_stdout
 import importlib.util
 import json
@@ -42,6 +43,9 @@ def parser():
     listing.add_argument("--company")
     listing.add_argument("--archived", choices=["yes", "no", "all"], default="all")
     apps.add_parser("stats")
+    insights = apps.add_parser("insights", help="Read application flow and workspace counts")
+    insights.add_argument("--include-archived", action="store_true")
+    insights.add_argument("--as-of", type=date.fromisoformat, help="Local date for follow-ups, YYYY-MM-DD")
     for action in ("get", "update", "archive", "restore", "delete"):
         command = apps.add_parser(action)
         command.add_argument("id", type=int)
@@ -166,6 +170,9 @@ def dispatch(a):
             return {"text": text}
         return w.profile_save(input_json(a.input), a.revision)
     if a.group == "applications":
+        if a.action == "insights":
+            from cv_tailor.services.application_insights import application_insights
+            return application_insights(a.include_archived, a.as_of)
         if a.action == "list":
             return w.applications_list(a.status, a.company, {"yes": True, "no": False, "all": None}[a.archived])
         if a.action == "stats":

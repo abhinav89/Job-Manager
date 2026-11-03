@@ -644,8 +644,11 @@ export default function TrackerPage() {
                 {stats.total} application{stats.total !== 1 ? "s" : ""} · {jobs.filter(j => j.has_pdf).length} with generated CVs
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <button type="button" onClick={() => setShowArchived(value => !value)} className="rounded-sm border border-[#d4cfc7] px-3 py-2 text-xs">{showArchived ? "Show active" : "Show archived"}</button>
+              <Link href="/insights" className="flex items-center gap-2 rounded-sm border border-[#d4cfc7] px-4 py-2.5 text-xs font-bold uppercase tracking-[0.15em] text-[#3d6600] hover:bg-[#e8f5c0]">
+                Application flow
+              </Link>
               <Link href="/discover" prefetch
                 className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold tracking-[0.15em] uppercase rounded-sm border transition-colors"
                 style={{ borderColor: "#5a8a00", color: "#5a8a00", background: "transparent" }}

@@ -47,6 +47,11 @@ const IconDiscover = () => (
   </svg>
 );
 
+const IconInsights = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <path d="M2 3v10M14 2v3M14 7v3M14 12v2M3 5c5 0 5-2 10-2M3 8c5 0 5 0 10 0M3 11c5 0 5 2 10 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+  </svg>
+);
 
 
 const IconChevron = ({ collapsed }: { collapsed: boolean }) => (
@@ -78,6 +83,7 @@ const NAV_ITEMS = [
   { label: "Generate CV", href: "/generate",    icon: <IconGenerate /> },
   { label: "Discover",    href: "/discover",    icon: <IconDiscover /> },
   { label: "Job Tracker", href: "/tracker",     icon: <IconTracker /> },
+  { label: "Insights",    href: "/insights",    icon: <IconInsights /> },
 ];
 
 const STATUS_DOT: Record<ApplicationStatus, string> = {
