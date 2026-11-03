@@ -10,13 +10,14 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 from urllib.parse import urlsplit
 
 from cv_tailor.config import data_dir
 
-BROWSERS = ("msedge", "chrome", "chromium", "firefox", "webkit")
+BROWSERS = ("brave", "msedge", "chrome", "chromium", "firefox", "webkit")
 
 
 class BrowserError(ValueError):
@@ -76,7 +77,7 @@ def site_settings(site):
 
 def validate_site(browser, url, allowed_origins=()):
     if browser not in BROWSERS:
-        raise BrowserError("Choose Edge, Chrome, Chromium, Firefox or WebKit.")
+        raise BrowserError("Choose Brave, Edge, Chrome, Chromium, Firefox or WebKit.")
     base = origin(url)
     value = urlsplit(url)
     if value.query or value.fragment:
@@ -150,11 +151,38 @@ def profile_lease(site, config):
                 fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
+def brave_executable():
+    override = os.environ.get("CV_TAILOR_BRAVE_PATH")
+    if override:
+        path = Path(override).expanduser()
+        if path.is_file():
+            return str(path.resolve())
+        raise BrowserError("CV_TAILOR_BRAVE_PATH must point to the installed Brave executable.")
+    candidates = [shutil.which(name) for name in ("brave", "brave-browser", "brave-browser-stable")]
+    for variable in ("ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"):
+        if os.environ.get(variable):
+            candidates.append(str(Path(os.environ[variable]) / "BraveSoftware/Brave-Browser/Application/brave.exe"))
+    if os.name == "nt":
+        # MCP clients deliberately inherit a reduced environment which may omit
+        # ProgramFiles/LOCALAPPDATA. Standard installations must still resolve.
+        drive = Path(os.environ.get("SystemRoot", "C:/Windows")).anchor
+        for base in (Path(drive) / "Program Files", Path(drive) / "Program Files (x86)", Path.home() / "AppData/Local"):
+            candidates.append(str(base / "BraveSoftware/Brave-Browser/Application/brave.exe"))
+    candidates.extend(["/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+                       str(Path.home() / "Applications/Brave Browser.app/Contents/MacOS/Brave Browser")])
+    for candidate in candidates:
+        if candidate and Path(candidate).is_file():
+            return str(Path(candidate).resolve())
+    raise BrowserError("Install Brave locally, or set CV_TAILOR_BRAVE_PATH to its executable. Playwright does not install Brave.")
+
+
 async def launch_context(playwright, path, browser, *, headless=False):
-    engine = "chromium" if browser in {"msedge", "chrome"} else browser
+    engine = "chromium" if browser in {"brave", "msedge", "chrome"} else browser
     options = {"headless": headless, "accept_downloads": False, "service_workers": "block"}
     if browser in {"msedge", "chrome"}:
         options["channel"] = browser
+    elif browser == "brave":
+        options["executable_path"] = brave_executable()
     context = await getattr(playwright, engine).launch_persistent_context(str(path), **options)
     context.set_default_timeout(5000)
     return context
@@ -168,11 +196,18 @@ def status():
             "boundary": "Restricted tools; not isolation from other processes running as the same OS user."}
 
 
-def mcp_config(site):
+def mcp_config(site, host="standard"):
     site_settings(site)
-    return {"mcpServers": {f"cv-browser-{site}": {
-        "command": sys.executable,
-        "args": ["-m", "cv_tailor", "--data-dir", str(data_dir()), "browser", "serve", "--site", site]}}}
+    executable = Path(sys.executable)
+    # The GUI runs under pythonw on Windows; MCP requires real stdio streams.
+    if executable.name.lower() == "pythonw.exe":
+        executable = executable.with_name("python.exe")
+    args = ["-m", "cv_tailor", "--data-dir", str(data_dir()), "browser", "serve", "--site", site]
+    if host == "opencode":
+        return {"mcp": {f"cv-browser-{site}": {"type": "local", "command": [str(executable), *args], "enabled": True}}}
+    if host != "standard":
+        raise BrowserError("Choose standard MCP JSON or the OpenCode configuration format.")
+    return {"mcpServers": {f"cv-browser-{site}": {"command": str(executable), "args": args}}}
 
 
 def open_wizard(site=None):

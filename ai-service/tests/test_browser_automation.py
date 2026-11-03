@@ -34,6 +34,31 @@ def test_config_contains_no_credentials_and_mcp_uses_selected_workspace(configur
         browser.site_settings("../example")
 
 
+def test_gui_generates_console_python_for_mcp(configured_site, monkeypatch, tmp_path):
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "pythonw.exe"))
+    config = browser.mcp_config("example")["mcpServers"]["cv-browser-example"]
+    assert config["command"] == str(tmp_path / "python.exe")
+
+
+def test_opencode_uses_the_same_local_tools(configured_site):
+    standard = browser.mcp_config("example")["mcpServers"]["cv-browser-example"]
+    config = browser.mcp_config("example", "opencode")["mcp"]["cv-browser-example"]
+    assert config["command"] == [standard["command"], *standard["args"]]
+    assert config["enabled"] is True
+    assert config["type"] == "local"
+
+
+def test_brave_path_override_is_validated(monkeypatch, tmp_path):
+    executable = tmp_path / "brave.exe"
+    executable.touch()
+    monkeypatch.setenv("CV_TAILOR_BRAVE_PATH", str(executable))
+    assert browser.brave_executable() == str(executable.resolve())
+    executable.unlink()
+    with pytest.raises(BrowserError, match="installed Brave executable"):
+        browser.brave_executable()
+    assert browser.validate_site("brave", "https://jobs.example/")["browser"] == "brave"
+
+
 @pytest.mark.parametrize("url", ["https://user:password@jobs.example/", "file:///passwords", "http://jobs.example/", "javascript:alert(1)"])
 def test_invalid_urls_are_not_echoed(url):
     with pytest.raises(BrowserError) as caught:

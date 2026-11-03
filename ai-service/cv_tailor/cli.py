@@ -123,8 +123,11 @@ def parser():
     browser = groups.add_parser("browser", help="Local sign-in wizard and restricted application browser tools").add_subparsers(dest="action", required=True)
     browser.add_parser("status")
     browser.add_parser("setup", help="Open a local window; never enter credentials in chat")
-    for action in ("login", "mcp-config", "serve"):
+    for action in ("login", "serve"):
         browser.add_parser(action).add_argument("--site", required=True)
+    mcp = browser.add_parser("mcp-config")
+    mcp.add_argument("--site", required=True)
+    mcp.add_argument("--host", choices=["standard", "opencode"], default="standard")
     return p
 
 
@@ -147,7 +150,7 @@ def dispatch(a):
         if a.action in {"setup", "login"}:
             return browser.open_wizard(getattr(a, "site", None))
         if a.action == "mcp-config":
-            return browser.mcp_config(a.site)
+            return browser.mcp_config(a.site, a.host)
         from cv_tailor.browser_mcp import serve
         serve(a.site)
         return None

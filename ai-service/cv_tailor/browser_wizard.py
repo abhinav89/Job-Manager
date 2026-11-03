@@ -32,8 +32,8 @@ async def sign_in(site, config, finished, events):
 def run(site=None):
     root = tk.Tk()
     root.title("CV Tailor — local browser sign-in")
-    root.geometry("680x640")
-    root.minsize(620, 610)
+    root.geometry("680x700")
+    root.minsize(620, 670)
     frame = ttk.Frame(root, padding=22)
     frame.pack(fill="both", expand=True)
     ttk.Label(frame, text="Connect a job site", font=("Segoe UI", 18, "bold")).pack(anchor="w")
@@ -45,11 +45,14 @@ def run(site=None):
     browser = tk.StringVar(value=configured["browser"])
     url = tk.StringVar(value=configured["url"])
     extra = tk.StringVar(value=", ".join(configured["allowed_origins"]))
+    host = tk.StringVar(value="standard")
     for label, variable in (("Site name", name), ("Start URL", url), ("Additional allowed origins (optional, comma separated)", extra)):
         ttk.Label(frame, text=label).pack(anchor="w")
         ttk.Entry(frame, textvariable=variable).pack(fill="x", pady=(3, 10))
     ttk.Label(frame, text="Browser").pack(anchor="w")
     ttk.Combobox(frame, textvariable=browser, values=BROWSERS, state="readonly").pack(fill="x", pady=(3, 10))
+    ttk.Label(frame, text="Agent configuration format (standard MCP JSON or OpenCode)").pack(anchor="w")
+    ttk.Combobox(frame, textvariable=host, values=("standard", "opencode"), state="readonly").pack(fill="x", pady=(3, 10))
     message = tk.StringVar(value="Sign in, return to the job page, then save and close the browser.")
     ttk.Label(frame, textvariable=message, wraplength=590).pack(anchor="w", pady=8)
     events = queue.Queue()
@@ -73,6 +76,8 @@ def run(site=None):
             try:
                 asyncio.run(sign_in(active["site"], config, finished, events))
                 events.put(("closed", None))
+            except BrowserError as exc:
+                events.put(("error", str(exc)))
             except Exception:
                 # Browser errors can include page content or credential-bearing URLs.
                 events.put(("error", None))
@@ -86,12 +91,12 @@ def run(site=None):
 
     def copy_config():
         root.clipboard_clear()
-        root.clipboard_append(json.dumps(mcp_config(active["site"] or name.get().strip()), indent=2))
+        root.clipboard_append(json.dumps(mcp_config(active["site"] or name.get().strip(), host.get()), indent=2))
         message.set("MCP configuration copied. Add it to your agent's project MCP settings; restart its MCP connection.")
 
     def poll():
         while not events.empty():
-            event, _ = events.get_nowait()
+            event, detail = events.get_nowait()
             if event == "opened":
                 finish_button.configure(state="normal")
                 message.set("Sign in in the visible browser. Finish MFA/CAPTCHA there, return to the job page, then save.")
@@ -106,7 +111,7 @@ def run(site=None):
                     config_button.configure(state="normal")
                     message.set("Session saved locally. Passwords were not read. Copy the MCP configuration to connect your agent.")
                 elif event == "error":
-                    message.set("Could not open this browser. Close its MCP session, or install the selected browser with python -m playwright install BROWSER, then retry.")
+                    message.set(detail or "Could not open this browser. Close its MCP session and check its installation. Brave, Edge and Chrome must be installed locally; other engines use python -m playwright install BROWSER.")
                 else:
                     message.set("Browser closed. A saved browser session does not prove that the site accepted your login.")
         root.after(150, poll)

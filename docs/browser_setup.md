@@ -1,6 +1,8 @@
 # Local browser setup and private sign-in
 
-CV Tailor's optional application browser works with Gemini or another MCP-capable host. The local model host selects the tools; the model vendor does not select the browser. Edge and Chrome use installed browser channels. Chromium, Firefox and WebKit use Playwright-managed builds. WebKit is an engine, not an attachment to Safari; arbitrary existing browser tabs are not supported by this adapter.
+CV Tailor's optional application browser works with any MCP-capable AI agent host. The local host selects the tools; the model vendor does not select the browser. Brave, Edge and Chrome use installed browsers. Chromium, Firefox and WebKit use Playwright-managed builds. WebKit is an engine, not an attachment to Safari; arbitrary existing browser tabs are not supported by this adapter. Agents with their own documented browser/computer tools can also use the shared `cv-apply` workflow; private wizard-created profiles stay behind the restricted adapter.
+
+Brave uses Playwright's Chromium engine with its installed executable. It is detected in standard Windows/macOS locations or on PATH; set `CV_TAILOR_BRAVE_PATH` for a nonstandard installation. There is no silent browser fallback. Compatibility depends on Brave's Chromium version; local fixture tests do not establish compatibility with every Brave release or job portal.
 
 ## Install and sign in
 
@@ -8,7 +10,7 @@ Use the repository environment:
 
 ```powershell
 .venv\Scripts\python.exe -m pip install -e "ai-service[automation]"
-# Edge or Chrome must already be installed. For another engine, for example:
+# Brave, Edge or Chrome must already be installed. For another engine, for example:
 .venv\Scripts\python.exe -m playwright install firefox
 .venv\Scripts\cv-tailor.exe browser setup
 ```
@@ -31,9 +33,11 @@ The wizard can copy an MCP configuration snippet. You can also generate it with:
 
 ```text
 cv-tailor --json browser mcp-config --site onlinejobs
+# OpenCode uses a different enclosing configuration:
+cv-tailor --json browser mcp-config --site onlinejobs --host opencode
 ```
 
-The result uses Gemini CLI's `mcpServers` shape and absolute executable/workspace paths. Merge the server entry into the host's project MCP settings, preserving other settings. For Gemini CLI, that file is `.gemini/settings.json`. Other hosts may use a different enclosing structure. Do not install a second unrestricted browser MCP server against the private profile. The repository ignores machine-specific `.gemini/` configuration.
+Standard output uses the `mcpServers` JSON shape and absolute executable/workspace paths. OpenCode output uses its `mcp` object with a local command array. The wizard offers both formats. Merge the server entry into your chosen host's project MCP settings, preserving other settings. Gemini CLI uses `.gemini/settings.json`; Claude Code uses its project MCP configuration; other hosts should register the same executable and argument list through their documented MCP setup. This server is not tied to Gemini: Claude Code, Codex, OpenCode, Antigravity and other compatible agents can use it. Windows configurations must use `python.exe` for MCP stdio, even when the wizard runs under `pythonw.exe`. Do not install a second unrestricted browser MCP server against the private profile. The repository ignores machine-specific `.gemini/` configuration.
 
 Restart the host's MCP connection and verify that the `cv-browser-SITE` tools are discovered. The server command is `cv-tailor browser serve --site SITE`, using stdio; it starts a visible task browser. It begins on a blank page without inspecting restored tabs. Use `browser_open` with the intended application URL. The server does not expose an HTTP debugging port.
 
