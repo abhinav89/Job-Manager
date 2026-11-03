@@ -7,6 +7,7 @@ import CopyButton from "./copy-button";
 import ResumeGallery from "./resume-gallery";
 import TrackingIntegrations from "./tracking-integrations";
 import ApplicationAssistance, { APPLY_PROMPT } from "./application-assistance";
+import ApplicationSnapshots, { SNAPSHOT_PROMPT } from "./application-snapshots";
 import {
   ArrowRight, ArrowUpRight, Check, ChevronDown, Code2, FileText,
   FolderOpen, GitBranch, Layers, LayoutDashboard, Menu, MessageSquare,
@@ -28,6 +29,7 @@ const skills = [
   { name: "cv-resume-edit", label: "Targeted edits", description: "Rewrite one summary or selected bullets while keeping the rest.", prompt: "Make the first experience bullet more relevant to this job. Keep my facts and leave the rest of the CV unchanged." },
   { name: "cv-cover-letter", label: "Cover letters", description: "Connect your experience to the role in a letter you can review.", prompt: "Write a concise cover letter using my real experience and the company research. Save it as a draft for this application." },
   { name: "cv-tracker", label: "Application tracking", description: "Query, update, archive, and manage your application history.", prompt: "Show my applications at the interview stage, including their saved documents and next steps." },
+  { name: "cv-snapshot", label: "Application snapshots", description: "Visualize your current application statuses and save a chart, offline HTML report, and source JSON from your local database.", prompt: SNAPSHOT_PROMPT },
   { name: "cv-apply", label: "Application form assistance", description: "Draft answers, fill supported forms, and resume from saved progress. You review and submit.", prompt: APPLY_PROMPT },
   { name: "cv-interview", label: "Interview preparation", description: "Build prep plans, practice answers, and create cheat sheets.", prompt: "Help me prepare for this interview. Ask one practice question at a time, give feedback, and save a cheat sheet." },
   { name: "cv-code-practice", label: "Coding practice", description: "Work through Python exercises with hints, execution, and review.", prompt: "Give me a Python interview exercise for this role. Let me attempt it, offer hints when asked, and review my solution." },
@@ -38,12 +40,13 @@ const features: { icon: LucideIcon; title: string; description: string; detail: 
   { icon: Search, title: "Find your next opportunity.", description: "Discover jobs, read a posting URL, and understand how a role fits your actual experience.", detail: "Job discovery · Fit analysis · Sourced research" },
   { icon: FileText, title: "Give every application its own CV.", description: "Tailor a one-page resume, refine individual bullets, and check that the PDF is readable by an ATS.", detail: "Targeted edits · PDF, LaTeX & DOCX exports" },
   { icon: MessageSquare, title: "Write with something real to say.", description: "Create cover letters that connect your experience to the role, with company research when it helps.", detail: "Confirmed facts · Reviewable drafts" },
-  { icon: LayoutDashboard, title: "Keep the whole search in view.", description: "Track statuses, find past applications, and keep each role’s documents and notes together.", detail: "Search · Update · Archive · Restore" },
+  { icon: LayoutDashboard, title: "Keep the whole search in view.", description: "Track statuses, visualize your pipeline, and keep each role’s documents and notes together.", detail: "Application snapshots · Search · Archive · Restore" },
   { icon: UserRound, title: "Walk into interviews prepared.", description: "Build a prep plan, rehearse answers, get feedback, and keep an interview-day cheat sheet close.", detail: "Mock interviews · Saved preparation" },
   { icon: Code2, title: "Practice before the technical round.", description: "Solve Python exercises, ask for a nudge, run your code, and review correctness and complexity.", detail: "Progressive hints · Execution · Code review" },
 ];
 
 const questions = [
+  { title: "Can my agent create an application snapshot?", answer: "Yes. Ask for a snapshot of your job applications, or name the cv-snapshot skill. Your agent reads your selected local database and saves an SVG chart, offline HTML report, and source JSON. You can request archived applications too. The chart shows current recorded statuses; historical transitions and interview rounds are not recorded. The dashboard does not need to be running." },
   { title: "Can it help fill application forms?", answer: "Yes, through a local agent with browser or computer access. The cv-apply skill uses your confirmed profile and selected documents, asks for missing facts, and saves progress. You handle sign-in or CAPTCHA when needed, review the form, and submit it yourself. Without browser access, your agent prepares answers to copy. Tracker status changes after you confirm submission." },
   { title: "How do tracking connections work?", answer: "Copy a connection prompt into an AI agent working in this repository. The cv-connect skill guides local setup and prepares a publishing script for your chosen tool. SQLite stays primary, and you choose when to publish. Any required credentials are entered locally and saved in a Git-ignored .env file." },
   { title: "Is CV Tailor open source?", answer: "Yes. CV Tailor is available under the MIT license. Clone the repository, inspect the code, adapt it to your workflow, and contribute through GitHub. Access to your chosen AI agent or provider is separate." },
@@ -133,6 +136,7 @@ export default function LandingPage() {
         ["04", "Apply and keep moving", "Get help filling the form, review and submit it yourself, then track the role and prepare for interviews."],
       ].map(([number, title, text]) => <article key={number}><span className="step-number">{number}</span><h3>{title}</h3><p>{text}</p></article>)}</div></section>
       <section className="features-section section" id="features" aria-labelledby="features-title"><div className="section-heading"><div><span className="eyebrow">THE TOOLS FOR YOUR NEXT STEP</span><h2 id="features-title">A place for every part<br />of the application.</h2></div><p>The writing, research, documents, and preparation all connect to the same profile and application history.</p></div><div className="feature-grid">{features.map(({ icon: Icon, title, description, detail }) => <article className="feature-card" key={title}><span className="feature-icon"><Icon size={20} strokeWidth={1.5} /></span><h3>{title}</h3><p>{description}</p><span className="feature-detail">{detail}</span></article>)}</div><div className="workspace-foundation"><div><UserRound size={19} /><span><strong>One reusable profile</strong><small>Your experience and confirmed skills.</small></span></div><div><Layers size={19} /><span><strong>Room to revise</strong><small>Keep drafts and earlier document versions.</small></span></div><div><FolderOpen size={19} /><span><strong>Local, lasting storage</strong><small>SQLite data that stays between sessions.</small></span></div></div></section>
+      <ApplicationSnapshots />
       <ResumeGallery />
       <ApplicationAssistance />
       <TrackingIntegrations />
