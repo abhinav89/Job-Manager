@@ -7,7 +7,7 @@ from cv_tailor.services.snapshots import resume_snapshot, profile_snapshot
 from cv_tailor.services.external_work import run_blocking
 from cv_tailor.routers.generate_routes import require_one_page
 from typing import List
-from datetime import datetime
+from datetime import date, datetime
 from cv_tailor.database import get_db
 from cv_tailor.dependencies import get_workspace_id
 from cv_tailor.models import database_models as db_models
@@ -43,6 +43,11 @@ def delete_job(job_id: int, revision: int, request: Request):
 @router.get("/stats")
 def get_stats():
     return w.application_stats()
+
+@router.get("/insights")
+def get_insights(include_archived: bool = False, as_of: date | None = None):
+    from cv_tailor.services.application_insights import application_insights
+    return application_insights(include_archived, as_of)
 
 @router.get("/{job_id}/details")
 def get_job_details(job_id: int):

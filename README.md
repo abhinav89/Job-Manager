@@ -100,9 +100,11 @@ Resumes are assembled from structured plain-text content, compiled with Tectonic
 
 ## Included skills
 
-`cv-tailor`, `cv-profile`, `cv-jobs`, `cv-job-fit`, `cv-company-research`, `cv-resume`, `cv-resume-edit`, `cv-cover-letter`, `cv-tracker`, `cv-apply`, `cv-interview`, `cv-code-practice`, `cv-connect`.
+`cv-tailor`, `cv-profile`, `cv-jobs`, `cv-job-fit`, `cv-company-research`, `cv-resume`, `cv-resume-edit`, `cv-cover-letter`, `cv-tracker`, `cv-snapshot`, `cv-apply`, `cv-interview`, `cv-code-practice`, `cv-connect`.
 
 Canonical skills live in `.agents/skills`, with Claude entrypoints in `.claude/skills`. They share the same CLI and output schemas. Company research uses the harness's browsing tools, or user-provided sources when browsing is unavailable. Factual grounding guidance and deterministic checks help catch unsupported claims; review generated documents.
+
+Ask **“Create a snapshot of my job applications”** or **“Use cv-snapshot to visualize my application pipeline.”** The [snapshot skill](.agents/skills/cv-snapshot/SKILL.md) reads your selected database and saves an SVG chart, standalone HTML report, and source JSON under that workspace's `snapshots/` directory. The dashboard does not need to be running. Add “include archived applications” when needed; the chart reflects current recorded statuses.
 
 ## Application form assistance
 
