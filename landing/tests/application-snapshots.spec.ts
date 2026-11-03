@@ -6,7 +6,7 @@ test("visitors can learn and copy the snapshot skill from the guide or skills de
   });
   await page.goto("/#snapshots");
   const section = page.locator("#snapshots");
-  await expect(section.getByRole("heading", { name: "See where your search stands." })).toBeVisible();
+  await expect(section.getByRole("heading", { name: "Your search at a glance." })).toBeVisible();
   await expect(section.getByRole("listitem")).toHaveCount(3);
   await expect(section.getByRole("img", { name: "Sample application snapshot" })).toBeVisible();
   await expect(section.getByText("Illustrative data", { exact: true })).toBeVisible();

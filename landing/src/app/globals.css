@@ -104,7 +104,7 @@ svg { flex-shrink: 0; }
 .site-header { position: sticky; top: 0; z-index: 30; background: var(--header); border-bottom: 1px solid var(--line); backdrop-filter: blur(12px); }
 .header-inner { max-width: 1440px; height: 79px; padding-inline: 40px; margin: auto; display: flex; align-items: center; justify-content: space-between; gap: 22px; }
 .brand { display: inline-flex; align-items: center; font-size: 17px; font-weight: 600; letter-spacing: -.04em; }
-.desktop-nav { display: flex; align-items: center; gap: 20px; }
+.desktop-nav { display: flex; align-items: center; gap: 30px; }
 .desktop-nav a { font-size: 13px; letter-spacing: .025em; color: var(--muted); }
 .desktop-nav a:hover { color: var(--ink); }
 .header-actions { display: flex; align-items: center; gap: 26px; }
@@ -122,7 +122,7 @@ svg { flex-shrink: 0; }
 .hero-copy { padding-bottom: 19px; }
 .hero-eyebrow { display: flex; align-items: center; gap: 9px; color: var(--green); font-size: 12px; font-weight: 600; letter-spacing: .16em; margin-bottom: 24px; }
 .hero-eyebrow > span { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 4px var(--green-glow); }
-h1 { font-family: var(--display); font-size: clamp(42px, 4.4vw, 61px); line-height: 1.09; font-weight: 400; letter-spacing: -.047em; }
+h1 { font-family: var(--display); font-size: clamp(30px, 3.6vw, 55px); line-height: 1.09; font-weight: 400; letter-spacing: -.047em; }
 h1 em { font-weight: 400; color: var(--sage); }
 .hero-description { max-width: 430px; margin-top: 24px; font-size: 15px; line-height: 1.95; color: var(--secondary); }
 .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 23px; margin-top: 30px; }
@@ -228,15 +228,7 @@ h2 { font-family: var(--display); font-size: clamp(31px,3.2vw,43px); font-weight
 .feature-card { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--line); background: var(--white); border-radius: 9px; padding: 27px 25px 23px; transition: border-color .2s, transform .2s; }
 .feature-card:hover { transform: translateY(-3px); border-color: var(--selected-line); }
 .feature-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 7px; background: var(--selected); color: var(--selected-text); margin-bottom: 21px; }
-.feature-card h3 { font-family: var(--display); font-size: 22px; line-height: 1.2; font-weight: 400; letter-spacing: -.025em; max-width: 235px; margin-bottom: 12px; }
-.feature-card p { font-size: 14px; line-height: 1.95; color: var(--muted); margin-bottom: 22px; }
-.feature-detail { display: block; border-top: 1px solid var(--line-soft); padding-top: 14px; color: var(--subtle); font-size: 11px; line-height: 1.7; margin-top: auto; }
-.workspace-foundation { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); background: var(--panel); border: 1px solid var(--line); border-radius: 7px; margin-top: 15px; padding: 23px 0; }
-.workspace-foundation > div { display: flex; gap: 12px; align-items: center; justify-content: center; padding: 0 18px; }
-.workspace-foundation > div + div { border-left: 1px solid var(--line); }
-.workspace-foundation svg { color: var(--sage); }
-.workspace-foundation strong { display: block; font-size: 13px; font-weight: 500; }
-.workspace-foundation small { display: block; color: var(--muted); font-size: 11px; line-height: 1.7; margin-top: 4px; }
+.feature-card h3 { font-family: var(--display); font-size: 24px; line-height: 1.2; font-weight: 400; letter-spacing: -.025em; }
 .skills-section { padding-bottom: 90px; }
 .skill-desk { display: grid; grid-template-columns: 290px minmax(0,1fr); border: 1px solid var(--line); background: var(--white); border-radius: 9px; overflow: hidden; }
 .skill-list { display: grid; gap: 4px; padding: 15px; background: var(--panel); border-right: 1px solid var(--line); }
@@ -268,7 +260,6 @@ h2 { font-family: var(--display); font-size: clamp(31px,3.2vw,43px); font-weight
 .install-section::before { content: ""; position: absolute; z-index: -1; inset: 0; border: 1px solid var(--line); background: var(--panel); border-radius: 10px; }
 .install-copy { padding-block: 12px; }
 .install-copy h2 { font-size: clamp(31px,3vw,39px); margin-top: 15px; }
-.install-copy > p { color: var(--muted); font-size: 14px; line-height: 1.95; margin-top: 20px; max-width: 360px; }
 .install-requirements { display: grid; gap: 14px; margin-block: 25px 27px; }
 .install-requirements > span { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--secondary); line-height: 1.5; }
 .install-requirements svg { color: var(--green); }
@@ -285,9 +276,7 @@ h2 { font-family: var(--display); font-size: clamp(31px,3.2vw,43px); font-weight
 .code-header > span { color: var(--subtle); font-size: 11px; letter-spacing: .12em; }
 .install-code pre { overflow-x: auto; padding: 21px 16px 22px; margin: 0; font-family: var(--mono); font-size: 13px; line-height: 2.25; }
 .install-code code { font: inherit; }
-.install-code-note { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--success-text); padding: 11px 15px; border-top: 1px dashed var(--line-soft); line-height: 1.7; }
 .after-install { padding-top: 20px; }
-.after-install .eyebrow { font-size: 11px; color: var(--subtle); }
 .after-install p { font-size: 12px; line-height: 1.95; color: var(--secondary); margin-top: 7px; }
 .after-install p code { color: var(--secondary); }
 .launch-command { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--selected); border: 1px solid var(--selected-line); border-radius: 4px; padding: 10px 12px; margin-top: 13px; }
@@ -360,6 +349,7 @@ html:has(.pdf-preview-dialog[open]) { overflow: hidden; }
 
 
 .tracking-integrations { padding-bottom: 90px; scroll-margin-top: 15px; }
+.integration-setup-link { margin-top: 18px; color: var(--selected-text); font-size: 13px; }
 .integration-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 18px; }
 .integration-card { display: flex; flex-direction: column; align-items: center; padding: 31px 23px 23px; border: 1px solid var(--line); border-radius: 8px; background: var(--white); }
 .integration-logo { width: 84px; height: 84px; display: grid; place-items: center; background: white; border: 1px solid var(--line-soft); border-radius: 18px; }
@@ -368,14 +358,8 @@ html:has(.pdf-preview-dialog[open]) { overflow: hidden; }
 .integration-card h3 { margin: 23px 0 24px; font-family: var(--display); font-size: 24px; font-weight: 400; line-height: 1.2; text-align: center; }
 .integration-card .copy-control { width: 100%; margin-top: auto; }
 .integration-card .copy-button { width: 100%; min-height: 40px; gap: 7px; font-size: 13px; border-radius: 4px; }
-.integration-details { display: flex; align-items: center; gap: 16px 25px; flex-wrap: wrap; padding-top: 20px; font-size: 13px; color: var(--muted); }
-.integration-details > span, .integration-details > a { display: inline-flex; align-items: center; gap: 7px; line-height: 1.7; }
-.integration-details > span svg { color: var(--sage); }
-.integration-details > a { margin-left: auto; color: var(--selected-text); }
-.integration-details > a:hover { text-decoration: underline; text-underline-offset: 4px; }
-.integration-note { margin-top: 13px; font-size: 12px; line-height: 1.8; color: var(--muted); }
 .copy-fallback { display: block; width: 100%; margin-top: 10px; padding: 10px; resize: vertical; border: 1px solid var(--line); border-radius: 4px; background: var(--paper); color: var(--ink); font: inherit; font-size: 13px; line-height: 1.7; }
-@media (max-width: 1000px) { .integration-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .integration-details > a { margin-left: 0; } }
+@media (max-width: 1000px) { .integration-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media (max-width: 900px) {
   .desktop-nav { display: none; }
   .menu-toggle { display: flex; }
@@ -390,8 +374,6 @@ html:has(.pdf-preview-dialog[open]) { overflow: hidden; }
   .integration-logo img { width: 41px; height: 41px; }
   .integration-card h3 { font-size: clamp(16px,5vw,21px); margin-block: 19px; min-height: 2.4em; display: grid; align-items: center; }
   .integration-card .copy-button { font-size: 12px; }
-  .integration-details { gap: 12px; font-size: 12px; }
-  .integration-note { font-size: 12px; }
 }
 
 @media (min-width: 1300px) {
@@ -399,6 +381,7 @@ html:has(.pdf-preview-dialog[open]) { overflow: hidden; }
 }
 @media (max-width: 1100px) {
   .section, .header-inner { padding-inline: 28px; }
+  .desktop-nav { gap: 24px; }
   .hero { gap: 28px; padding-top: 78px; }
   .hero-actions { gap: 15px; }
   .hero-note { font-size: 11px; }
@@ -419,18 +402,19 @@ html:has(.pdf-preview-dialog[open]) { overflow: hidden; }
   .agent-strip > p { font-size: 16px; }
   .feature-card { padding: 24px 20px 20px; }
   .feature-card h3 { font-size: 21px; }
-  .workspace-foundation > div { padding-inline: 14px; gap: 9px; }
-  .workspace-foundation small { font-size: 10px; }
   .skill-desk { grid-template-columns: 260px minmax(0,1fr); }
   .skill-detail { padding-inline: 28px; }
   .install-section, .faq-section { gap: 45px; }
+}
+@media (max-width: 960px) {
+  .desktop-nav { gap: 18px; }
 }
 @media (max-width: 860px) {
   .desktop-nav { gap: 19px; margin-left: 0; }
   .header-actions { gap: 15px; }
   .hero { grid-template-columns: 1fr; padding-top: 63px; padding-bottom: 64px; gap: 42px; }
   .hero-copy { max-width: 600px; padding-bottom: 0; }
-  h1 { font-size: 60px; }
+  h1 { font-size: clamp(36px, 6vw, 55px); }
   .hero-description { max-width: 500px; }
   .hero .button { font-size: 13px; padding-inline: 19px; gap: 18px; }
   .hero-note { font-size: 12px; }
@@ -465,11 +449,7 @@ html:has(.pdf-preview-dialog[open]) { overflow: hidden; }
   .workflow-steps article { padding-top: 22px; }
   .workflow-steps article:nth-child(3) { padding-left: 0; border-left: 0; }
   .feature-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .feature-card h3 { max-width: 240px; font-size: 23px; }
-  .workspace-foundation { padding: 20px; grid-template-columns: 1fr; gap: 20px; }
-  .workspace-foundation > div { justify-content: flex-start; padding: 0; }
-  .workspace-foundation > div + div { border: 0; }
-  .workspace-foundation small { font-size: 11px; }
+  .feature-card h3 { font-size: 23px; }
   .skill-desk { grid-template-columns: 230px minmax(0,1fr); }
   .skill-list { padding: 12px 8px; }
   .skill-list button { font-size: 12px; padding-inline: 10px; }
@@ -478,11 +458,10 @@ html:has(.pdf-preview-dialog[open]) { overflow: hidden; }
   .prompt-window blockquote { font-size: 13px; padding: 20px 15px; }
   .prompt-result { font-size: 10px; align-items: flex-start; }
   .install-section { grid-template-columns: 1fr; gap: 35px; padding-block: 45px; }
-  .install-copy > p { max-width: 500px; }
   .install-requirements { margin-block: 20px; }
   .install-panel { max-width: 620px; width: 100%; }
   .install-code pre { font-size: 14px; }
-  .install-code-note, .code-header > span { font-size: 11px; }
+  .code-header > span { font-size: 11px; }
   .after-install p { font-size: 13px; }
   .faq-section { gap: 35px; }
   .faq-section h2 { font-size: 32px; }
@@ -501,7 +480,7 @@ html:has(.pdf-preview-dialog[open]) { overflow: hidden; }
   .mobile-nav a { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; font-size: 14px; }
   .hero { padding-top: 46px; padding-bottom: 60px; gap: 32px; }
   .hero-eyebrow { font-size: 11px; letter-spacing: .12em; margin-bottom: 21px; }
-  h1 { font-size: clamp(38px,9.4vw,55px); line-height: 1.1; letter-spacing: -.047em; }
+  h1 { font-size: clamp(25px,7vw,42px); line-height: 1.1; letter-spacing: -.047em; }
   .hero-description { font-size: 14px; line-height: 1.95; margin-top: 22px; }
   .hero-actions { gap: 18px; margin-top: 25px; }
   .hero .button { min-height: 45px; padding: 13px 14px; font-size: 12px; gap: 13px; }
@@ -545,7 +524,7 @@ html:has(.pdf-preview-dialog[open]) { overflow: hidden; }
   .agent-carousel-item { font-size: 13px; }
   .workflow-section { padding-block: 63px 60px; }
   .section-heading { flex-direction: column; align-items: flex-start; gap: 18px; margin-bottom: 30px; }
-  h2 { font-size: 32px; }
+  h2 { font-size: clamp(24px,7vw,32px); }
   .eyebrow { font-size: 11px; letter-spacing: .12em; }
   .section-heading > p { font-size: 13px; max-width: 400px; }
   .workflow-steps { row-gap: 25px; }
@@ -559,12 +538,7 @@ html:has(.pdf-preview-dialog[open]) { overflow: hidden; }
   .feature-grid { grid-template-columns: 1fr; gap: 12px; }
   .feature-card { padding: 23px 23px 20px; }
   .feature-icon { margin-bottom: 18px; }
-  .feature-card h3 { font-size: 25px; max-width: 270px; }
-  .feature-card p { font-size: 14px; max-width: 380px; margin-bottom: 20px; }
-  .feature-detail { font-size: 11px; }
-  .workspace-foundation { padding: 23px; gap: 22px; }
-  .workspace-foundation strong { font-size: 13px; }
-  .workspace-foundation small { font-size: 11px; }
+  .feature-card h3 { font-size: 22px; }
   .skills-section { padding-bottom: 61px; }
   .skill-desk { grid-template-columns: 1fr; }
   .skill-list { grid-template-columns: repeat(2,minmax(0,1fr)); padding: 12px 9px; border-right: 0; border-bottom: 1px solid var(--line); gap: 3px; }
@@ -582,8 +556,7 @@ html:has(.pdf-preview-dialog[open]) { overflow: hidden; }
   .skills-footnote > a { margin-left: 22px; }
   .install-section { margin-inline: 12px; gap: 28px; padding: 35px 20px 32px; }
   .install-copy { padding: 0; }
-  .install-copy h2 { font-size: 31px; }
-  .install-copy > p { font-size: 14px; margin-top: 16px; }
+  .install-copy h2 { font-size: clamp(23px,6.8vw,31px); }
   .install-requirements { gap: 12px; }
   .install-requirements > span { font-size: 11px; align-items: flex-start; }
   .install-options { gap: 4px; padding: 4px; }
@@ -593,7 +566,6 @@ html:has(.pdf-preview-dialog[open]) { overflow: hidden; }
   .install-options > button svg { width: 14px; }
   .code-header { padding: 11px 12px; }
   .install-code pre { font-size: 12px; padding: 17px 12px; }
-  .install-code-note { font-size: 9px; padding-inline: 12px; }
   .after-install p { font-size: 12px; }
   .launch-command { align-items: flex-start; flex-direction: column; gap: 6px; }
   .launch-command code { font-size: 12px; }
@@ -635,10 +607,7 @@ html:has(.pdf-preview-dialog[open]) { overflow: hidden; }
 .apply-prompt-panel .prompt-window-header:has(.copy-fallback) { flex-wrap: wrap; }
 .apply-prompt-panel .copy-control:has(.copy-fallback) { flex-basis: 100%; min-width: 0; }
 .apply-prompt-panel blockquote { overflow-wrap: anywhere; }
-.apply-dashboard-path { margin-top: 18px; color: var(--muted); font-size: 13px; line-height: 1.9; }
-.apply-dashboard-path strong { color: var(--ink); font-weight: 500; }
-.apply-notes { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 34px; padding-top: 22px; border-top: 1px solid var(--line); }
-.apply-notes p { max-width: 700px; color: var(--muted); font-size: 13px; line-height: 1.9; }
+.apply-notes { display: flex; align-items: center; justify-content: flex-end; gap: 24px; margin-top: 34px; padding-top: 22px; border-top: 1px solid var(--line); }
 .apply-notes .text-link { flex-shrink: 0; }
 @media (max-width: 900px) {
   .apply-workflow { grid-template-columns: 1fr; gap: 30px; }
@@ -652,7 +621,6 @@ html:has(.pdf-preview-dialog[open]) { overflow: hidden; }
   .apply-steps li { flex-direction: row; gap: 14px; }
   .apply-steps h3 { font-size: 14px; }
   .apply-steps p { font-size: 13px; }
-  .apply-dashboard-path { font-size: 12px; }
   .apply-notes { margin-top: 26px; }
-  .apply-notes p, .apply-notes .text-link { font-size: 12px; }
+  .apply-notes .text-link { font-size: 12px; }
 }

@@ -6,12 +6,14 @@ test("visitors can copy the application workflow from its guide or the skills de
   });
   await page.goto("/#apply");
   const section = page.locator("#apply");
-  await expect(section.getByRole("heading", { name: "Less retyping. More time to review." })).toBeVisible();
+  await expect(section.getByRole("heading", { name: "Apply with your agent." })).toBeVisible();
   await expect(section.getByRole("listitem")).toHaveCount(3);
   await section.getByRole("button", { name: "Copy application assistance prompt" }).click();
   await expect(section.getByRole("status")).toHaveText("Copied to clipboard.");
   const prompt = await page.evaluate(() => (window as Window & { copiedPrompt?: string }).copiedPrompt);
-  expect(prompt).toContain("Use cv-apply for application #42");
+  expect(prompt).toContain("Use cv-apply.");
+  expect(prompt).toContain("choose a saved application");
+  expect(prompt).not.toContain("#42");
   expect(prompt).toContain("I'll submit it myself");
   await expect(section.getByRole("link", { name: "Read the application guide" })).toHaveAttribute("href", /docs\/application_forms\.md$/);
   const skills = page.locator("#skills");
