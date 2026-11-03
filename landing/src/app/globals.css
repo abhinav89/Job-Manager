@@ -197,12 +197,19 @@ h1 em { font-weight: 400; color: var(--sage); }
 .prep-checklist svg { color: var(--green); }
 .demo-interview .demo-saved-document { margin-top: 23px; }
 
-.agent-strip { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-block: 26px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-.agent-strip > span { font-size: 8px; letter-spacing: .11em; color: var(--muted); }
-.agent-strip > div { display: flex; align-items: center; gap: 29px; }
-.agent-strip > div > span { display: flex; gap: 7px; align-items: center; font-size: 11px; }
-.agent-strip svg { color: var(--subtle); }
-.agent-strip > p { font-family: var(--display); font-style: italic; font-size: 13px; color: var(--muted); }
+.agent-strip { display: grid; grid-template-columns: 190px minmax(0,1fr) 190px; align-items: center; gap: 28px; padding-block: 26px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.agent-strip > span { font-size: 11px; letter-spacing: .11em; color: var(--muted); }
+.agent-strip > p { font-family: var(--display); font-style: italic; font-size: 17px; color: var(--muted); text-align: right; }
+.agent-carousel { display: flex; align-items: center; min-width: 0; }
+.agent-carousel-window { min-width: 0; flex: 1; overflow: hidden; padding-block: 8px; mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); }
+.agent-carousel-window:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+.agent-carousel-track { display: flex; width: max-content; animation: agent-scroll 48s linear infinite; }
+.agent-carousel-group { display: flex; flex-shrink: 0; align-items: center; gap: 32px; list-style: none; margin: 0; padding: 0 32px 0 0; }
+.agent-carousel-item { display: flex; align-items: center; gap: 10px; white-space: nowrap; font-size: 14px; font-weight: 500; }
+.agent-carousel-item img { display: block; width: 30px; height: 30px; object-fit: contain; }
+:root[data-theme="dark"] .agent-logo-monochrome { filter: invert(1); }
+.agent-carousel-window:hover .agent-carousel-track, .agent-carousel-window:focus .agent-carousel-track { animation-play-state: paused; }
+@keyframes agent-scroll { to { transform: translateX(-50%); } }
 .workflow-section { padding-block: 93px 86px; }
 .section-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 35px; margin-bottom: 39px; }
 h2 { font-family: var(--display); font-size: clamp(31px,3.2vw,43px); font-weight: 400; line-height: 1.14; letter-spacing: -.037em; }
@@ -408,9 +415,9 @@ html:has(.pdf-preview-dialog[open]) { overflow: hidden; }
   .demo-job > div > span { font-size: 5px; }
   .company-monogram { width: 22px; height: 23px; }
   .demo-job { gap: 6px; }
-  .agent-strip > div { gap: 20px; }
-  .agent-strip > div > span { font-size: 10px; }
-  .agent-strip > p { display: none; }
+  .agent-strip { grid-template-columns: 160px minmax(0,1fr) 160px; gap: 16px; }
+  .agent-strip > span { font-size: 10px; }
+  .agent-strip > p { font-size: 16px; }
   .feature-card { padding: 24px 20px 20px; }
   .feature-card h3 { font-size: 21px; }
   .workspace-foundation > div { padding-inline: 14px; gap: 9px; }
@@ -532,10 +539,11 @@ html:has(.pdf-preview-dialog[open]) { overflow: hidden; }
   .workspace-preview figcaption { font-size: 7px; bottom: -25px; }
   .demo-interview .practice-question { padding-block: 18px; margin-top: 18px; }
   .demo-interview .practice-question p { font-size: 22px; }
-  .agent-strip { flex-direction: column; align-items: flex-start; padding-block: 22px; gap: 16px; }
-  .agent-strip > div { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 13px 20px; }
-  .agent-strip > div > span { font-size: 10px; }
-  .agent-strip > span { font-size: 7px; }
+  .agent-strip { grid-template-columns: minmax(0,1fr) auto; padding-block: 22px; gap: 18px 10px; }
+  .agent-strip > span { font-size: 10px; }
+  .agent-strip > p { grid-column: 2; grid-row: 1; font-size: 15px; }
+  .agent-carousel { grid-column: 1 / -1; grid-row: 2; }
+  .agent-carousel-item { font-size: 13px; }
   .workflow-section { padding-block: 63px 60px; }
   .section-heading { flex-direction: column; align-items: flex-start; gap: 18px; margin-bottom: 30px; }
   h2 { font-size: 32px; }
@@ -612,6 +620,8 @@ html:has(.pdf-preview-dialog[open]) { overflow: hidden; }
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .feature-card:hover, .github-star:hover { transform: none; }
+  .agent-carousel-window { overflow-x: auto; mask-image: none; }
+  .agent-carousel-group[aria-hidden="true"] { display: none; }
 }
 
 .apply-section { padding-bottom: 88px; }

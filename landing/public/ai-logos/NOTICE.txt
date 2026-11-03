@@ -1,0 +1,3 @@
+AI brand icons from Lobe Icons (MIT): https://github.com/lobehub/lobe-icons
+Source: packages/static-svg/icons/
+Brand names and logos belong to their respective owners. No affiliation or endorsement is implied.
