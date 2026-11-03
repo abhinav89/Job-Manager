@@ -1,5 +1,12 @@
 Icons from Simple Icons (CC0): https://github.com/simple-icons/simple-icons
 Brand names and logos belong to their respective owners.
-HighLevel logo (gohighlevel.png): official brand kit, https://marketing.gohighlevel.com/brandkit
-Source: https://assets.cdn.filesafe.space/zELBHkVp0JPbbLvKIlF5/media/690a5f4a57ea175183408da2.png
-HighLevel logo is unmodified and is not covered by the Simple Icons CC0 dedication. No affiliation or endorsement is implied.
+HighLevel logo (gohighlevel.png): user-supplied transparent three-arrow symbol, used unmodified.
+HighLevel logo is not covered by the Simple Icons CC0 dedication. No affiliation or endorsement is implied.
+
+Google Calendar logo (googlecalendar.svg): unmodified Google product asset.
+Source: https://www.gstatic.com/images/branding/productlogos/calendar_2026/v2/web/192px.svg
+Product page: https://workspace.google.com/products/calendar/
+Microsoft Outlook logo (outlook.svg): Microsoft product icon (2025-present), via Wikimedia Commons.
+Source: https://upload.wikimedia.org/wikipedia/commons/c/cc/Microsoft_Outlook_Icon_%282025%E2%80%93present%29.svg
+File details: https://commons.wikimedia.org/wiki/File:Microsoft_Outlook_Icon_(2025%E2%80%93present).svg
+These product logos are not covered by the Simple Icons CC0 dedication. Brand rights remain with their respective owners.

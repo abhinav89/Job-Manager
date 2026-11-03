@@ -7,8 +7,9 @@ test("each destination copies its setup wizard and local credential instructions
   await page.goto("/#integrations");
   const section = page.locator("#integrations");
   await expect(section.getByRole("heading", { name: "Connect it anywhere." })).toBeVisible();
-  await expect(section.locator("article")).toHaveCount(9);
-  for (const name of ["Obsidian", "Notion", "Google Sheets", "Markdown", "Airtable", "HubSpot", "GoHighLevel"]) {
+  await expect(section.locator("article")).toHaveCount(8);
+  await expect(section.getByRole("heading", { name: "Markdown", exact: true })).toHaveCount(0);
+  for (const name of ["Obsidian", "Notion", "Google Sheets", "Airtable", "HubSpot", "GoHighLevel"]) {
     const card = section.getByRole("article").filter({ has: page.getByRole("heading", { name, exact: true }) });
     await expect(card.getByRole("img", { name: `${name} logo` })).toBeVisible();
     await expect.poll(() => card.locator("img").evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
@@ -62,7 +63,7 @@ test("connection cards and navigation fit mobile, tablet, and desktop", async ({
     await expect(page).toHaveURL(/#integrations$/);
     await expect(page.getByRole("heading", { name: "Connect it anywhere." })).toBeInViewport();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await expect(page.locator(".integration-card .copy-button")).toHaveCount(9);
+    await expect(page.locator(".integration-card .copy-button")).toHaveCount(8);
   }
 });
 
@@ -73,7 +74,8 @@ test("calendar prompts choose the provider and preserve existing connections", a
   await page.goto("/#integrations");
   for (const name of ["Google Calendar", "Outlook"]) {
     const card = page.getByRole("article").filter({ has: page.getByRole("heading", { name, exact: true }) });
-    await expect(card.getByRole("img", { name: `${name} calendar icon` })).toBeVisible();
+    await expect(card.getByRole("img", { name: `${name} logo` })).toBeVisible();
+    await expect.poll(() => card.locator("img").evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
     await card.getByRole("button", { name: `Copy ${name} connection prompt`, exact: true }).click();
     await expect(card.getByRole("status")).toHaveText("Copied to clipboard.");
     const prompt = await page.evaluate(() => (window as Window & { copiedPrompt?: string }).copiedPrompt);
