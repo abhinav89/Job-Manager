@@ -40,6 +40,13 @@ browsers, proxy rotation, or challenge bypasses. Source output has a `sources` m
 These statuses describe this run, not whether the website has matching jobs.
 Public access can vary; fixture tests verify parsing and failure handling, not live availability.
 
+LinkedIn's logged-out search uses ten-result pages. Philippine posting links are
+normalized to the main LinkedIn hostname. The helper does not promise remote-only
+results: the logged-out endpoint's work-type filter is not reliable. A bounded
+research probe returned search cards and a full guest description without a login,
+but the normal helper still stops because LinkedIn's robots rules disallow these
+paths. See the provider inspection below for the separate Indeed API finding.
+
 ## Experimental JobStreet Philippines JSON source
 
 An explicitly selected `jobstreet-json` source reads the website's

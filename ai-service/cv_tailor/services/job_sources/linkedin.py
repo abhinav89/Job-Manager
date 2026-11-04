@@ -15,7 +15,7 @@ from .common import (
 
 SOURCE = "LinkedIn"
 BASE_URL = "https://www.linkedin.com"
-PAGE_SIZE = 25
+PAGE_SIZE = 10
 MAX_PAGES = 4
 
 
@@ -23,7 +23,6 @@ def search_url(query: str = "", page: int = 0) -> str:
     params = {
         "keywords": query.strip() or "developer",
         "location": "Philippines",
-        "f_WT": "2",
         "start": page * PAGE_SIZE,
     }
     return f"{BASE_URL}/jobs-guest/jobs/api/seeMoreJobPostings/search?{urlencode(params)}"
@@ -34,7 +33,7 @@ def _posting_url(href: str) -> tuple[str, str | None] | None:
         parsed = urlsplit(urljoin(BASE_URL, href))
     except ValueError:
         return None
-    if parsed.scheme != "https" or parsed.hostname not in ("linkedin.com", "www.linkedin.com"):
+    if parsed.scheme != "https" or parsed.hostname not in ("linkedin.com", "www.linkedin.com", "ph.linkedin.com"):
         return None
     if not parsed.path.startswith("/jobs/view/"):
         return None
@@ -125,7 +124,7 @@ def parse_detail(html: str, job: dict) -> dict:
 
 
 async def fetch_jobs(query: str = "", limit: int = 5) -> tuple[list[dict], str]:
-    """Collect at most 100 remote-filtered PH listings, preserving access failures."""
+    """Collect at most 40 PH listings, preserving access failures."""
     if limit < 1:
         return [], "no_results"
     limit = min(limit, PAGE_SIZE * MAX_PAGES)

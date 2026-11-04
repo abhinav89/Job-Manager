@@ -32,12 +32,18 @@ DETAIL_HTML = """
 
 
 class LinkedInSourceTests(unittest.TestCase):
-    def test_search_encodes_role_and_keeps_remote_ph_pagination(self):
+    def test_search_encodes_role_and_uses_ten_result_ph_pagination(self):
         parsed = urlsplit(linkedin.search_url("Python & JavaScript", page=2))
         self.assertEqual(parse_qs(parsed.query), {
             "keywords": ["Python & JavaScript"], "location": ["Philippines"],
-            "f_WT": ["2"], "start": ["50"],
+            "start": ["20"],
         })
+
+    def test_philippine_posting_links_are_canonicalized(self):
+        html = SEARCH_HTML.replace("www.linkedin.com", "ph.linkedin.com")
+        job = linkedin.parse_search(html)[0]
+        self.assertEqual(job["source_job_id"], "12345")
+        self.assertEqual(job["job_url"], "https://www.linkedin.com/jobs/view/12345/")
 
     def test_cards_preserve_unknowns_and_canonical_posting_identity(self):
         jobs = linkedin.parse_search(SEARCH_HTML + SEARCH_HTML)
@@ -58,7 +64,12 @@ class LinkedInSourceTests(unittest.TestCase):
         self.assertIsNone(job["location"])
 
     def test_rejects_foreign_or_nonposting_links(self):
-        for url in ("https://example.com/jobs/view/42/", "https://www.linkedin.com/company/example/"):
+        for url in (
+            "https://example.com/jobs/view/42/",
+            "https://www.linkedin.com/company/example/",
+            "https://ph.linkedin.com.example.com/jobs/view/42/",
+            "https://ph-linkedin.com/jobs/view/42/",
+        ):
             html = f'<div class="base-search-card"><a class="base-card__full-link" href="{url}"></a><h3>Engineer</h3></div>'
             with self.assertRaises(JobSourceError) as error:
                 linkedin.parse_search(html)
@@ -117,6 +128,18 @@ class LinkedInSourceTests(unittest.TestCase):
         self.assertEqual(status, "partial")
         self.assertEqual(len(jobs), 1)
         self.assertEqual(jobs[0]["job_description"], "")
+
+    def test_fetch_continues_after_a_full_ten_card_page(self):
+        first_page = "".join(SEARCH_HTML.replace("12345", str(1000 + index)) for index in range(10))
+        second_page = SEARCH_HTML.replace("12345", "1010")
+        responses = [first_page, *([DETAIL_HTML] * 10), second_page, DETAIL_HTML]
+        with patch.object(linkedin, "fetch_public_html", new=AsyncMock(side_effect=responses)) as fetch:
+            jobs, status = asyncio.run(linkedin.fetch_jobs("Python", limit=11))
+        self.assertEqual(status, "ok")
+        self.assertEqual(len(jobs), 11)
+        self.assertEqual(jobs[-1]["source_job_id"], "1010")
+        next_search = fetch.await_args_list[11].args[0]
+        self.assertEqual(parse_qs(urlsplit(next_search).query)["start"], ["10"])
 
     def test_removed_posting_is_not_returned(self):
         with patch.object(linkedin, "fetch_public_html", new=AsyncMock(side_effect=[SEARCH_HTML, JobSourceError("not_found", "Removed")])):

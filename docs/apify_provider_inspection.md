@@ -30,3 +30,38 @@ the test, without site credentials. It does not prove that these hosted LinkedIn
 or Indeed Actors use the same technique. The endpoint is undocumented and the PH
 robots rules disallow its path; CV Tailor therefore exposes it only as the
 explicitly selected experimental `jobstreet-json` source, outside default scans.
+
+## LinkedIn and Indeed follow-up
+
+The MIT-licensed [JobSpy implementation](https://github.com/speedyapply/JobSpy/tree/68b88d6909a2342ad75fbb945c4204a3a7ed6665/jobspy)
+was inspected as an independent open-source reference. It is not the hidden source
+of any of the Apify Actors above. No third-party package was installed or executed.
+
+- LinkedIn uses the public guest search endpoint already targeted by our helper.
+  A direct, unauthenticated research request for `python automation` in the
+  Philippines returned HTTP 200 with ten cards. The first card's guest detail
+  endpoint returned HTTP 200 and a 2,205-character description. Our existing detail
+  parser recognized the description and explicit full-time employment type.
+- Live cards used `ph.linkedin.com` posting links. The helper now accepts this
+  exact hostname, normalizes it to `www.linkedin.com`, and uses ten-result offsets.
+  Lookalike hostnames remain rejected. JobSpy also reports that logged-out search
+  ignores the remote/work-type filter; our helper no longer sends or promises it.
+- LinkedIn's robots rules disallow both guest paths for this collector. These
+  research requests demonstrate technical availability at the time of the test;
+  they do not change the normal helper's robots stop or add a new opt-in source.
+- JobSpy's Indeed implementation posts a GraphQL search to
+  `https://apis.indeed.com/graphql` with a hardcoded `indeed-api-key` and mobile-app
+  headers. A separate request without a key returned HTTP 401 with
+  `UNAUTHENTICATED` and `An API Key is required.` The third-party key was not used,
+  copied into CV Tailor, or included in research output. This method is therefore
+  not evidence of anonymous Indeed access.
+- Indeed's [documented integration flow](https://docs.indeed.com/getstarted/integrate-and-call-apis)
+  requires a partner app and OAuth credentials. Its example also shows that an
+  authenticated client can lack access to the job-retrieval service. A future
+  direct adapter needs credentials and search access issued for this integration,
+  or a separately configured provider; neither was added in this research pass.
+
+Requests used ordinary HTTP without site sessions, proxies, browser impersonation,
+or challenge solving. These small probes do not establish sustained access,
+complete search coverage, or production reliability. The existing Indeed HTML
+collector still reports its observed refusal rather than returning fabricated jobs.
