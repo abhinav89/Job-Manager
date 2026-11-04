@@ -141,6 +141,14 @@ Browser-backed job sources are optional: `python -m pip install -e "ai-service[b
 
 ## Development and verification
 
+Develop on `dev`, push it, and open a PR from `dev` to `main`. After the PR merges, synchronize `dev` with `origin/main` and continue working on `dev`. Enable the repository-local guards once per clone:
+
+```sh
+python scripts/setup_git_hooks.py
+```
+
+These hooks block commits on `main` and direct pushes to it, including `dev:main` pushes. Existing custom hooks are preserved. GitHub's branch protection still enforces PR checks; local hooks are an additional guard against mistakes. Agents follow this workflow through [AGENTS.md](AGENTS.md).
+
 ```sh
 python -m pip install -e "ai-service[test,ai]"
 python -m pytest ai-service/tests
