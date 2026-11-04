@@ -1,5 +1,15 @@
 # Using CV Tailor
 
+## Development workflow
+
+Make engineering changes on the long-lived `dev` branch. Fetch origin and switch to `dev` before editing; create it from `origin/main` only if it does not exist. Preserve uncommitted work and existing branch history. Never reset or force-push a branch to synchronize it.
+
+Enable the repository's branch guards once per clone with `python scripts/setup_git_hooks.py`. Do not overwrite an existing custom hooks setup; integrate the guards with it instead. The guards block commits on `main` and direct pushes to `main`.
+
+Commit and push changes to `dev`, then open a PR from `dev` to `main`. Merge through the PR after required checks pass when the user has authorized the merge. Never commit or push directly to `main`, bypass its required checks, or delete `dev` after merging. After a merge, fetch origin, fast-forward `dev` to `origin/main` when possible, and leave the checkout on `dev`. If branches have diverged, preserve the existing work and merge normally rather than resetting.
+
+## Career workspace
+
 This repository is a local career workspace. For user career tasks, start with `.agents/skills/cv-tailor/SKILL.md`; load focused skills as needed. Codex, OpenCode, and Antigravity discover `.agents/skills`. Claude entrypoints are in `.claude/skills`.
 
 First setup: `python scripts/install.py --cli-only` (default) or `python scripts/install.py --with-dashboard`.
