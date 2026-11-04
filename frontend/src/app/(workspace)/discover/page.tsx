@@ -27,6 +27,7 @@ const SOURCES = [
   { id: "remotive", name: "Remotive" },
   { id: "arbeitnow", name: "Arbeitnow" },
   { id: "jobstreet", name: "JobStreet PH" },
+  { id: "jobstreet-json", name: "JobStreet PH (experimental)" },
   { id: "indeed-us", name: "Indeed (US)" },
   { id: "indeed-ph", name: "Indeed (PH)" },
 ];
@@ -122,7 +123,7 @@ export default function DiscoverPage() {
           {/* Header */}
           <div className="mb-8">
             <div className="text-[10px] tracking-[0.3em] uppercase mb-1" style={{ color: PAPER.green }}>cv_tailor</div>
-            <h1 className="text-2xl font-bold" style={{ fontFamily: "'Georgia', serif" }}>Discover Remote Jobs</h1>
+            <h1 className="text-2xl font-bold" style={{ fontFamily: "'Georgia', serif" }}>Discover Jobs</h1>
             <p className="text-xs mt-1" style={{ color: PAPER.muted }}>
               Search selected job websites directly, then import postings to your tracker in one click.
             </p>

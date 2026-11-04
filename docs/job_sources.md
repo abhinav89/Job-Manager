@@ -40,6 +40,33 @@ browsers, proxy rotation, or challenge bypasses. Source output has a `sources` m
 These statuses describe this run, not whether the website has matching jobs.
 Public access can vary; fixture tests verify parsing and failure handling, not live availability.
 
+## Experimental JobStreet Philippines JSON source
+
+An explicitly selected `jobstreet-json` source reads the website's
+`https://ph.jobstreet.com/api/jobsearch/v5/search` endpoint with `siteKey=PH-Main`.
+This is distinct from SEEK's documented partner API. A local unauthenticated probe
+on November 5, 2026 returned HTTP 200 and PH listings, including advertised salary
+text. Availability can change and is not guaranteed by a supported API contract.
+
+```powershell
+.\.venv\Scripts\cv-tailor.exe --json jobs search "python automation" --sources jobstreet-json --limit 2
+```
+
+This route must be selected explicitly in the CLI/agent sources or the Discover
+page's experimental JobStreet option; it is excluded from default scans. The
+website's robots rules disallow this API path for the collector. Selecting this
+experimental source makes direct unauthenticated JSON requests; it does not apply
+the HTML collector's robots stop. The existing `jobstreet` HTML source and its
+robots checks are unchanged. No credentials, proxy rotation, challenge bypasses, or
+supplied sign-in cookies are used. Requests are bounded, paginated sequentially, and spaced two
+seconds apart after the first page; a refusal or rate limit stops collection.
+
+The search API provides preview text, which stays in `short_description`;
+`job_description` stays empty until a full description is available. Save to
+Tracker remains available for a known employer; tailoring requires a description.
+See [the provider inspection](apify_provider_inspection.md) for the public Actor
+contracts inspected alongside this experiment.
+
 Run parser, transport, and integration tests with:
 
 ```powershell

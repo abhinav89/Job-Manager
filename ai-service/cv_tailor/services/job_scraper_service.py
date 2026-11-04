@@ -289,6 +289,11 @@ async def fetch_jobstreet_ph(query: str = "", limit: int = 5) -> Tuple[List[Dict
     return await fetch_jobs(query, limit=limit)
 
 
+async def fetch_jobstreet_json(query: str = "", limit: int = 5) -> Tuple[List[Dict[str, Any]], str]:
+    from cv_tailor.services.job_sources.jobstreet_json import fetch_jobs
+    return await fetch_jobs(query, limit=limit)
+
+
 async def fetch_indeed_us(query: str = "", limit: int = 5) -> Tuple[List[Dict[str, Any]], str]:
     from cv_tailor.services.job_sources.indeed import fetch_jobs
     return await fetch_jobs(query, limit=limit, country="us")
@@ -308,9 +313,15 @@ SOURCE_REGISTRY = {
     "remotive": ("Remotive", fetch_remotive_jobs, "httpx"),
     "arbeitnow": ("Arbeitnow", fetch_arbeitnow_jobs, "httpx"),
     "jobstreet": ("JobStreet PH", fetch_jobstreet_ph, "httpx"),
+    "jobstreet-json": ("JobStreet PH (JSON)", fetch_jobstreet_json, "httpx"),
     "indeed-us": ("Indeed (US)", fetch_indeed_us, "httpx"),
     "indeed-ph": ("Indeed (PH)", fetch_indeed_ph, "httpx"),
 }
+
+
+def default_source_ids():
+    """Experimental website JSON access must be explicitly selected."""
+    return [key for key in SOURCE_REGISTRY if key != "jobstreet-json"]
 
 
 async def fetch_remote_jobs(
@@ -322,7 +333,7 @@ async def fetch_remote_jobs(
     """Hybrid aggregator. Returns (jobs, source_status)."""
     if limit < 1:
         return [], {}
-    requested = list(dict.fromkeys(sources)) if sources is not None else list(SOURCE_REGISTRY.keys())
+    requested = list(dict.fromkeys(sources)) if sources is not None else default_source_ids()
     active = [source for source in requested if source in SOURCE_REGISTRY]
     per_source_limit = min(limit, max(4, limit // max(1, len(active))))
 

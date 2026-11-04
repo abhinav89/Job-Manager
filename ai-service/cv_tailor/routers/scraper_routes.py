@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from cv_tailor.database import get_db
 from cv_tailor.dependencies import get_workspace_id
 from cv_tailor.models import database_models as db_models
-from cv_tailor.services.job_scraper_service import fetch_remote_jobs, SOURCE_REGISTRY
+from cv_tailor.services.job_scraper_service import fetch_remote_jobs, default_source_ids
 
 router = APIRouter(prefix="/scraper", tags=["scraper"])
 
@@ -41,7 +41,7 @@ async def discover_jobs(
     source_list = (
         [s.strip() for s in sources.split(",") if s.strip()]
         if sources is not None
-        else list(SOURCE_REGISTRY.keys())
+        else default_source_ids()
     )
     type_list = [t.strip() for t in job_types.split(",") if t.strip()] if job_types else []
 
