@@ -22,6 +22,7 @@ const PAPER = {
 const SOURCES = [
   { id: "onlinejobs", name: "OnlineJobs.ph" },
   { id: "linkedin", name: "LinkedIn PH" },
+  { id: "linkedin-guest", name: "LinkedIn PH guest (experimental)" },
   { id: "remoteok", name: "RemoteOK" },
   { id: "weworkremotely", name: "WeWorkRemotely" },
   { id: "remotive", name: "Remotive" },
@@ -241,6 +242,13 @@ export default function DiscoverPage() {
                   </button>
                 </div>
               </div>
+            )}
+
+            {(selectedSources.includes("linkedin-guest") || "LinkedIn PH (Guest)" in sourceStatus) && (
+              <p className="mt-3 text-xs" style={{ color: PAPER.sub }}>
+                LinkedIn guest results may include recommendations unrelated to your keywords.
+                Review each posting; remote-only filtering is unavailable.
+              </p>
             )}
 
             {searchKeyword && (

@@ -44,6 +44,8 @@ def _posting_url(href: str) -> tuple[str, str | None] | None:
 
 
 def parse_search(html: str) -> list[dict]:
+    if re.fullmatch(r"\s*<!DOCTYPE html>\s*<!---->\s*", html, re.IGNORECASE):
+        return []
     soup = BeautifulSoup(html, "html.parser")
     jobs = []
     seen = set()

@@ -47,6 +47,37 @@ research probe returned search cards and a full guest description without a logi
 but the normal helper still stops because LinkedIn's robots rules disallow these
 paths. See the provider inspection below for the separate Indeed API finding.
 
+## Experimental LinkedIn Philippines guest source
+
+Select `linkedin-guest` explicitly in CLI/agent sources or choose **LinkedIn PH guest
+(experimental)** in Discover. It is excluded from default CLI and HTTP scans and
+unselected by default in the dashboard.
+
+```powershell
+.\.venv\Scripts\cv-tailor.exe --json jobs search "python automation" --sources linkedin-guest --limit 3
+```
+
+This source reads public guest search and description endpoints without account
+credentials or cookies. LinkedIn's robots rules disallow these paths: selecting
+this experimental source makes direct requests outside the normal `linkedin`
+helper's robots stop. That normal helper remains unchanged in its access policy.
+Requests are sequential, spaced three seconds apart, and bounded to four search
+pages of ten cards each and at most forty selected descriptions. Redirects, access
+refusals and rate limits stop collection; available previews remain marked partial.
+
+The published description is extracted when available. Undisclosed salaries stay
+unknown, removed detail pages are skipped, and duplicate posting IDs are collected
+once. This does not log in, submit applications, or retrieve external apply URLs.
+
+**Keyword relevance is not guaranteed.** Live tests returned unrelated jobs even
+for a nonsense term enclosed in quotes. The source preserves LinkedIn's response;
+it does not invent a strict keyword filter or treat those recommendations as an
+empty search. Discover shows this limitation. Remote-only filtering is unavailable,
+and listings may be old. Review each posting before saving or applying.
+
+See [the live validation](linkedin_guest_validation.md) for the tested output and
+the distinction between successful extraction and unverified search relevance.
+
 ## Experimental JobStreet Philippines JSON source
 
 An explicitly selected `jobstreet-json` source reads the website's
@@ -77,5 +108,5 @@ contracts inspected alongside this experiment.
 Run parser, transport, and integration tests with:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest ai-service/tests/test_linkedin_job_source.py ai-service/tests/test_jobstreet_job_source.py ai-service/tests/test_indeed_job_source.py ai-service/tests/test_job_source_common.py ai-service/tests/test_scraper_routes.py
+.\.venv\Scripts\python.exe -m pytest ai-service/tests/test_linkedin_job_source.py ai-service/tests/test_linkedin_guest_source.py ai-service/tests/test_jobstreet_job_source.py ai-service/tests/test_indeed_job_source.py ai-service/tests/test_job_source_common.py ai-service/tests/test_scraper_routes.py
 ```

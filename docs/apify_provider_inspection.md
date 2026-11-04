@@ -48,7 +48,10 @@ of any of the Apify Actors above. No third-party package was installed or execut
   ignores the remote/work-type filter; our helper no longer sends or promises it.
 - LinkedIn's robots rules disallow both guest paths for this collector. These
   research requests demonstrate technical availability at the time of the test;
-  they do not change the normal helper's robots stop or add a new opt-in source.
+  they do not change the normal helper's robots stop. The separate, explicitly
+  selected `linkedin-guest` source now uses those paths; see the
+  [live validation](linkedin_guest_validation.md) for its tested behavior and
+  keyword-relevance limitation.
 - JobSpy's Indeed implementation posts a GraphQL search to
   `https://apis.indeed.com/graphql` with a hardcoded `indeed-api-key` and mobile-app
   headers. A separate request without a key returned HTTP 401 with

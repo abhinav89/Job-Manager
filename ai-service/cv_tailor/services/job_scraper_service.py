@@ -289,6 +289,11 @@ async def fetch_jobstreet_ph(query: str = "", limit: int = 5) -> Tuple[List[Dict
     return await fetch_jobs(query, limit=limit)
 
 
+async def fetch_linkedin_guest(query: str = "", limit: int = 5) -> Tuple[List[Dict[str, Any]], str]:
+    from cv_tailor.services.job_sources.linkedin_guest import fetch_jobs
+    return await fetch_jobs(query, limit=limit)
+
+
 async def fetch_jobstreet_json(query: str = "", limit: int = 5) -> Tuple[List[Dict[str, Any]], str]:
     from cv_tailor.services.job_sources.jobstreet_json import fetch_jobs
     return await fetch_jobs(query, limit=limit)
@@ -308,6 +313,7 @@ async def fetch_indeed_ph(query: str = "", limit: int = 5) -> Tuple[List[Dict[st
 SOURCE_REGISTRY = {
     "onlinejobs": ("OnlineJobs.ph", fetch_onlinejobs_ph, "httpx"),
     "linkedin": ("LinkedIn PH", fetch_linkedin_ph, "httpx"),
+    "linkedin-guest": ("LinkedIn PH (Guest)", fetch_linkedin_guest, "httpx"),
     "remoteok": ("RemoteOK", fetch_remoteok_jobs, "httpx"),
     "weworkremotely": ("WeWorkRemotely", fetch_weworkremotely_jobs, "httpx"),
     "remotive": ("Remotive", fetch_remotive_jobs, "httpx"),
@@ -320,8 +326,8 @@ SOURCE_REGISTRY = {
 
 
 def default_source_ids():
-    """Experimental website JSON access must be explicitly selected."""
-    return [key for key in SOURCE_REGISTRY if key != "jobstreet-json"]
+    """Experimental website endpoints must be explicitly selected."""
+    return [key for key in SOURCE_REGISTRY if key not in {"jobstreet-json", "linkedin-guest"}]
 
 
 async def fetch_remote_jobs(
