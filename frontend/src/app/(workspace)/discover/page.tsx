@@ -245,7 +245,7 @@ export default function DiscoverPage() {
             {searchKeyword && (
               <div className="flex flex-col gap-2 text-xs mt-3" style={{ color: PAPER.sub }}>
                 <div className="flex items-center justify-between">
-                  <p>Showing remote positions for <span className="font-semibold" style={{ color: PAPER.ink }}>&quot;{searchKeyword}&quot;</span></p>
+                  <p>Showing job postings for <span className="font-semibold" style={{ color: PAPER.ink }}>&quot;{searchKeyword}&quot;</span></p>
                   {jobs.length > 0 && <span>{jobs.length} jobs found</span>}
                 </div>
                 {Object.keys(sourceStatus).length > 0 && (
@@ -255,9 +255,15 @@ export default function DiscoverPage() {
                         ok: { label: "live", color: PAPER.green, bg: PAPER.greenBg, border: "#8ab030" },
                         no_results: { label: "no matches", color: PAPER.sub, bg: "#f0ede8", border: PAPER.border },
                         blocked: { label: "blocked", color: "#8a2a2a", bg: "#ffeaea", border: "#f8b8b8" },
+                        robots_disallowed: { label: "automated access disallowed", color: "#8a2a2a", bg: "#ffeaea", border: "#f8b8b8" },
+                        rate_limited: { label: "rate limited", color: "#8a2a2a", bg: "#ffeaea", border: "#f8b8b8" },
+                        partial: { label: "some details unavailable", color: "#805c14", bg: "#fff5da", border: "#dfc789" },
+                        layout_changed: { label: "page format unrecognized", color: "#8a2a2a", bg: "#ffeaea", border: "#f8b8b8" },
+                        network_error: { label: "connection failed", color: "#8a2a2a", bg: "#ffeaea", border: "#f8b8b8" },
+                        not_found: { label: "page unavailable", color: "#8a2a2a", bg: "#ffeaea", border: "#f8b8b8" },
                         error: { label: "error", color: "#8a2a2a", bg: "#ffeaea", border: "#f8b8b8" },
                       };
-                      const s = map[st] || map.no_results;
+                      const s = map[st] || { ...map.error, label: "unavailable" };
                       return (
                         <span key={src} className="px-2 py-0.5 rounded-sm font-medium" style={{ color: s.color, background: s.bg, border: `1px solid ${s.border}` }}>
                           {src}: {s.label}

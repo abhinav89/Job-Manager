@@ -103,6 +103,8 @@ class DiscoverJobsTests(unittest.IsolatedAsyncioTestCase):
         await scraper_routes.import_scraped_job(payload, request, db)
         self.assertEqual(db.add.call_args.args[0].job_source, "Arbeitnow")
         self.assertEqual(db.add.call_args.args[0].workspace_id, 1)
+        self.assertIsNone(db.add.call_args.args[0].location)
+        self.assertIsNone(db.add.call_args.args[0].job_type)
 
 
 if __name__ == "__main__":

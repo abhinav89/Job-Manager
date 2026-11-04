@@ -13,14 +13,14 @@ const C = {
 };
 
 export interface ScrapedJobMatch {
-  company_name: string;
+  company_name: string | null;
   job_title: string;
   job_url: string;
-  location: string;
-  salary_range: string;
+  location: string | null;
+  salary_range: string | null;
   job_description: string;
   short_description: string;
-  job_type: string;
+  job_type: string | null;
   source?: string;
   match_score?: number;
   match_analysis?: {
@@ -38,8 +38,10 @@ interface JobMatchCardProps {
 export const JobMatchCard: React.FC<JobMatchCardProps> = ({ job, onImport }) => {
   const [isImporting, setIsImporting] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const canImport = Boolean(job.company_name?.trim());
 
   const handleAction = async (redirectTailor: boolean) => {
+    if (!canImport) return;
     setIsImporting(true);
     try {
       await onImport(job, redirectTailor);
@@ -55,7 +57,7 @@ export const JobMatchCard: React.FC<JobMatchCardProps> = ({ job, onImport }) => 
         <div className="flex items-start justify-between gap-3">
           <div>
             <h3 className="font-semibold text-lg line-clamp-1" style={{ color: C.ink }}>{job.job_title}</h3>
-            <p className="text-sm font-medium" style={{ color: C.sub }}>{job.company_name}</p>
+            <p className="text-sm font-medium" style={{ color: C.sub }}>{job.company_name || 'Employer not listed'}</p>
           </div>
           {typeof job.match_score === "number" && (
             <JobMatchScoreBadge score={job.match_score} size="md" />
@@ -70,13 +72,13 @@ export const JobMatchCard: React.FC<JobMatchCardProps> = ({ job, onImport }) => 
             </span>
           )}
           <span className="px-2.5 py-1 rounded-md" style={{ background: "#f0ede8", border: `1px solid ${C.border}` }}>
-            📍 {job.location || 'Remote'}
+            📍 {job.location || 'Location not specified'}
           </span>
           <span className="px-2.5 py-1 rounded-md" style={{ background: "#f0ede8", border: `1px solid ${C.border}` }}>
-            💰 {job.salary_range || 'Competitive'}
+            💰 {job.salary_range || 'Salary not specified'}
           </span>
           <span className="px-2.5 py-1 rounded-md" style={{ background: "#f0ede8", border: `1px solid ${C.border}` }}>
-            💼 {job.job_type || 'Full-Time'}
+            💼 {job.job_type || 'Employment type not specified'}
           </span>
         </div>
 
@@ -141,7 +143,8 @@ export const JobMatchCard: React.FC<JobMatchCardProps> = ({ job, onImport }) => 
           )}
           <button
             type="button"
-            disabled={isImporting}
+            disabled={isImporting || !canImport}
+            title={!canImport ? 'An employer name is needed to save this job. Open the posting for details.' : undefined}
             onClick={() => handleAction(false)}
             className="px-3 py-1.5 text-xs rounded-lg font-medium transition-colors disabled:opacity-50"
             style={{ background: "#f0ede8", color: C.ink, border: `1px solid ${C.border}` }}
@@ -152,7 +155,8 @@ export const JobMatchCard: React.FC<JobMatchCardProps> = ({ job, onImport }) => 
           </button>
           <button
             type="button"
-            disabled={isImporting}
+            disabled={isImporting || !canImport}
+            title={!canImport ? 'An employer name is needed to save this job. Open the posting for details.' : undefined}
             onClick={() => handleAction(true)}
             className="px-3 py-1.5 text-xs text-white rounded-lg font-medium transition-colors disabled:opacity-50"
             style={{ background: C.ink }}

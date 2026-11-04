@@ -17,9 +17,9 @@ class ImportJobRequest(BaseModel):
     source: Optional[str] = ""
     job_description: Optional[str] = ""
     short_description: Optional[str] = ""
-    location: Optional[str] = "Remote"
+    location: Optional[str] = None
     salary_range: Optional[str] = ""
-    job_type: Optional[str] = "Full-Time"
+    job_type: Optional[str] = None
     match_score: Optional[int] = None
     match_analysis: Optional[Dict[str, Any]] = None
 
@@ -72,9 +72,9 @@ async def import_scraped_job(payload: ImportJobRequest, request: Request, db: Se
         job_source=payload.source or None,
         job_description=payload.job_description,
         short_description=payload.short_description or (payload.job_description[:200] if payload.job_description else ""),
-        location=payload.location or "Remote",
+        location=payload.location,
         salary_range=payload.salary_range or "",
-        job_type=payload.job_type or "Full-Time",
+        job_type=payload.job_type,
         status="Saved",
         priority="Medium",
         match_score=payload.match_score,

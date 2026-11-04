@@ -1,5 +1,6 @@
 import asyncio
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlsplit, urlunsplit
+import re
 import json
 import httpx
 from bs4 import BeautifulSoup
@@ -27,8 +28,8 @@ def _is_remote_posting(text: str) -> bool:
     return True
 
 
-# ── Hybrid fetcher: scrapling StealthyFetcher (camoufox) ──────────
-# scrapling's `.text` is unreliable in this env; use `.body` (bytes).
+# Retained for callers of the existing optional browser adapter. The new source
+# helpers use job_sources.common and do not fall back to this transport.
 async def scrape_scrapling(url: str, timeout: int = 25) -> Optional[str]:
     try:
         from scrapling.fetchers import StealthyFetcher
@@ -101,45 +102,10 @@ async def fetch_onlinejobs_ph(query: str = "", limit: int = 5) -> Tuple[List[Dic
     return jobs, ("ok" if jobs else "no_results")
 
 
-# ── Source: LinkedIn PH (httpx) ──────────────────────────────────
+# ── Website-specific public collectors ──────────────────────────
 async def fetch_linkedin_ph(query: str = "", limit: int = 5) -> Tuple[List[Dict[str, Any]], str]:
-    search_term = quote_plus(query.strip() or "developer")
-    url = f"https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords={search_term}&location=Philippines&f_WT=2"
-    html = await _httpx_get(url)
-    if not html:
-        return [], "blocked"
-    soup = BeautifulSoup(html, "html.parser")
-    cards = soup.select(".job-search-card, .base-card")
-    jobs = []
-    for card in cards:
-        title_el = card.select_one(".base-search-card__title, h3")
-        comp_el = card.select_one(".base-search-card__subtitle, h4")
-        loc_el = card.select_one(".job-search-card__location, .job-search-card__location-text")
-        link_el = card.select_one("a.base-card__full-link, a.base-search-card__full-link, a[href*='/jobs/view/']")
-        if not title_el:
-            continue
-        title = title_el.get_text(strip=True)
-        company = comp_el.get_text(strip=True) if comp_el else "LinkedIn Employer"
-        location = loc_el.get_text(strip=True) if loc_el else "Philippines"
-        href = link_el["href"].split("?")[0] if (link_el and link_el.get("href")) else url
-        if f" at {company}" in title:
-            title = title.split(f" at {company}")[0].strip()
-        if not _is_remote_posting(f"{title} {location}"):
-            continue
-        jobs.append({
-            "company_name": company,
-            "job_title": title,
-            "job_url": href,
-            "location": location,
-            "salary_range": "Competitive",
-            "job_description": "",
-            "short_description": f"Position for {title} at {company} ({location}).",
-            "job_type": "Full-Time",
-            "source": "LinkedIn",
-        })
-        if len(jobs) >= limit:
-            break
-    return jobs, ("ok" if jobs else "no_results")
+    from cv_tailor.services.job_sources.linkedin import fetch_jobs
+    return await fetch_jobs(query, limit=limit)
 
 
 # ── Source: RemoteOK (httpx API) ─────────────────────────────────
@@ -318,125 +284,19 @@ async def fetch_arbeitnow_jobs(query: str = "", limit: int = 5) -> Tuple[List[Di
     return jobs, "ok" if jobs else "no_results"
 
 
-# ── Source: JobStreet PH (scrapling stealth) ─────────────────────
 async def fetch_jobstreet_ph(query: str = "", limit: int = 5) -> Tuple[List[Dict[str, Any]], str]:
-    search_term = quote_plus(query.strip() or "remote")
-    url = f"https://www.jobstreet.com.ph/j?q={search_term}&work-type=242"
-    html = await scrape_scrapling(url)
-    if not html:
-        return [], "blocked"
-    soup = BeautifulSoup(html, "html.parser")
-    cards = soup.select("[data-automation='jobListing'], .job-card, article")
-    jobs = []
-    for card in cards:
-        title_el = card.select_one("h3, h2, [data-automation='jobTitle']")
-        comp_el = card.select_one("[data-automation='companyName'], h4")
-        link_el = card.select_one("a[href*='/job/']")
-        if not title_el:
-            continue
-        title = title_el.get_text(strip=True)
-        company = comp_el.get_text(strip=True) if comp_el else "JobStreet Employer"
-        href = link_el["href"] if (link_el and link_el.get("href")) else url
-        if href and not href.startswith("http"):
-            href = f"https://www.jobstreet.com.ph{href}"
-        if not _is_remote_posting(f"{title} {company}"):
-            continue
-        jobs.append({
-            "company_name": company,
-            "job_title": title,
-            "job_url": href,
-            "location": "Remote (Philippines)",
-            "salary_range": "Competitive",
-            "job_description": "",
-            "short_description": f"Position for {title} at {company}.",
-            "job_type": "Full-Time",
-            "source": "JobStreet PH",
-        })
-        if len(jobs) >= limit:
-            break
-    return jobs, ("ok" if jobs else "no_results")
+    from cv_tailor.services.job_sources.jobstreet import fetch_jobs
+    return await fetch_jobs(query, limit=limit)
 
 
-# ── Source: Indeed US (scrapling stealth) ────────────────────────
 async def fetch_indeed_us(query: str = "", limit: int = 5) -> Tuple[List[Dict[str, Any]], str]:
-    search_term = quote_plus(query.strip() or "remote")
-    url = f"https://www.indeed.com/jobs?q={search_term}+remote&remotejob=032b3046-06e9-4ae4-8f4b-986bb313b994"
-    html = await scrape_scrapling(url)
-    if not html:
-        return [], "blocked"
-    soup = BeautifulSoup(html, "html.parser")
-    cards = soup.select("[data-testid='jobListing'], .job_seen_beacon, article")
-    jobs = []
-    for card in cards:
-        title_el = card.select_one("h2.jobTitle span, h2 a span")
-        comp_el = card.select_one("[data-testid='company-name'], .companyName")
-        loc_el = card.select_one("[data-testid='text-location'], .companyLocation")
-        link_el = card.select_one("h2 a, a[href*='/rc/']")
-        if not title_el:
-            continue
-        title = title_el.get_text(strip=True)
-        company = comp_el.get_text(strip=True) if comp_el else "Indeed Employer"
-        location = loc_el.get_text(strip=True) if loc_el else "Remote (US)"
-        href = link_el["href"] if (link_el and link_el.get("href")) else url
-        if href and not href.startswith("http"):
-            href = f"https://www.indeed.com{href}"
-        if not _is_remote_posting(f"{title} {location}"):
-            continue
-        jobs.append({
-            "company_name": company,
-            "job_title": title,
-            "job_url": href,
-            "location": location,
-            "salary_range": "Competitive",
-            "job_description": "",
-            "short_description": f"Position for {title} at {company}.",
-            "job_type": "Full-Time",
-            "source": "Indeed (US)",
-        })
-        if len(jobs) >= limit:
-            break
-    return jobs, ("ok" if jobs else "no_results")
+    from cv_tailor.services.job_sources.indeed import fetch_jobs
+    return await fetch_jobs(query, limit=limit, country="us")
 
 
-# ── Source: Indeed PH (scrapling stealth) ────────────────────────
 async def fetch_indeed_ph(query: str = "", limit: int = 5) -> Tuple[List[Dict[str, Any]], str]:
-    search_term = quote_plus(query.strip() or "remote")
-    url = f"https://ph.indeed.com/jobs?q={search_term}+remote&remotejob=032b3046-06e9-4ae4-8f4b-986bb313b994"
-    html = await scrape_scrapling(url)
-    if not html:
-        return [], "blocked"
-    soup = BeautifulSoup(html, "html.parser")
-    cards = soup.select("[data-testid='jobListing'], .job_seen_beacon, article")
-    jobs = []
-    for card in cards:
-        title_el = card.select_one("h2.jobTitle span, h2 a span")
-        comp_el = card.select_one("[data-testid='company-name'], .companyName")
-        loc_el = card.select_one("[data-testid='text-location'], .companyLocation")
-        link_el = card.select_one("h2 a, a[href*='/rc/']")
-        if not title_el:
-            continue
-        title = title_el.get_text(strip=True)
-        company = comp_el.get_text(strip=True) if comp_el else "Indeed Employer"
-        location = loc_el.get_text(strip=True) if loc_el else "Remote (PH)"
-        href = link_el["href"] if (link_el and link_el.get("href")) else url
-        if href and not href.startswith("http"):
-            href = f"https://ph.indeed.com{href}"
-        if not _is_remote_posting(f"{title} {location}"):
-            continue
-        jobs.append({
-            "company_name": company,
-            "job_title": title,
-            "job_url": href,
-            "location": location,
-            "salary_range": "Competitive",
-            "job_description": "",
-            "short_description": f"Position for {title} at {company}.",
-            "job_type": "Full-Time",
-            "source": "Indeed (PH)",
-        })
-        if len(jobs) >= limit:
-            break
-    return jobs, ("ok" if jobs else "no_results")
+    from cv_tailor.services.job_sources.indeed import fetch_jobs
+    return await fetch_jobs(query, limit=limit, country="ph")
 
 
 # ── Source registry ──────────────────────────────────────────────
@@ -447,9 +307,9 @@ SOURCE_REGISTRY = {
     "weworkremotely": ("WeWorkRemotely", fetch_weworkremotely_jobs, "httpx"),
     "remotive": ("Remotive", fetch_remotive_jobs, "httpx"),
     "arbeitnow": ("Arbeitnow", fetch_arbeitnow_jobs, "httpx"),
-    "jobstreet": ("JobStreet PH", fetch_jobstreet_ph, "scrapling"),
-    "indeed-us": ("Indeed (US)", fetch_indeed_us, "scrapling"),
-    "indeed-ph": ("Indeed (PH)", fetch_indeed_ph, "scrapling"),
+    "jobstreet": ("JobStreet PH", fetch_jobstreet_ph, "httpx"),
+    "indeed-us": ("Indeed (US)", fetch_indeed_us, "httpx"),
+    "indeed-ph": ("Indeed (PH)", fetch_indeed_ph, "httpx"),
 }
 
 
@@ -460,9 +320,11 @@ async def fetch_remote_jobs(
     limit: int = 15,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
     """Hybrid aggregator. Returns (jobs, source_status)."""
-    requested = sources if sources is not None else list(SOURCE_REGISTRY.keys())
+    if limit < 1:
+        return [], {}
+    requested = list(dict.fromkeys(sources)) if sources is not None else list(SOURCE_REGISTRY.keys())
     active = [source for source in requested if source in SOURCE_REGISTRY]
-    per_source_limit = max(4, limit // max(1, len(active)))
+    per_source_limit = min(limit, max(4, limit // max(1, len(active))))
 
     tasks = []
     for s in active:
@@ -486,7 +348,8 @@ async def fetch_remote_jobs(
         source_jobs.append(iter(jobs))
 
     # Interleave providers so the global limit does not hide later sources.
-    allowed_types = [t.lower() for t in (job_types or []) if t]
+    normalize_type = lambda value: re.sub(r"[\s_-]+", "", value.casefold())
+    allowed_types = [normalize_type(t) for t in (job_types or []) if t]
     while source_jobs and len(all_jobs) < limit:
         remaining = []
         for jobs in source_jobs:
@@ -494,9 +357,16 @@ async def fetch_remote_jobs(
             if job is None:
                 continue
             remaining.append(jobs)
-            if allowed_types and not any(at in (job.get("job_type") or "").lower() for at in allowed_types):
+            if allowed_types and not any(at in normalize_type(job.get("job_type") or "") for at in allowed_types):
                 continue
-            key = f"{job['company_name'].lower()}_{job['job_title'].lower()}"
+            source = job.get("source") or ""
+            if job.get("source_job_id"):
+                key = (source, "id", job["source_job_id"])
+            elif job.get("job_url"):
+                parts = urlsplit(job["job_url"])
+                key = (source, "url", urlunsplit((parts.scheme.lower(), parts.netloc.lower(), parts.path, parts.query, "")))
+            else:
+                key = (source, "title", (job.get("company_name") or "").casefold(), job["job_title"].casefold())
             if key not in seen:
                 seen.add(key)
                 all_jobs.append(job)
