@@ -52,6 +52,8 @@ A reviewable version of a CV, cover letter, interview preparation plan, or inter
 **Application Form Checkpoint**:
 A versioned `application_form` draft holding a live form's questions, proposed answers, reported observations, field constraints and selected document fingerprints. It belongs to one tracked application and one form session. Its derived state is drafted, partially filled, verified for review, or submission confirmed. The user's local agent supplies browser access; the CLI validates reported observations without independently controlling a browser. A checkpoint is never sent to an employer by CV Tailor. Only the user's explicit submission confirmation records Applied.
 
+Application preparation drafts complete answers from the `forms prepare` context before entering a known form. That response includes an optional website-guide reference, initially for canonical OnlineJobs posting URLs. Guides supply navigation/field hints; fresh inventory and readback still establish live state. Routine filling uses one before-fill checkpoint and one revision after verification, with additional checkpoints for steps or interruptions. Confirmed facts retain their profile/application scope.
+
 **Personal Evidence**:
 Personal facts supported by the user's saved profile or Conversation Evidence. Earlier resumes may inform context or phrasing but do not independently establish Personal Evidence.
 
