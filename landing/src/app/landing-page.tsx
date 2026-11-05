@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import ThemeToggle from "./theme-toggle";
@@ -12,9 +12,9 @@ import ProductDemo from "./product-demo";
 import ApplicationAssistance, { APPLY_PROMPT } from "./application-assistance";
 import ApplicationSnapshots, { SNAPSHOT_PROMPT } from "./application-snapshots";
 import {
-  ArrowRight, ArrowUpRight, Check, ChevronDown, Code2, FileText,
+  ArrowRight, ArrowUpRight, Check, ChevronDown, FileText,
   GitBranch, LayoutDashboard, Menu, MessageSquare,
-  Search, Star, Terminal, UserRound, X, type LucideIcon,
+  Star, Terminal, X, type LucideIcon,
 } from "lucide-react";
 
 const REPO = "https://github.com/yabswannalearn/CV-Tailor";
@@ -39,13 +39,13 @@ const skills = [
   { name: "cv-connect", label: "Connect your tracker", description: "Guide setup to publish your local applications to your notes or chosen tracking tool.", prompt: "Use the cv-connect skill. Help me connect my local application tracker to my preferred tool. Keep SQLite primary, guide the setup, and store any credentials locally in a Git-ignored .env file." },
 ];
 
-const features: { icon: LucideIcon; title: string }[] = [
-  { icon: Search, title: "Find your next role." },
-  { icon: FileText, title: "Tailor your CV." },
-  { icon: MessageSquare, title: "Write a cover letter." },
-  { icon: LayoutDashboard, title: "Track your progress." },
-  { icon: UserRound, title: "Prepare to interview." },
-  { icon: Code2, title: "Practice your coding." },
+const features = [
+  { index: "01", skill: "cv-jobs", badge: "INTAKE", title: "Find your next role" },
+  { index: "02", skill: "cv-resume", badge: "1-PAGE PDF", title: "Tailor your CV" },
+  { index: "03", skill: "cv-cover-letter", badge: "GROUNDED", title: "Write a cover letter" },
+  { index: "04", skill: "cv-tracker", badge: "LOCAL SQLITE", title: "Track your progress" },
+  { index: "05", skill: "cv-interview", badge: "PRACTICE", title: "Prepare to interview" },
+  { index: "06", skill: "cv-code-practice", badge: "PYTHON", title: "Practice your coding" },
 ];
 
 const questions = [
@@ -66,8 +66,36 @@ function ArrowLink({ children, href }: { children: ReactNode; href: string }) {
   return <a className="button button-secondary" href={href}>{children}<ArrowRight size={15} /></a>;
 }
 
+function GitHubIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0 0 22 12.017C22 6.484 17.522 2 12 2Z" />
+    </svg>
+  );
+}
+
 function StarLink({ className = "" }: { className?: string }) {
-  return <a className={`github-star ${className}`} href={REPO} target="_blank" rel="noreferrer" aria-label="Star CV Tailor on GitHub"><Star size={16} aria-hidden="true" /><span>Star<span className="star-full-label"> on GitHub</span></span><ArrowUpRight size={14} className="star-external" aria-hidden="true" /></a>;
+  return <a className={`github-star ${className}`} href={REPO} target="_blank" rel="noreferrer" aria-label="Star CV Tailor on GitHub"><GitHubIcon size={16} /><span>Star<span className="star-full-label"> on GitHub</span></span><ArrowUpRight size={14} className="star-external" aria-hidden="true" /></a>;
+}
+
+function HeaderStarLink() {
+  const [stars, setStars] = useState<number>(7);
+  useEffect(() => {
+    fetch("https://api.github.com/repos/yabswannalearn/CV-Tailor")
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (data && typeof data.stargazers_count === "number") {
+          setStars(data.stargazers_count);
+        }
+      })
+      .catch(() => {});
+  }, []);
+  return (
+    <a className="github-star header-star" href={REPO} target="_blank" rel="noreferrer" aria-label={`Star CV Tailor on GitHub (${stars} stars)`}>
+      <GitHubIcon size={16} />
+      <span className="star-count">{stars.toLocaleString()}</span>
+    </a>
+  );
 }
 
 
@@ -127,7 +155,7 @@ export default function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   return <>
     <a className="skip-link" href="#main">Skip to content</a>
-    <header className="site-header"><div className="header-inner"><a className="brand" href="#" aria-label="CV Tailor home">CV Tailor</a><nav className="desktop-nav" aria-label="Main navigation"><a href="#workflow">How it works</a><a href="#features">Features</a><a href="#templates">Templates</a><a href="#apply">Apply</a><a href="#integrations">Connect</a><a href="#skills">The skills</a></nav><div className="header-actions"><ThemeToggle /><StarLink className="header-star" /><button className="menu-toggle" type="button" aria-label={menuOpen ? "Close menu" : "Open menu"} aria-expanded={menuOpen} aria-controls="mobile-navigation" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X size={20} /> : <Menu size={20} />}</button></div></div><nav hidden={!menuOpen} id="mobile-navigation" className="mobile-nav" aria-label="Mobile navigation">{[["#workflow", "How it works"], ["#features", "Features"], ["#templates", "Templates"], ["#apply", "Application forms"], ["#integrations", "Connect your tools"], ["#skills", "The skills"], ["#install", "Get started"]].map(([href, label]) => <a key={href} href={href} onClick={() => setMenuOpen(false)}>{label}<ArrowUpRight size={15} /></a>)}</nav></header>
+    <header className="site-header"><div className="header-inner"><a className="brand" href="#" aria-label="CV Tailor home">CV Tailor</a><nav className="desktop-nav" aria-label="Main navigation"><a href="#workflow">How it works</a><a href="#features">Features</a><a href="#templates">Templates</a><a href="#apply">Apply</a><a href="#integrations">Connect</a><a href="#skills">The skills</a></nav><div className="header-actions"><ThemeToggle /><HeaderStarLink /><button className="menu-toggle" type="button" aria-label={menuOpen ? "Close menu" : "Open menu"} aria-expanded={menuOpen} aria-controls="mobile-navigation" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X size={20} /> : <Menu size={20} />}</button></div></div><nav hidden={!menuOpen} id="mobile-navigation" className="mobile-nav" aria-label="Mobile navigation">{[["#workflow", "How it works"], ["#features", "Features"], ["#templates", "Templates"], ["#apply", "Application forms"], ["#integrations", "Connect your tools"], ["#skills", "The skills"], ["#install", "Get started"]].map(([href, label]) => <a key={href} href={href} onClick={() => setMenuOpen(false)}>{label}<ArrowUpRight size={15} /></a>)}</nav></header>
     <main id="main">
       <section className="hero section" aria-labelledby="hero-title"><div className="hero-copy"><span className="hero-eyebrow"><span />YOUR AGENT. YOUR MACHINE.</span><h1 id="hero-title">Your career, <em>open source.</em></h1><p className="hero-description">An open-source AI resume builder and job application tracker. Tailor CVs and prepare for interviews with your agent, in one local workspace.</p><div className="hero-actions"><ArrowLink href="#install">Get started</ArrowLink><StarLink className="button" /></div><a className="hero-watch-link" href="#watch">Watch the 1-minute demo<ArrowRight size={14} aria-hidden="true" /></a><div className="hero-note"><Check size={13} /><span>MIT licensed. Local data. No CV Tailor account.</span></div></div><WorkspacePreview /></section>
       <AgentCarousel />
@@ -138,7 +166,7 @@ export default function LandingPage() {
         ["03", "Tailor it", "Review your CV and cover letter."],
         ["04", "Apply", "Submit, track, and prepare for interviews."],
       ].map(([number, title, text]) => <article key={number}><span className="step-number">{number}</span><h3>{title}</h3><p>{text}</p></article>)}</div></section>
-      <section className="features-section section" id="features" aria-labelledby="features-title"><div className="section-heading"><div><span className="eyebrow">THE TOOLS FOR YOUR NEXT STEP</span><h2 id="features-title">Every step, one place.</h2></div></div><div className="feature-grid">{features.map(({ icon: Icon, title }) => <article className="feature-card" key={title}><span className="feature-icon"><Icon size={20} strokeWidth={1.5} /></span><h3>{title}</h3></article>)}</div></section>
+      <section className="features-section section" id="features" aria-labelledby="features-title"><div className="section-heading"><div><span className="eyebrow">THE TOOLS FOR YOUR NEXT STEP</span><h2 id="features-title">Every step, one place.</h2></div></div><div className="feature-grid">{features.map(({ index, skill, badge, title }) => <article className="feature-card" key={skill}><div className="feature-meta"><span className="feature-index">{index} <i>/</i> {skill}</span><span className="feature-badge">{badge}</span></div><h3>{title}</h3></article>)}</div></section>
       <ApplicationSnapshots />
       <ResumeGallery />
       <ApplicationAssistance />
