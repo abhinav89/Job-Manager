@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from cv_tailor.database import get_db
 from cv_tailor.dependencies import get_workspace_id
 from cv_tailor.models import database_models as db_models
-from cv_tailor.services.job_scraper_service import fetch_remote_jobs, SOURCE_REGISTRY
+from cv_tailor.services.job_scraper_service import fetch_remote_jobs, default_source_ids
 
 router = APIRouter(prefix="/scraper", tags=["scraper"])
 
@@ -17,9 +17,9 @@ class ImportJobRequest(BaseModel):
     source: Optional[str] = ""
     job_description: Optional[str] = ""
     short_description: Optional[str] = ""
-    location: Optional[str] = "Remote"
+    location: Optional[str] = None
     salary_range: Optional[str] = ""
-    job_type: Optional[str] = "Full-Time"
+    job_type: Optional[str] = None
     match_score: Optional[int] = None
     match_analysis: Optional[Dict[str, Any]] = None
 
@@ -41,7 +41,7 @@ async def discover_jobs(
     source_list = (
         [s.strip() for s in sources.split(",") if s.strip()]
         if sources is not None
-        else list(SOURCE_REGISTRY.keys())
+        else default_source_ids()
     )
     type_list = [t.strip() for t in job_types.split(",") if t.strip()] if job_types else []
 
@@ -72,9 +72,9 @@ async def import_scraped_job(payload: ImportJobRequest, request: Request, db: Se
         job_source=payload.source or None,
         job_description=payload.job_description,
         short_description=payload.short_description or (payload.job_description[:200] if payload.job_description else ""),
-        location=payload.location or "Remote",
+        location=payload.location,
         salary_range=payload.salary_range or "",
-        job_type=payload.job_type or "Full-Time",
+        job_type=payload.job_type,
         status="Saved",
         priority="Medium",
         match_score=payload.match_score,

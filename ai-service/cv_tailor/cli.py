@@ -92,6 +92,8 @@ def parser():
     search = jobs.add_parser("search")
     search.add_argument("keyword")
     search.add_argument("--sources", help="Comma-separated source names")
+    search.add_argument("--limit", type=int, choices=range(1, 51), metavar="1-50", default=12,
+                        help="Maximum returned jobs (default: 12)")
     forms = groups.add_parser("forms", help="Prepare, check and recover agent-assisted application forms").add_subparsers(dest="action", required=True)
     prepare = forms.add_parser("prepare")
     prepare.add_argument("--application", required=True, type=int)
@@ -255,7 +257,7 @@ def dispatch(a):
             return {"url": a.url, "text": fetch_job_text(a.url)}
         from cv_tailor.services.job_scraper_service import fetch_remote_jobs
         with redirect_stdout(sys.stderr):
-            jobs, sources = asyncio.run(fetch_remote_jobs(query=a.keyword, sources=a.sources.split(",") if a.sources else None, limit=12))
+            jobs, sources = asyncio.run(fetch_remote_jobs(query=a.keyword, sources=[value.strip() for value in a.sources.split(",")] if a.sources else None, limit=a.limit))
         return {"jobs": jobs, "sources": sources}
     if a.group == "practice":
         if a.action == "save":

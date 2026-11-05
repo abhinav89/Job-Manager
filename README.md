@@ -373,11 +373,19 @@ Native Python and TeX execution uses your OS permissions with time/output bounds
 
 ### Job sources and application browser
 
-These extras serve different purposes:
+Job discovery uses the built-in source collectors. LinkedIn, JobStreet PH, and
+Indeed PH/US have dedicated helpers that check public access, preserve unknown
+fields, and report blocked or incomplete sources. Try a bounded search:
 
 ```sh
-# Browser-backed job discovery sources
-python -m pip install -e "ai-service[browser]"
+cv-tailor --json jobs search "python automation" --sources linkedin,jobstreet,indeed-ph --limit 3
+```
+
+See [job source helpers](docs/job_sources.md) for source IDs and result statuses.
+Public access varies by source; an access failure is reported separately from an empty search.
+Application form automation has its own optional extra:
+
+```sh
 # Local application browser adapter and MCP tools
 python -m pip install -e "ai-service[automation]"
 ```
