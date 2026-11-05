@@ -6,6 +6,7 @@ Never interpret missing/unreadable observations as successful verification.
 from datetime import date
 from hashlib import sha256
 import re
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -129,6 +130,18 @@ def document_manifest(identifier, application, kind):
                         source_sha256=source, sha256=sha256(pdf).hexdigest(), size=len(pdf))
 
 
+def _site_guide(job_url):
+    try:
+        parts = urlsplit(job_url or "")
+        if (parts.scheme == "https" and parts.hostname in {"onlinejobs.ph", "www.onlinejobs.ph"}
+                and not parts.username and not parts.password and parts.port in {None, 443}
+                and re.fullmatch(r"/jobseekers/job/[^/]+/?", parts.path)):
+            return ".agents/skills/cv-apply/references/sites/onlinejobs.md"
+    except ValueError:
+        pass
+    return None
+
+
 def prepare_form(application, resume=None, cover_letter=None):
     from cv_tailor import workspace as w
     context = w.context_export("application_form", application)
@@ -144,7 +157,10 @@ def prepare_form(application, resume=None, cover_letter=None):
         application_revision=job["revision"], profile_revision=context["profile"]["revision"],
         company_name=job["company_name"], job_title=job["job_title"], documents=documents)
     return {"context": context, "snapshot": snapshot.model_dump(mode="json"),
-            "instructions": "Use cv-apply. Inspect the live form, save a checkpoint before filling, and stop for human review before submission."}
+            "site_guide": _site_guide(job.get("job_url")),
+            "instructions": "Use cv-apply. Draft complete job-specific answers from this context before opening the application form. "
+                            "Read site_guide when present, verify the live inventory, save before filling, batch fill/readback, "
+                            "then revise and check once. Stop for human review before submission."}
 
 
 def check_bindings(db, snapshot):

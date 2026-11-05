@@ -2,6 +2,7 @@ from hashlib import sha256
 import io
 import json
 import os
+from pathlib import Path
 import subprocess
 import sys
 
@@ -105,6 +106,55 @@ def test_attachment_verifies_exact_selected_file_and_never_guesses():
 def setup_application(w, profile_payload):
     w.profile_save(profile_payload)
     return w.application_add({"company_name": "Acme", "job_title": "Engineer"})
+
+
+@pytest.mark.parametrize("job_url,known_site", [
+    ("https://www.onlinejobs.ph/jobseekers/job/python-developer-1760329", True),
+    ("https://onlinejobs.ph/jobseekers/job/1760329/?ref=search", True),
+    ("https://www.onlinejobs.ph:443/jobseekers/job/1760329", True),
+    ("https://example.com/jobs/1760329", False),
+    ("https://www.onlinejobs.ph.example.com/jobseekers/job/1760329", False),
+    ("https://www.onlinejobs.ph/apply", False),
+    ("http://www.onlinejobs.ph/jobseekers/job/1760329", False),
+    ("https://user:secret@www.onlinejobs.ph/jobseekers/job/1760329", False),
+    ("https://www.onlinejobs.ph:invalid/jobseekers/job/1760329", False),
+    (None, False),
+])
+def test_prepare_routes_known_postings_without_claiming_live_observations(local_workspace, profile_payload, job_url, known_site):
+    w = local_workspace
+    w.profile_save(profile_payload)
+    job = w.application_add({"company_name": "Acme", "job_title": "Engineer", "job_url": job_url})
+    prepared = prepare_form(job["id"])
+    if known_site:
+        assert prepared["site_guide"] == ".agents/skills/cv-apply/references/sites/onlinejobs.md"
+        assert (Path(__file__).resolve().parents[2] / prepared["site_guide"]).is_file()
+    else:
+        assert prepared["site_guide"] is None
+    snapshot = prepared["snapshot"]
+    assert snapshot["fields"] == []
+    assert not snapshot["inventory_complete"]
+    assert not snapshot["identity_confirmed"]
+    assert not snapshot["all_steps_complete"]
+    assert snapshot["posting_status"] == "unknown"
+    assert w.application_get(job["id"]) == job
+
+
+def test_prepare_includes_confirmed_drafting_context_without_selecting_a_document(local_workspace, profile_payload):
+    w = local_workspace
+    job = setup_application(w, profile_payload)
+    letter = w.import_draft("cover_letter", {"content": "I use Python."}, job["id"],
+                            evidence=["I am available part time."])
+    prepared = prepare_form(job["id"])
+    context = prepared["context"]
+    assert context["application"] == job
+    assert context["profile"]["first_name"] == profile_payload["first_name"]
+    assert [skill["skill_name"] for skill in context["profile"]["skills"]] == ["Python"]
+    assert context["conversation_evidence"] == ["I am available part time."]
+    assert context["drafts"][0]["id"] == letter["id"]
+    assert "fields" in context["output_schema"]["properties"]
+    assert prepared["snapshot"]["documents"] == []
+    assert w.profile_get()["revision"] == 1
+    assert len(w.drafts_list(job["id"])) == 1
 
 
 def test_checkpoints_persist_and_resume_without_touching_application(local_workspace, profile_payload):
