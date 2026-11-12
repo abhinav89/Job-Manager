@@ -161,7 +161,8 @@ async def generate_pdf_for_job(job_id: int, request: Request, db: Session = Depe
 
     validate_page_limit(pdf_bytes)
     db.rollback()
-    db.connection().exec_driver_sql("BEGIN IMMEDIATE")
+    if db.bind.dialect.name == "sqlite":
+        db.connection().exec_driver_sql("BEGIN IMMEDIATE")
     job = get_job_for_user(db, job_id, workspace_id)
     w.check_revision(job, expected_revision)
     # 3. Save both LaTeX and PDF to DB

@@ -40,7 +40,8 @@ class ReviseDraft(BaseModel):
 
 def _write_lock(db):
     db.rollback()
-    db.connection().exec_driver_sql("BEGIN IMMEDIATE")
+    if db.bind.dialect.name == "sqlite":
+        db.connection().exec_driver_sql("BEGIN IMMEDIATE")
 
 
 def _conversation(db, workspace_id, conversation_id, *, lock=False):

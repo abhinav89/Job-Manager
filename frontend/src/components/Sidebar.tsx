@@ -71,9 +71,9 @@ export default function Sidebar() {
   const toolItems = [
     { label: "Job Tailor", href: "/generate?tab=tailored", icon: <Wand2 className="w-4 h-4" /> },
     { label: "Cover Letter", href: "/generate?tab=cover_letter", icon: <Mail className="w-4 h-4" /> },
-    { label: "Interview Prep", href: "/interview", icon: <MessageSquare className="w-4 h-4" />, isNew: true },
     { label: "Career Profile", href: "/profile", icon: <User className="w-4 h-4" /> },
-    { label: "Career Agent", href: "/assistant", icon: <Bot className="w-4 h-4" /> },
+    { label: "Interview Prep", href: "#", icon: <MessageSquare className="w-4 h-4" />, badge: "Upcoming", isFuture: true },
+    { label: "Career Agent", href: "#", icon: <Bot className="w-4 h-4" />, badge: "Upcoming", isFuture: true },
     { label: "Settings", href: "/settings", icon: <Settings className="w-4 h-4" /> },
   ];
 
@@ -220,7 +220,14 @@ export default function Sidebar() {
                   key={item.href}
                   href={item.href}
                   prefetch
-                  onClick={closeMobile}
+                  onClick={(e) => {
+                    if (item.isFuture) {
+                      e.preventDefault();
+                      toast.info(`${item.label} is scheduled for future release.`);
+                      return;
+                    }
+                    closeMobile();
+                  }}
                   className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all group ${
                     active
                       ? "bg-blue-50 text-blue-700 font-bold"
@@ -234,9 +241,9 @@ export default function Sidebar() {
                   {!collapsed && (
                     <span className="flex-1 truncate">{item.label}</span>
                   )}
-                  {!collapsed && item.isNew && (
-                    <span className="text-[9px] font-bold uppercase bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded-full">
-                      NEW
+                  {!collapsed && item.badge && (
+                    <span className="text-[9px] font-bold uppercase bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full">
+                      {item.badge}
                     </span>
                   )}
                 </Link>

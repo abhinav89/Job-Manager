@@ -1,7 +1,13 @@
-export const API_URL =
-  typeof window !== "undefined" && window.location.port === "3000"
-    ? "http://127.0.0.1:8005/api"
-    : process.env.NEXT_PUBLIC_API_URL || "/api";
+export const API_URL = (() => {
+  if (typeof window !== "undefined") {
+    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+      return window.location.port === "3000" ? "http://127.0.0.1:8005/api" : "/api";
+    }
+    // Production cloud domain: always communicate directly with production backend
+    return process.env.NEXT_PUBLIC_API_URL || "https://api-jobs.dealos.in/api";
+  }
+  return process.env.NEXT_PUBLIC_API_URL || "https://api-jobs.dealos.in/api";
+})();
 
 export async function getApiError(response: Response, fallback: string): Promise<string> {
   const data = await response.json().catch(() => null) as { detail?: unknown; error?: unknown; message?: unknown } | null;

@@ -53,9 +53,10 @@ def summarize_applications(applications, as_of=None):
 
 
 def application_insights(include_archived=False, as_of=None):
-    # Read one SQLite snapshot so totals, chart branches and drill-downs agree.
+    # Read one snapshot so totals, chart branches and drill-downs agree.
     with w.SessionLocal() as db:
-        db.connection().exec_driver_sql("BEGIN")
+        if db.bind.dialect.name == "sqlite":
+            db.connection().exec_driver_sql("BEGIN")
         jobs = list(db.scalars(select(m.JobApplication).where(m.JobApplication.workspace_id == 1)
                                .order_by(m.JobApplication.id.desc())))
         visible = [w.application_dict(job, False) for job in jobs if include_archived or not job.is_archived]

@@ -28,7 +28,8 @@ class WorkspaceError(ValueError):
 @contextmanager
 def write_session():
     with SessionLocal() as db:
-        db.connection().exec_driver_sql("BEGIN IMMEDIATE")
+        if db.bind.dialect.name == "sqlite":
+            db.connection().exec_driver_sql("BEGIN IMMEDIATE")
         try:
             yield db
             db.commit()

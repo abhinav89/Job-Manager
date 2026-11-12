@@ -668,7 +668,7 @@ export default function TrackerPage() {
 
   return (
     <>
-    <div className="h-full overflow-auto font-mono" style={{ background: "#f5f2ed", color: "#1a1814" }}>
+    <div className="h-full overflow-auto font-sans bg-slate-50/50 text-slate-900">
         <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
 
           {/* Header */}

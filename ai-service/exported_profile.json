@@ -1,0 +1,252 @@
+{
+  "id": 1,
+  "revision": 7,
+  "first_name": "Abhinav",
+  "last_name": "Agrawal",
+  "mobile_no": "+91 8527961709",
+  "email": "abhinava2015@email.iimcal.ac.in",
+  "linkedin": "https://www.linkedin.com/in/abhinav-agrawal-9b466639",
+  "github": "",
+  "portfolio": "",
+  "preset_slug": "blank",
+  "preferred_template": "classic",
+  "education": [
+    {
+      "school_name": "Indian Institute of Management Calcutta",
+      "course": "MBA (PGDM)",
+      "location": "",
+      "description": "",
+      "date_range": "2013 - 2015"
+    },
+    {
+      "school_name": "BIT Mesra, Ranchi",
+      "course": "B.E. Electrical & Electronics Engineering",
+      "location": "",
+      "description": "",
+      "date_range": "2007 - 2011"
+    }
+  ],
+  "experience": [
+    {
+      "job_title": "Founder",
+      "company": "DealOS.in",
+      "location": "Hyderabad",
+      "description": "\u2022 Domain: AI-Powered capital raising and Transaction Infrastructure Platform\n\u2022 Founded DealOS to build the operating system for capital markets execution, integrating AI-driven workflows, investor intelligence, market research, CRM, and transaction management for startups, MSMEs, family offices, and advisory firms.\n\u2022 Advising and raising capital for 30+ high-growth startups and 15+ MSMEs via equity, debt structuring, and strategic finance.\n\u2022 Managing acquisition search mandates for family offices and strategic investors; 5+ active M&A transactions involving founder-led businesses and growth-stage enterprises across sectors.\n\u2022 Working with VCs for equity placement based on fund preferences; partnering with family offices on acquisition mandates; engaging IB firms to co-execute transactions and expand geographic and sector coverage.\n\u2022 Built and scaled a distributed execution network of 30+ former bankers and CAs who actively work on transaction origination and execution, creating a scalable partner-driven delivery model.\n\u2022 Hired three interns & trained them to support for fundraising mandates. Partnered with IITD grad to build the product MVP.\n\u2022 Developing DealOS platform - an AI-enabled deal operating system integrating workflow automation, investor connectivity, due diligence tools, industry reports, and business intelligence infrastructure to run transactions at scale.",
+      "date_range": "Mar 2026 - Present"
+    },
+    {
+      "job_title": "Senior Vice President, Strategy & Platform Development",
+      "company": "BankersKlub",
+      "location": "Delhi/ Hyderabad",
+      "description": "\u2022 Domain: Capital markets and financial services platform for businesses, investors, and lenders\n\u2022 Built and scaled a nationwide ecosystem of 2,000+ retired banking professionals, converting 200+ members into active paid participants through platform-led community management and a structured monetization framework.\n\u2022 Led API integrations with BimaKavach (insurance), eFundzz (fintech), Probe42 (business intelligence), and DhanLap (LAMF & LAS products); integrated cross-sell portfolio to expand platform financial services offering.\n\u2022 Established strategic partnerships with investment banking firms and fund houses to expand platform transaction execution capabilities and offer clients access to a broader capital market network.\n\u2022 Evaluated 200+ investment opportunities and executed INR 10-200 Cr financing transactions spanning structured credit, pre- IPO placements, refinancing, project completion funding, and invoice discounting.\n\u2022 Developed financial models, valuation frameworks, IRR scenarios, investment memos, and collateral schedules for institutional investors, lenders, and credit committees across all executed transactions.",
+      "date_range": "Jul 2024 - Mar 2026"
+    },
+    {
+      "job_title": "Manager, Strategic Finance & Planning (Team Lead)",
+      "company": "DE Shaw India",
+      "location": "Hyderabad",
+      "description": "\u2022 Domain: Leading finance transformation initiatives, financial planning & budgeting for India GCC office\n\u2022 Owned annual budgeting (~USD 200M) and rolling forecasts for 2,000+ employees, delivering under 2% variance; led a 5- member analyst team on management reporting, variance analysis, KPI tracking, and quarter-close activities.\n\u2022 Built automated financial planning tools and Power BI dashboards reducing manual effort by 400+ hours annually; developed competitor intelligence and benchmarking models supporting strategic planning for global leadership.\n\u2022 Built multi-year financial models and scenario frameworks for cost driver analysis, capacity planning, and macro sensitivities; served as FP&A-to-accounting liaison for accruals, actuals, and month-end close alignment.\n\u2022 Build compensation planning automation tool collaborating with product & engineering teams, to model compensation for 2000+ employees based at India offices.\n\u2022 Developed forecast model for headcount, P&L and other key indicators, developed budget pack for Board approvals.",
+      "date_range": "Aug 2022 - Jul 2024"
+    },
+    {
+      "job_title": "Vice President, Finance & Strategy",
+      "company": "Aon India Insurance Brokers",
+      "location": "Bangalore",
+      "description": "\u2022 Domain: Led FP&A, corporate development, and enterprise performance for India operations\n\u2022 Supported the Aon-Catamaran M&A transaction end-to-end for name change & shareholding transfer from Anviti to Aon India.\n\u2022 Developed valuation model, 5 years forecasts, strategy deck, diligence coordination, and legal advisor liaison.\n\u2022 Reduced accounts receivables by 80% liasoning with all department heads & external insurance companies through data intelligence, dashboarding, strategic initiatives & reconciliations.\n\u2022 Led FP&A, board-level MIS reporting, and TM1 planning system implementation; developed Power BI dashboards for KPI tracking; presented performance insights and strategic recommendations to CEO, CFO, and global leadership.",
+      "date_range": "Oct 2020 - Jul 2022"
+    },
+    {
+      "job_title": "Business Analyst, CEO Strategy Office",
+      "company": "Dabur India Ltd",
+      "location": "Delhi",
+      "description": "\u2022 Domain: Strategic advisor to the Global CEO\n\u2022 Shaped board presentations, investor communications, and enterprise growth strategy; led international business analytics on market sizing, pricing, and portfolio profitability; supported M&A pipeline and new business evaluation.\n\u2022 Led RISE project implementation & steering innovation pipeline to reduce Go to market time from 12 months to <3 months.\n\u2022 Analyzed Nielson intelligence reports to study competition & market share to provide strategic interventions with brand teams.",
+      "date_range": "Jan 2019 - Oct 2020"
+    },
+    {
+      "job_title": "Finance Manager & Product P&L Owner, NLD Business",
+      "company": "Bharti Airtel",
+      "location": "Gurgaon",
+      "description": "\u2022 Domain: Owned Product P&L for NLD business (~INR 500 Cr revenue); Led pricing for B2B deals\n\u2022 Owned commercial performance, profitability, and P&L management for Airtel's National Long Distance (NLD) business generating ~INR 500 Cr annual revenue, driving growth, margin expansion, and market competitiveness.\n\u2022 Partnered with enterprise sales leadership on large and strategic B2B transactions (via RFPs), developing commercial structures, pricing frameworks, and business cases that enabled successful acquisition and retention of key accounts.\n\u2022 Delivered INR 500 Mn in infrastructure and operating cost savings, recognized with the CFO Gold Award for driving enterprise-wide profitability improvement initiatives.\n\u2022 Identified and realized INR 600 Mn in contractual cost optimization opportunities in tower contracts with Indus & Infratel through strategic vendor negotiations, commercial restructuring, and rigorous financial governance.\n\u2022 Led national pricing strategy for SMB connectivity products; managed and led regional finance teams across 13+ telecom circles, including rate-card design, pricing approvals, margin optimization, and competitive positioning.",
+      "date_range": "Jun 2015 - Dec 2018"
+    },
+    {
+      "job_title": "Consultant",
+      "company": "PwC India",
+      "location": "Mumbai/ Bangalore",
+      "description": "\u2022 Domain: SAP BI Implementation & Enterprise Reporting Transformation Lead\n\u2022 Developed management dashboards & drove report consolidation projects in SAP Business Intelligence tool for mid to large corporates; led reporting transformation initiatives working with senior client stakeholders across multiple sectors. Key clients included GMR Infra, Olam International, D\u2019d\u00e9cor, Alok Industries.",
+      "date_range": "Jul 2011 - Jun 2013"
+    }
+  ],
+  "projects": [],
+  "skills": [
+    {
+      "skill_name": "Enterprise Sales",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "CRM",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Product Strategy",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "B2B Product Strategy",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Machine Learning",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Deep Learning",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Power BI",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "FP&A",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Variance Analysis",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Valuation",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Accounting",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "P&L Management",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "SAP",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Advanced Excel",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Due Diligence",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Capital Markets",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Fundraising",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Structured Finance",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Investment Banking",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "QuickBooks ProAdvisor",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "CFA",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "FRM",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Corporate Strategy",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Strategic Planning",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Operating Model",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Market Sizing",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Workflow Automation",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "CFA Level III (Passed)",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "FRM Level I",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Deep Learning (Coursera)",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Company Building",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Startup Operations",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Go-To-Market",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "AI-Enabled",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Platforms",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Fintech API Integrations",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Capital Formation",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "M&A and Corporate Development",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Investor Relations",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Family Office Mandates",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "P&L Ownership",
+      "is_confirmed": true
+    },
+    {
+      "skill_name": "Financial Modelling",
+      "is_confirmed": true
+    }
+  ],
+  "certifications": []
+}
