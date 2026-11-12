@@ -1,0 +1,39 @@
+name: Automated Job Feeder Cron
+
+on:
+  schedule:
+    # Runs twice a day at 00:00 UTC and 12:00 UTC (5:30 AM and 5:30 PM IST)
+    - cron: '0 0,12 * * *'
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: 'Target Job-Manager API URL'
+        required: false
+        default: 'https://api-jobs.dealos.in/api'
+
+jobs:
+  run-feeder:
+    name: Crawl & Ingest Live Jobs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Feeder Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pydantic
+
+      - name: Run Job Feeder Suite
+        env:
+          JOB_MANAGER_API_URL: ${{ github.event.inputs.api_url || secrets.JOB_MANAGER_API_URL || 'https://api-jobs.dealos.in/api' }}
+        run: |
+          echo "Starting automated crawler against: $JOB_MANAGER_API_URL"
+          python -m feeder.cli run-all --api-url "$JOB_MANAGER_API_URL"

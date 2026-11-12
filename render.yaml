@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: job-manager-backend
+    runtime: docker
+    dockerfilePath: ./ai-service/Dockerfile
+    dockerContext: ./ai-service
+    plan: free
+    region: oregon
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: ALLOWED_ORIGINS
+        value: https://jobs.dealos.in,http://localhost:3000
