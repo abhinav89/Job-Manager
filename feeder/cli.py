@@ -16,6 +16,7 @@ import requests
 from feeder.sources.greenhouse import DEFAULT_GREENHOUSE_COMPANIES, fetch_greenhouse_jobs
 from feeder.sources.lever import DEFAULT_LEVER_COMPANIES, fetch_lever_jobs
 from feeder.sources.json_feeder import load_jobs_from_file
+from feeder.sources.india_jobboard import fetch_india_jobboard_jobs
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("job-feeder")
@@ -28,6 +29,16 @@ def push_jobs_to_backend(jobs: List[Dict[str, Any]], source_name: str, api_url: 
     if not jobs:
         logger.info("No jobs to push.")
         return True
+
+    if len(jobs) > 100:
+        logger.info(f"Chunking {len(jobs)} jobs into batches of 100 for reliable ingestion...")
+        overall_ok = True
+        for idx in range(0, len(jobs), 100):
+            chunk = jobs[idx : idx + 100]
+            ok = push_jobs_to_backend(chunk, f"{source_name} [chunk {idx // 100 + 1}]", api_url)
+            if not ok:
+                overall_ok = False
+        return overall_ok
 
     candidate_urls = [api_url]
     if "8000" in api_url:
@@ -56,8 +67,7 @@ def push_jobs_to_backend(jobs: List[Dict[str, Any]], source_name: str, api_url: 
             logger.warning("⚠️ Job-Manager backend is not reachable via HTTP. Writing directly to local repository service.")
             try:
                 from cv_tailor.services.job_repository_service import job_repo_service
-                for j in jobs:
-                    job_repo_service.add_job(j)
+                job_repo_service.bulk_add_jobs(jobs)
                 logger.info(f"✅ Stored {len(jobs)} jobs directly into local repository service.")
                 return True
             except Exception as e:
@@ -92,13 +102,26 @@ def main():
     all_parser = subparsers.add_parser("run-all", help="Run all automated feeder sources")
     all_parser.add_argument("--api-url", type=str, default=DEFAULT_API_URL, help="Job-Manager API URL")
 
+    # Command: india-jobboard
+    ij_parser = subparsers.add_parser("india-jobboard", help="Fetch all verified jobs from running india-jobboard")
+    ij_parser.add_argument("--api-url", type=str, default=DEFAULT_API_URL, help="Job-Manager API URL")
+    ij_parser.add_argument("--source-url", type=str, default="http://localhost:8000/api/jobs", help="india-jobboard API URL")
+    ij_parser.add_argument("--max-pages", type=int, default=None, help="Max pages to fetch")
+
     args = parser.parse_args()
 
     if not args.command or args.command == "run-all":
         logger.info("🚀 Starting comprehensive Job Feeder run across all configured sources...")
         total_ingested = 0
 
-        # 1. Greenhouse
+        # 1. India Job Board (highest volume, curated Indian opportunities)
+        logger.info("Connecting to India Job Board on port 8000...")
+        india_jobs = fetch_india_jobboard_jobs()
+        if india_jobs:
+            push_jobs_to_backend(india_jobs, "India Job Board", getattr(args, "api_url", DEFAULT_API_URL))
+            total_ingested += len(india_jobs)
+
+        # 2. Greenhouse
         for comp in DEFAULT_GREENHOUSE_COMPANIES:
             logger.info(f"Checking Greenhouse board for {comp['name']}...")
             jobs = fetch_greenhouse_jobs(comp["name"], comp["token"], limit=8)
@@ -106,7 +129,7 @@ def main():
                 push_jobs_to_backend(jobs, f"Greenhouse-{comp['name']}", getattr(args, "api_url", DEFAULT_API_URL))
                 total_ingested += len(jobs)
 
-        # 2. Lever
+        # 3. Lever
         for comp in DEFAULT_LEVER_COMPANIES:
             logger.info(f"Checking Lever board for {comp['name']}...")
             jobs = fetch_lever_jobs(comp["name"], comp["token"], limit=8)
@@ -115,6 +138,14 @@ def main():
                 total_ingested += len(jobs)
 
         logger.info(f"🎉 Feeder run complete! Total jobs collected & processed: {total_ingested}")
+        return
+
+    if args.command == "india-jobboard":
+        logger.info(f"Pulling all jobs from India Job Board ({args.source_url})...")
+        jobs = fetch_india_jobboard_jobs(base_url=args.source_url, max_pages=args.max_pages)
+        if jobs:
+            push_jobs_to_backend(jobs, "India Job Board", args.api_url)
+            logger.info(f"🎉 Ingestion finished: {len(jobs)} jobs processed from India Job Board.")
         return
 
     if args.command == "greenhouse":

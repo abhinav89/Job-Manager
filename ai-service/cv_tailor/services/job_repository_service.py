@@ -893,8 +893,33 @@ class JobRepositoryService:
     """Service to query, filter, and ingest jobs across sources."""
 
     def __init__(self):
+        from cv_tailor.config import data_dir
+        self._storage_path = data_dir() / "repository_jobs.json"
         self._jobs: List[Dict[str, Any]] = list(SEEDED_REPOSITORY_JOBS)
         self._companies: List[Dict[str, Any]] = list(MASTER_COMPANIES)
+        self._load_from_disk()
+
+    def _load_from_disk(self):
+        try:
+            if self._storage_path.exists():
+                with open(self._storage_path, "r", encoding="utf-8") as f:
+                    saved = json.load(f)
+                    if isinstance(saved, list):
+                        seen = {j.get("id") for j in self._jobs if j.get("id")}
+                        for item in saved:
+                            if item.get("id") and item.get("id") not in seen:
+                                seen.add(item.get("id"))
+                                self._jobs.append(item)
+        except Exception as e:
+            logger.error(f"Error loading repository jobs from disk: {e}")
+
+    def _save_to_disk(self):
+        try:
+            self._storage_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self._storage_path, "w", encoding="utf-8") as f:
+                json.dump(self._jobs, f, indent=2)
+        except Exception as e:
+            logger.error(f"Error saving repository jobs to disk: {e}")
 
     def list_companies(self) -> List[Dict[str, Any]]:
         return self._companies
@@ -983,10 +1008,42 @@ class JobRepositoryService:
         for idx, existing in enumerate(self._jobs):
             if existing.get("fingerprint") == fingerprint or existing.get("id") == job_data["id"]:
                 self._jobs[idx].update(job_data)
+                self._save_to_disk()
                 return self._jobs[idx]
 
         self._jobs.insert(0, job_data)
+        self._save_to_disk()
         return job_data
+
+    def bulk_add_jobs(self, jobs_data: List[Dict[str, Any]]) -> int:
+        """Add multiple jobs in batch and persist to disk once."""
+        added = 0
+        existing_fps = {j.get("fingerprint") for j in self._jobs if j.get("fingerprint")}
+        existing_ids = {j.get("id") for j in self._jobs if j.get("id")}
+
+        for job_data in jobs_data:
+            fingerprint = generate_job_fingerprint(
+                job_data.get("company_name", ""),
+                job_data.get("job_title", ""),
+                job_data.get("location", "")
+            )
+            job_data["fingerprint"] = fingerprint
+            if not job_data.get("id"):
+                job_data["id"] = f"job-{fingerprint}"
+            if not job_data.get("date_posted"):
+                job_data["date_posted"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+            if fingerprint in existing_fps or job_data["id"] in existing_ids:
+                continue
+
+            existing_fps.add(fingerprint)
+            existing_ids.add(job_data["id"])
+            self._jobs.append(job_data)
+            added += 1
+
+        if added > 0:
+            self._save_to_disk()
+        return added
 
     def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
         for job in self._jobs:
