@@ -78,7 +78,15 @@ async def local_access(request: Request, call_next):
         except ValueError:
             return JSONResponse(status_code=403, content={"detail": "Local connections only."})
     origin = request.headers.get("origin")
-    allowed_origins = {str(request.base_url).rstrip("/"), "http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8000", "http://127.0.0.1:8000"}
+    allowed_origins = {
+        str(request.base_url).rstrip("/"),
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:8005",
+        "http://127.0.0.1:8005",
+    }
     if origin and origin not in allowed_origins:
         return JSONResponse(status_code=403, content={"detail": "Cross-origin access is disabled."})
     if request.method == "OPTIONS":

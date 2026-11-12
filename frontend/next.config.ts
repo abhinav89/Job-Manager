@@ -19,15 +19,15 @@ const nextConfig: NextConfig = {
           return [
             {
               source: "/api/:path*",
-              destination: "http://127.0.0.1:8000/api/:path*",
+              destination: "http://127.0.0.1:8005/api/:path*",
             },
             {
               source: "/workspace",
-              destination: "http://127.0.0.1:8000/workspace",
+              destination: "http://127.0.0.1:8005/workspace",
             },
             {
               source: "/preferences",
-              destination: "http://127.0.0.1:8000/preferences",
+              destination: "http://127.0.0.1:8005/preferences",
             },
           ];
         },

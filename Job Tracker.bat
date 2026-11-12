@@ -4,8 +4,8 @@ set "PROJECT_ROOT=%~dp0"
 echo Starting CV Tailor services...
 
 :: Start FastAPI AI service
-echo [1/2] Starting FastAPI AI service on :8000
-start "AI Service" /D "%PROJECT_ROOT%ai-service" cmd /k "venv\Scripts\python.exe -m uvicorn cv_tailor.main:app --reload --port 8000"
+echo [1/2] Starting FastAPI AI service on :8005
+start "AI Service" /D "%PROJECT_ROOT%ai-service" cmd /k "venv\Scripts\python.exe -m uvicorn cv_tailor.main:app --reload --port 8005"
 
 :: Wait a moment
 timeout /t 2 /nobreak >nul
