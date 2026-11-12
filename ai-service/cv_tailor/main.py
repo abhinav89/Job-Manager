@@ -55,6 +55,16 @@ def favicon():
     from fastapi.responses import Response
     return Response(status_code=204)
 
+@app.get("/workspace")
+def root_workspace():
+    from cv_tailor.routers.workspace_routes import workspace_status
+    return workspace_status()
+
+@app.get("/preferences")
+def root_preferences():
+    from cv_tailor.routers.workspace_routes import preferences
+    return preferences()
+
 @app.middleware("http")
 async def local_access(request: Request, call_next):
     host = request.url.hostname
@@ -68,8 +78,17 @@ async def local_access(request: Request, call_next):
         except ValueError:
             return JSONResponse(status_code=403, content={"detail": "Local connections only."})
     origin = request.headers.get("origin")
-    if origin and origin != str(request.base_url).rstrip("/"):
+    allowed_origins = {str(request.base_url).rstrip("/"), "http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8000", "http://127.0.0.1:8000"}
+    if origin and origin not in allowed_origins:
         return JSONResponse(status_code=403, content={"detail": "Cross-origin access is disabled."})
+    if request.method == "OPTIONS":
+        opt_res = Response(status_code=204)
+        if origin in allowed_origins:
+            opt_res.headers["Access-Control-Allow-Origin"] = origin
+            opt_res.headers["Access-Control-Allow-Credentials"] = "true"
+            opt_res.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+            opt_res.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, X-Auto-Fit-Fallback"
+        return opt_res
     path = request.url.path.removeprefix("/api")
     if request.method == "POST":
         category = None
@@ -87,7 +106,13 @@ async def local_access(request: Request, call_next):
         payload = (root / request.url.path.lstrip("/") / "index.txt").resolve()
         if payload.is_relative_to(root) and payload.is_file():
             return FileResponse(payload, media_type="text/x-component")
-    return await call_next(request)
+    response = await call_next(request)
+    if origin in allowed_origins:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, X-Auto-Fit-Fallback"
+    return response
 
 app.mount("/api", api)
 from cv_tailor.dashboard import assets_dir

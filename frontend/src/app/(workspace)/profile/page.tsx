@@ -15,7 +15,6 @@ import {
   Trash2,
   UploadCloud,
   CheckCircle2,
-  Linkedin,
   MapPin,
   DollarSign,
   Building,

@@ -1,4 +1,7 @@
-export const API_URL = "/api";
+export const API_URL =
+  typeof window !== "undefined" && window.location.port === "3000"
+    ? "http://127.0.0.1:8000/api"
+    : process.env.NEXT_PUBLIC_API_URL || "/api";
 
 export async function getApiError(response: Response, fallback: string): Promise<string> {
   const data = await response.json().catch(() => null) as { detail?: unknown; error?: unknown; message?: unknown } | null;
