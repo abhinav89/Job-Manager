@@ -9,11 +9,13 @@ configure()
 
 # Default to local SQLite unless DATABASE_URL is provided (e.g. Supabase Postgres)
 DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
+if DATABASE_URL:
+    DATABASE_URL = DATABASE_URL.strip()
+    if DATABASE_URL.startswith("postgres://"):
+        # SQLAlchemy 2.0 requires postgresql:// instead of postgres://
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+else:
     DATABASE_URL = "sqlite:///" + (data_dir() / "cv-tailor.sqlite3").as_posix()
-elif DATABASE_URL.startswith("postgres://"):
-    # SQLAlchemy 2.0 requires postgresql:// instead of postgres://
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 request_path = ContextVar("request_path", default="cli")
 Base = declarative_base()

@@ -39,7 +39,7 @@ COPY ai-service/ /app/
 
 # 6. Install Python dependencies and package
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir ".[dashboard,ai]" psycopg2-binary uvicorn[standard]
+    pip install --no-cache-dir ".[dashboard,ai]" "psycopg[binary]>=3.1.18" psycopg2-binary uvicorn[standard]
 
 # 7. Expose default port
 EXPOSE 8000
