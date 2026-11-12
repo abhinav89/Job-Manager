@@ -34,13 +34,12 @@ RUN mkdir -p /opt/tectonic-cache /opt/tex-cache && chmod -R a+rwx /opt/tectonic-
 # 4. Set application working directory
 WORKDIR /app
 
-# 5. Install Python dependencies from ai-service
-COPY ai-service/pyproject.toml .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -e ".[dashboard,ai]" psycopg2-binary uvicorn[standard]
+# 5. Copy backend application source code first
+COPY ai-service/ /app/
 
-# 6. Copy backend application source code
-COPY ai-service/ .
+# 6. Install Python dependencies and package
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir ".[dashboard,ai]" psycopg2-binary uvicorn[standard]
 
 # 7. Expose default port
 EXPOSE 8000

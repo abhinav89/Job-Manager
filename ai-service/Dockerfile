@@ -1,7 +1,6 @@
 # ==============================================================================
-# Production Dockerfile for Job-Manager Backend
+# Production Dockerfile for Job-Manager Backend (ai-service directory)
 # Includes Python 3.12, Linux Tectonic LaTeX Compiler, and System Fonts
-# Compatible with Koyeb, Render, Railway, Fly.io, and Docker Compose
 # ==============================================================================
 
 FROM python:3.12-slim-bookworm
@@ -34,13 +33,12 @@ RUN mkdir -p /opt/tectonic-cache /opt/tex-cache && chmod -R a+rwx /opt/tectonic-
 # 4. Set application working directory
 WORKDIR /app
 
-# 5. Install Python dependencies
-COPY pyproject.toml .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -e ".[dashboard,ai]" psycopg2-binary uvicorn[standard]
+# 5. Copy code
+COPY . /app/
 
-# 6. Copy application source code
-COPY . .
+# 6. Install Python dependencies and package
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir ".[dashboard,ai]" psycopg2-binary uvicorn[standard]
 
 # 7. Expose default port
 EXPOSE 8000
