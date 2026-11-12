@@ -145,9 +145,9 @@ export default function DiscoverJobsPage() {
           onChange={(e) => setFilterState({ ...filterState, country: e.target.value })}
           className="px-3 py-2 bg-white border border-slate-200 rounded-xl font-medium text-slate-700 hover:border-slate-300 focus:outline-none cursor-pointer"
         >
+          <option value="Global / Anywhere">🌐 All Locations / Remote</option>
           <option value="India">🇮🇳 India</option>
           <option value="United States">🇺🇸 United States</option>
-          <option value="Global / Anywhere">🌐 Global / Remote</option>
         </select>
 
         {/* City Quick Dropdown */}
@@ -199,7 +199,7 @@ export default function DiscoverJobsPage() {
         </button>
 
         {/* Clear Filters */}
-        {(filterState.city !== "All Cities" || filterState.workModel !== "all" || filterState.seniority !== "all") && (
+        {(filterState.country !== "Global / Anywhere" || filterState.city !== "All Cities" || filterState.workModel !== "all" || filterState.seniority !== "all") && (
           <button
             type="button"
             onClick={() => setFilterState(defaultFilterState)}

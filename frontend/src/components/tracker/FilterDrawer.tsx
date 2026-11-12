@@ -21,7 +21,7 @@ export const defaultFilterState: FilterState = {
   jobType: "all",
   seniority: "all",
   datePosted: "any",
-  country: "India",
+  country: "Global / Anywhere",
   city: "All Cities",
   yearsExperience: 5,
   roleCategory: "all",
