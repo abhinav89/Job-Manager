@@ -17,6 +17,11 @@ DEFAULT_GREENHOUSE_COMPANIES = [
     {"name": "Databricks", "token": "databricks"},
     {"name": "Cloudflare", "token": "cloudflare"},
     {"name": "Instacart", "token": "instacart"},
+    {"name": "Airbnb", "token": "airbnb"},
+    {"name": "Dropbox", "token": "dropbox"},
+    {"name": "Coinbase", "token": "coinbase"},
+    {"name": "Reddit", "token": "reddit"},
+    {"name": "Robinhood", "token": "robinhood"},
 ]
 
 

@@ -6,7 +6,7 @@ echo =======================================================
 echo Pulling live jobs from Greenhouse, Lever, and feeds...
 echo.
 
-"%PROJECT_ROOT%ai-service\venv\Scripts\python.exe" -m feeder.cli run-all
+"%PROJECT_ROOT%ai-service\venv\Scripts\python.exe" -m feeder.cli run-all --api-url http://localhost:8005/api
 
 echo.
 echo Feeder run completed.

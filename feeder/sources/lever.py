@@ -13,8 +13,6 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_LEVER_COMPANIES = [
     {"name": "Spotify", "token": "spotify"},
-    {"name": "Netflix", "token": "netflix"},
-    {"name": "Atlassian", "token": "atlassian"},
 ]
 
 

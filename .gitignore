@@ -40,6 +40,7 @@ graphify-out/
 
 # Local runtime and build artifacts
 .venv/
+data/
 *.egg-info/
 .pytest_cache/
 *.sqlite3

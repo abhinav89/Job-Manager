@@ -5,6 +5,7 @@ and pushes them into Job-Manager's central repository.
 """
 from __future__ import annotations
 
+import os
 import argparse
 import json
 import logging
@@ -19,7 +20,7 @@ from feeder.sources.json_feeder import load_jobs_from_file
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("job-feeder")
 
-DEFAULT_API_URL = "http://localhost:8000/api"
+DEFAULT_API_URL = os.getenv("JOB_MANAGER_API_URL", "http://localhost:8005/api")
 
 
 def push_jobs_to_backend(jobs: List[Dict[str, Any]], source_name: str, api_url: str = DEFAULT_API_URL) -> bool:
@@ -28,33 +29,42 @@ def push_jobs_to_backend(jobs: List[Dict[str, Any]], source_name: str, api_url: 
         logger.info("No jobs to push.")
         return True
 
-    endpoint = f"{api_url.rstrip('/')}/feeder/jobs/ingest"
+    candidate_urls = [api_url]
+    if "8000" in api_url:
+        candidate_urls.append("http://localhost:8005/api")
+
     payload = {
         "source_name": source_name,
         "jobs": jobs,
     }
 
-    try:
-        resp = requests.post(endpoint, json=payload, timeout=20)
-        if resp.status_code == 200:
-            data = resp.json()
-            logger.info(f"✅ Successfully ingested {data.get('ingested_count', 0)} jobs from {source_name} into Job-Manager.")
-            return True
-        else:
-            logger.error(f"❌ Backend returned error {resp.status_code}: {resp.text}")
-            return False
-    except requests.exceptions.ConnectionError:
-        logger.warning("⚠️ Job-Manager backend is not running on :8000. Writing directly to local service.")
+    for url in candidate_urls:
+        endpoint = f"{url.rstrip('/')}/feeder/jobs/ingest"
         try:
-            # Fallback to direct import when backend isn't up
-            from cv_tailor.services.job_repository_service import job_repo_service
-            for j in jobs:
-                job_repo_service.add_job(j)
-            logger.info(f"✅ Stored {len(jobs)} jobs directly into local repository service.")
-            return True
-        except Exception as e:
-            logger.error(f"Failed local store: {e}")
-            return False
+            resp = requests.post(endpoint, json=payload, timeout=20)
+            if resp.status_code == 200:
+                data = resp.json()
+                logger.info(f"✅ Successfully ingested {data.get('ingested_count', 0)} jobs from {source_name} into Job-Manager.")
+                return True
+            elif resp.status_code == 404 and url != candidate_urls[-1]:
+                continue
+            else:
+                logger.error(f"❌ Backend returned error {resp.status_code}: {resp.text}")
+        except requests.exceptions.ConnectionError:
+            if url != candidate_urls[-1]:
+                continue
+            logger.warning("⚠️ Job-Manager backend is not reachable via HTTP. Writing directly to local repository service.")
+            try:
+                from cv_tailor.services.job_repository_service import job_repo_service
+                for j in jobs:
+                    job_repo_service.add_job(j)
+                logger.info(f"✅ Stored {len(jobs)} jobs directly into local repository service.")
+                return True
+            except Exception as e:
+                logger.error(f"Failed local store: {e}")
+                return False
+
+    return False
 
 
 def main():
