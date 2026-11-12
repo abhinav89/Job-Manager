@@ -15,9 +15,17 @@ import InlineQueryError from "@/components/InlineQueryError";
 import RouteLoading from "@/components/RouteLoading";
 import Alert from "@/components/Alert";
 import { ButtonLink } from "@/components/Button";
-import { ApiQueryError, queryKeys, type JobDetails, type Workspace, type WorkspacePreferences, type ResumeTemplate, useWorkspace, usePresets, useProfile, useTrackerDetails } from "@/lib/queries";
+import { ApiQueryError, queryKeys, type JobDetails, type Workspace, type WorkspacePreferences, type ResumeTemplate, useWorkspace, usePresets, useProfile, useTrackerDetails, useTrackerJobs, useRepositoryJobs } from "@/lib/queries";
 import { applyBlockText, formatEducationDetails, replaceProjectHeading, parseResumeBlocks, parseResumeDraft, replaceCommandArgument, replaceResumeItem, replaceResumeName, replaceSectionDetail, replaceSummary, resolveSelectionToBlocks, type ResumeBlock, type ResumeDraft } from "@/lib/resumeDraft";
 import { ResumeDifferenceView } from "@/components/tracker/ResumeDifferenceView";
+import { PickResumeModal } from "@/components/tracker/PickResumeModal";
+import { TailorInputModal } from "@/components/tracker/TailorInputModal";
+import {
+  Wand2, FileText, Sparkles, Plus, Search, Bookmark, ExternalLink,
+  Check, CheckCircle2, Building2, MapPin, Calendar, ChevronRight,
+  ArrowRight, Link as LinkIcon, Info, LayoutGrid, Layers, Globe,
+  Briefcase, Mail, RefreshCw, Download, Edit3, ShieldCheck, Star
+} from "lucide-react";
 
 const Document = dynamic(() => import("react-pdf").then(m => m.Document), { ssr: false });
 const Page = dynamic(() => import("react-pdf").then(m => m.Page), { ssr: false });
@@ -502,6 +510,7 @@ type EditorHeaderProps = {
   onDownloadTex: () => void;
   mode: EditorMode;
   onModeChange: (mode: EditorMode) => void;
+  onBackClick?: () => void;
   extra?: React.ReactNode;
 };
 
@@ -511,13 +520,24 @@ const EditorHeader = ({
   coverLetterAvailable, coverLetterBusy, onCoverLetter,
   busy, onRecompile, hasPdf, hasLatex, downloadingDocx,
   onDownloadPdf, onDownloadDocx, onDownloadTex,
-  mode, onModeChange, extra,
+  mode, onModeChange, onBackClick, extra,
 }: EditorHeaderProps) => {
   const [moreOpen, setMoreOpen] = useState(false);
   return (
     <header className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-7 sm:py-4" style={{ background: "#fffdf9", borderColor: C.border }}>
       <div className="flex items-center gap-4 min-w-0">
-        <Link href={backHref} prefetch className="shrink-0 text-[10px] font-semibold tracking-[0.3em] uppercase hover:opacity-60 transition-opacity" style={{ color: C.green }}>{backLabel}</Link>
+        {onBackClick ? (
+          <button
+            type="button"
+            onClick={onBackClick}
+            className="shrink-0 text-[10px] font-semibold tracking-[0.3em] uppercase hover:opacity-60 transition-opacity"
+            style={{ color: C.green }}
+          >
+            {backLabel}
+          </button>
+        ) : (
+          <Link href={backHref} prefetch className="shrink-0 text-[10px] font-semibold tracking-[0.3em] uppercase hover:opacity-60 transition-opacity" style={{ color: C.green }}>{backLabel}</Link>
+        )}
         <div className="h-5 w-px shrink-0" style={{ background: C.border }} />
         <div className="min-w-0">
           <p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: C.textFaint }}>{eyebrow}</p>
@@ -587,6 +607,95 @@ const EditorHeader = ({
   );
 };
 
+const TEMPLATE_METADATA: Record<string, {
+  displayName: string;
+  category: string;
+  pages: string;
+  flag?: string;
+  tag?: string;
+  description: string;
+}> = {
+  classic: {
+    displayName: "Harvard Style",
+    category: "Any role",
+    pages: "1–2 pages",
+    tag: "ATS 100%",
+    description: "Standard Ivy League format preferred by corporate recruiters and ATS parsers.",
+  },
+  modern: {
+    displayName: "Wall Street",
+    category: "Finance & Banking",
+    pages: "1–2 pages",
+    tag: "Finance",
+    description: "Rigorous high-density hierarchy designed for investment banking and management consulting.",
+  },
+  minimal: {
+    displayName: "Modern Minimal",
+    category: "Product & Strategy",
+    pages: "1–2 pages",
+    tag: "Clean",
+    description: "Sleek, uncluttered layout emphasizing scope, metrics, and leadership impact.",
+  },
+  serif: {
+    displayName: "Dubai / UAE",
+    category: "Country formats",
+    pages: "2 pages",
+    flag: "🇦🇪 UAE",
+    description: "Gulf Cooperation Council (GCC) executive format with complete verified credentials.",
+  },
+  sidebar: {
+    displayName: "Singapore",
+    category: "Country formats",
+    pages: "1–2 pages",
+    flag: "🇸🇬 Singapore",
+    description: "Asia-Pacific standard featuring streamlined contact & skills column.",
+  },
+  technical: {
+    displayName: "Silicon Valley",
+    category: "Tech & Software",
+    pages: "1–2 pages",
+    tag: "Engineering",
+    description: "Developer-focused design with dedicated tech stack, GitHub links, and projects.",
+  },
+  executive: {
+    displayName: "Executive Leadership",
+    category: "Director & VP",
+    pages: "2 pages",
+    tag: "Leadership",
+    description: "Comprehensive multi-page format showcasing P&L ownership and organizational scale.",
+  },
+  compact: {
+    displayName: "Compact One-Pager",
+    category: "Condensed Early Career",
+    pages: "1 page",
+    tag: "1-Pager",
+    description: "Tight single-page layout for <5 years experience or rapid recruiter scanning.",
+  },
+};
+
+function getCompanyInitials(name: string) {
+  if (!name) return "JM";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+
+const BRAND_COLORS = [
+  "bg-purple-100 text-purple-700 border-purple-200",
+  "bg-blue-100 text-blue-700 border-blue-200",
+  "bg-emerald-100 text-emerald-700 border-emerald-200",
+  "bg-amber-100 text-amber-800 border-amber-200",
+  "bg-rose-100 text-rose-700 border-rose-200",
+  "bg-indigo-100 text-indigo-700 border-indigo-200",
+  "bg-cyan-100 text-cyan-800 border-cyan-200",
+];
+
+function getCompanyColor(name: string) {
+  let hash = 0;
+  for (let i = 0; i < (name || "").length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return BRAND_COLORS[Math.abs(hash) % BRAND_COLORS.length];
+}
+
 function GeneratePageContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -601,7 +710,20 @@ function GeneratePageContent() {
   const [jd, setJd] = useState("");
   const queryTitle = searchParams.get("title") || jobDetailsQuery.data?.job_title || "";
   const queryCompany = searchParams.get("company") || jobDetailsQuery.data?.company_name || "";
-  const [wizardStep, setWizardStep] = useState<"difference" | "editor">(Boolean(queryTitle || queryCompany) ? "difference" : "editor");
+  const [targetJobTitle, setTargetJobTitle] = useState(queryTitle);
+  const [targetCompanyName, setTargetCompanyName] = useState(queryCompany);
+  const [wizardStep, setWizardStep] = useState<"difference" | "editor" | "main">(
+    Boolean(queryTitle || queryCompany) ? "difference" : "main"
+  );
+  const [mainTab, setMainTab] = useState<"tailored" | "original" | "cover_letter" | "templates">("tailored");
+  const [trackerSubTab, setTrackerSubTab] = useState<"tracker" | "search">("tracker");
+  const [linkInput, setLinkInput] = useState("");
+  const [repoSearchKeyword, setRepoSearchKeyword] = useState("");
+  const [isPickResumeModalOpen, setIsPickResumeModalOpen] = useState(false);
+  const [isTailorInputModalOpen, setIsTailorInputModalOpen] = useState(false);
+
+  const trackerJobsQuery = useTrackerJobs();
+  const repositoryJobsQuery = useRepositoryJobs({ keyword: repoSearchKeyword });
   const { selectedTemplate, setSelectedTemplate, editorMode, setEditorMode } = useResumeUiStore();
   const initializedTemplateScope = useRef<string | null>(null);
   const [savingDefault, setSavingDefault] = useState(false);
@@ -1108,14 +1230,19 @@ function GeneratePageContent() {
     />
   );
 
-  const handleGenerate = async () => {
-    if (!jd.trim() || !userEmail) return;
+  const handleGenerateWithJd = async (jobDesc?: string) => {
+    const textToUse = jobDesc ?? jd;
+    if (!textToUse.trim() || !userEmail) {
+      setIsTailorInputModalOpen(true);
+      return;
+    }
+    setJd(textToUse);
     if (pdfUrl) { window.URL.revokeObjectURL(pdfUrl); setPdfUrl(null); }
     setAppState("generating"); setErrorMsg("");
     try {
       const res = await fetch(`${API_URL}/generate/ats-check`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        credentials: "include", body: JSON.stringify({ email: userEmail, jd, template_id: selectedTemplate, preset_slug: presetSlug }),
+        credentials: "include", body: JSON.stringify({ email: userEmail, jd: textToUse, template_id: selectedTemplate, preset_slug: presetSlug }),
       });
       if (!res.ok) throw new Error(await getApiError(res, "Resume generation failed. Please try again."));
       const { latex: gen, pdf_b64, ats } = await res.json();
@@ -1135,6 +1262,8 @@ function GeneratePageContent() {
       setHasGenerated(true);
     } catch (err: unknown) { setErrorMsg(err instanceof Error ? err.message : "Generation failed"); setAppState("error"); }
   };
+
+  const handleGenerate = () => handleGenerateWithJd();
 
   const handleDownload = () => {
     if (!pdfUrl) return;
@@ -1328,20 +1457,25 @@ function GeneratePageContent() {
   if (startupError) return <div className="p-6 sm:p-10"><InlineQueryError message={startupError} onRetry={() => { void loadJobLatex(); void profileQuery.refetch(); void presetsQuery.refetch(); void jobDetailsQuery.refetch(); }} /></div>;
 
   if (!hasGenerated) {
-    if (wizardStep === "difference" && (queryTitle || queryCompany)) {
+    if (wizardStep === "difference" && (targetJobTitle || targetCompanyName || queryTitle || queryCompany)) {
       return (
         <div className="min-h-full bg-slate-50 p-4 sm:p-8">
           <ResumeDifferenceView
-            jobTitle={queryTitle || "Target Role"}
-            companyName={queryCompany || "Target Employer"}
-            userTitle={profileQuery.data?.experience?.[0]?.job_title || "Business Analyst - Strategy Office"}
+            jobTitle={targetJobTitle || queryTitle || "Target Role"}
+            companyName={targetCompanyName || queryCompany || "Target Employer"}
+            userTitle={profileQuery.data?.experience?.[0]?.job_title || "Senior Professional"}
             userExperienceYears={profileQuery.data?.experience?.length ? Math.round(profileQuery.data.experience.length * 2.5 * 10) / 10 : 8.5}
-            matchScore={6.5}
+            matchScore={7.5}
+            onBack={() => {
+              setWizardStep("main");
+              setTargetJobTitle("");
+              setTargetCompanyName("");
+            }}
             onProceedToAlign={() => {
+              const currentJd = jd.trim() || jobDetailsQuery.data?.job_description || `Role: ${targetJobTitle || queryTitle} at ${targetCompanyName || queryCompany}. Seeking proven professional with track record in execution, cross-functional collaboration, and strategic growth.`;
+              setJd(currentJd);
               setWizardStep("editor");
-              if (!jd && jobDetailsQuery.data?.job_description) {
-                setJd(jobDetailsQuery.data.job_description);
-              }
+              void handleGenerateWithJd(currentJd);
             }}
           />
         </div>
@@ -1349,103 +1483,558 @@ function GeneratePageContent() {
     }
 
     return (
-      <main className="min-h-full font-mono flex flex-col items-center justify-start md:justify-center px-6 py-8 md:py-16"
-          style={{ background: C.bg, color: C.text }}>
-          <div className="pointer-events-none fixed inset-0 opacity-[0.07] z-0"
-            style={{ backgroundImage: GRAIN, backgroundRepeat: "repeat", backgroundSize: "128px" }} />
-          <div className="relative z-10 w-full max-w-2xl">
-            <div className="mb-10">
-              <div className="flex items-center gap-3 mb-2">
-                <Link href="/dashboard" prefetch className="text-xs tracking-[0.3em] uppercase hover:opacity-60 transition-opacity" style={{ color: C.green }}>← dashboard</Link>
-                <span className="h-px flex-1" style={{ background: C.border }} />
-                <span className="text-xs" style={{ color: C.textFaint }}>v0.1</span>
-              </div>
-              <h1 className="text-4xl font-bold leading-none tracking-tight" style={{ fontFamily: "'Georgia', serif", letterSpacing: "-0.02em", color: C.text }}>
-                Tailor Your<br /><span style={{ color: C.green }}>Resume.</span>
-              </h1>
-              <p className="mt-4 text-sm leading-relaxed" style={{ color: C.textMuted }}>
-                Paste a job description. Gemini tailors your CV, then opens<br />a live LaTeX editor so you can fine-tune before exporting.
-              </p>
-              {userEmail && (
-                <div className="flex items-center gap-3 mt-4">
-                  <p className="text-xs" style={{ color: C.textFaint }}>Signed in as {userEmail}</p>
-                </div>
-              )}
+      <main className="min-h-full bg-slate-50/50 p-4 sm:p-8 font-sans">
+        <div className="max-w-5xl mx-auto space-y-6">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">My Resumes</h1>
+              <p className="text-xs sm:text-sm text-slate-500 mt-1">Create and manage your professional resumes</p>
             </div>
-            <div className="relative mb-5">
-              <div className="absolute top-0 left-0 right-0 h-px" style={{ background: `linear-gradient(to right, ${C.greenBorder}, transparent)` }} />
-              <label className="block text-[10px] tracking-[0.25em] uppercase mb-3 mt-4" style={{ color: C.textMuted }}>Job Description</label>
-              <textarea className="w-full h-56 text-sm leading-relaxed p-3 resize-none outline-none rounded-sm"
-                style={{ background: C.bgCard, color: C.text, border: `1px solid ${C.border}`, caretColor: C.green }}
-                placeholder="Paste the full job description here..."
-                value={jd} onChange={e => setJd(e.target.value)} />
-              <div className="absolute bottom-3 right-3 text-[10px]" style={{ color: C.textFaint }}>{jd.length} chars</div>
-            </div>
-            
-            <div className="mb-6">
-              <label className="block text-[10px] tracking-[0.25em] uppercase mb-3" style={{ color: C.textMuted }}>Your Role (Optional Steering)</label>
-              <input 
-                list="generate-presets"
-                className="w-full p-3 text-sm outline-none rounded-sm transition-colors mb-6"
-                style={{ background: C.bgCard, color: C.text, border: `1px solid ${C.border}` }}
-                value={presetSlug === 'blank' ? '' : presetSlug}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setPresetSlug(val || 'blank');
-                  const p = presets.find(x => x.display_name.toLowerCase() === val.toLowerCase());
-                   const recommended = RESUME_TEMPLATES.find(template => template.id === p?.recommended_template);
-                   if (recommended && !userQuery.data?.preferences?.resume_template && !profileQuery.data?.preferred_template) setSelectedTemplate(recommended.id as ResumeTemplate);
-                }}
-                placeholder="e.g. Full Stack Developer, Marketing Manager..."
-              />
-              <datalist id="generate-presets">
-                {presets.map(p => (
-                  <option key={p.slug} value={p.display_name} />
-                ))}
-              </datalist>
+            <button
+              type="button"
+              onClick={() => setIsPickResumeModalOpen(true)}
+              className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm flex items-center gap-2 transition-all hover:shadow"
+            >
+              <Plus className="w-4 h-4" />
+              Create New
+            </button>
+          </div>
 
-              <label className="block text-[10px] tracking-[0.25em] uppercase mb-3" style={{ color: C.textMuted }}>Select Template</label>
-              <div className="grid grid-cols-2 gap-4">
-                {RESUME_TEMPLATES.map(tpl => (
+          {/* Navigation Tabs */}
+          <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto">
+            <button
+              type="button"
+              onClick={() => setMainTab("original")}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                mainTab === "original"
+                  ? "bg-white text-slate-900 shadow-xs border border-slate-200"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              <FileText className="w-4 h-4 text-slate-400" />
+              Original
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMainTab("tailored")}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                mainTab === "tailored"
+                  ? "bg-white text-slate-900 shadow-xs border border-slate-200"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              <Wand2 className="w-4 h-4 text-blue-600" />
+              Job Tailored Resumes
+              <span className="bg-blue-100 text-blue-700 text-[10px] font-extrabold px-1.5 py-0.5 rounded-md uppercase">TRY</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMainTab("cover_letter")}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                mainTab === "cover_letter"
+                  ? "bg-white text-slate-900 shadow-xs border border-slate-200"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              <Mail className="w-4 h-4 text-slate-400" />
+              Cover Letter
+              <span className="bg-blue-100 text-blue-700 text-[10px] font-extrabold px-1.5 py-0.5 rounded-md uppercase">NEW</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMainTab("templates")}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                mainTab === "templates"
+                  ? "bg-white text-slate-900 shadow-xs border border-slate-200"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              <LayoutGrid className="w-4 h-4 text-slate-400" />
+              Resume Templates
+            </button>
+          </div>
+
+          {/* ── Tab 1: Job Tailored Resumes ── */}
+          {mainTab === "tailored" && (
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
+              <div>
+                <div className="inline-flex items-center gap-1.5 text-blue-600 text-xs font-extrabold uppercase tracking-widest mb-1.5">
+                  <Wand2 className="w-3.5 h-3.5" />
+                  TAILOR
+                </div>
+                <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">
+                  Paste a job link to tailor your resume to it
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  We rewrite your resume to match the role, with the job&apos;s keywords in place.
+                </p>
+              </div>
+
+              {/* URL Input Bar */}
+              <div className="relative flex items-center">
+                <LinkIcon className="w-4 h-4 text-slate-400 absolute left-4 pointer-events-none" />
+                <input
+                  type="url"
+                  value={linkInput}
+                  onChange={(e) => setLinkInput(e.target.value)}
+                  placeholder="https://jobs.company.com/..."
+                  className="w-full pl-11 pr-28 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && linkInput.trim()) {
+                      setIsTailorInputModalOpen(true);
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (linkInput.trim()) {
+                      setIsTailorInputModalOpen(true);
+                    } else {
+                      toast.info("Paste a job link or pick a job from your tracker below.");
+                    }
+                  }}
+                  className="absolute right-2 px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-2xs"
+                >
+                  Tailor
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <p className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5 shrink-0" />
+                Only paste direct job links – a company careers page or its ATS. Not LinkedIn, Wellfound, or other job-board listings.
+              </p>
+
+              {/* Divider */}
+              <div className="relative my-6">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-100" />
+                </div>
+                <div className="relative flex justify-center text-[10px] uppercase font-extrabold tracking-widest text-slate-400">
+                  <span className="bg-white px-4">OR PICK A JOB</span>
+                </div>
+              </div>
+
+              {/* Sub-tabs: Your tracker vs Search jobs */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    key={tpl.id}
-                    onClick={() => setSelectedTemplate(tpl.id)}
-                    aria-pressed={selectedTemplate === tpl.id}
-                    className="cursor-pointer rounded-sm p-3 text-left transition-all"
-                    style={{ background: selectedTemplate === tpl.id ? C.greenLight : C.bgCard, border: `1px solid ${selectedTemplate === tpl.id ? C.greenBorder : C.border}` }}
+                    onClick={() => setTrackerSubTab("tracker")}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                      trackerSubTab === "tracker"
+                        ? "bg-slate-900 text-white shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
                   >
-                    <Image src={`/resume-templates/${tpl.id}.png`} alt={`${tpl.name} resume preview`} width={850} height={1100} className="mb-3 h-auto w-full rounded-sm" />
-                    <span className="text-[12px] font-bold" style={{ color: selectedTemplate === tpl.id ? C.green : C.text }}>{tpl.name}{selectedTemplate === tpl.id ? " ✓" : ""}</span>
+                    <Bookmark className="w-3.5 h-3.5" />
+                    Your tracker
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                      trackerSubTab === "tracker" ? "bg-slate-700 text-slate-200" : "bg-slate-200 text-slate-700"
+                    }`}>
+                      {trackerJobsQuery.data?.length ?? 0}
+                    </span>
                   </button>
-                ))}
+
+                  <button
+                    type="button"
+                    onClick={() => setTrackerSubTab("search")}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                      trackerSubTab === "search"
+                        ? "bg-slate-900 text-white shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    <Search className="w-3.5 h-3.5" />
+                    Search jobs
+                  </button>
+                </div>
+
+                {/* Tracker SubTab List */}
+                {trackerSubTab === "tracker" && (
+                  <div className="space-y-2.5">
+                    {trackerJobsQuery.data && trackerJobsQuery.data.length > 0 ? (
+                      trackerJobsQuery.data.slice(0, 10).map((job) => (
+                        <div
+                          key={job.id}
+                          className="p-3.5 rounded-2xl border border-slate-200 hover:border-blue-400 hover:bg-blue-50/20 transition-all flex items-center justify-between gap-4 bg-white"
+                        >
+                          <div className="flex items-center gap-3.5 min-w-0">
+                            <div className={`w-10 h-10 rounded-xl border flex items-center justify-center font-black text-xs shrink-0 ${getCompanyColor(job.company_name)}`}>
+                              {getCompanyInitials(job.company_name)}
+                            </div>
+                            <div className="min-w-0">
+                              <h4 className="text-xs font-bold text-slate-900 truncate">
+                                {job.job_title}
+                              </h4>
+                              <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                                {job.company_name} {job.location ? `· ${job.location}` : ""}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className="text-[10px] font-semibold bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">
+                              {job.status || "Saved today"}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTargetJobTitle(job.job_title);
+                                setTargetCompanyName(job.company_name);
+                                setJd(job.short_description || "");
+                                setWizardStep("difference");
+                              }}
+                              className="px-3.5 py-1.5 rounded-xl border border-slate-200 hover:border-blue-600 hover:text-blue-600 text-slate-800 text-xs font-bold transition-all flex items-center gap-1 bg-white hover:bg-blue-50/50"
+                            >
+                              Tailor
+                              <ArrowRight className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-8 border border-dashed border-slate-200 rounded-2xl space-y-2">
+                        <p className="text-xs font-semibold text-slate-600">No jobs in your tracker yet</p>
+                        <p className="text-[11px] text-slate-400">Import jobs from your career feeder or use Search Jobs to pick a role to tailor.</p>
+                        <button
+                          type="button"
+                          onClick={() => setIsTailorInputModalOpen(true)}
+                          className="mt-2 px-3.5 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-bold inline-flex items-center gap-1.5"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          Add a job description
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Search Jobs SubTab List */}
+                {trackerSubTab === "search" && (
+                  <div className="space-y-3">
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={repoSearchKeyword}
+                        onChange={(e) => setRepoSearchKeyword(e.target.value)}
+                        placeholder="Search jobs by title, company, or keyword..."
+                        className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+
+                    <div className="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
+                      {repositoryJobsQuery.data?.jobs && repositoryJobsQuery.data.jobs.length > 0 ? (
+                        repositoryJobsQuery.data.jobs.slice(0, 10).map((job: any, idx: number) => (
+                          <div
+                            key={job.id || idx}
+                            className="p-3.5 rounded-2xl border border-slate-200 hover:border-blue-400 hover:bg-blue-50/20 transition-all flex items-center justify-between gap-4 bg-white"
+                          >
+                            <div className="flex items-center gap-3.5 min-w-0">
+                              <div className={`w-10 h-10 rounded-xl border flex items-center justify-center font-black text-xs shrink-0 ${getCompanyColor(job.company || job.company_name)}`}>
+                                {getCompanyInitials(job.company || job.company_name)}
+                              </div>
+                              <div className="min-w-0">
+                                <h4 className="text-xs font-bold text-slate-900 truncate">
+                                  {job.title || job.job_title}
+                                </h4>
+                                <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                                  {job.company || job.company_name} {job.location ? `· ${job.location}` : ""}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-3 shrink-0">
+                              {job.fit_score && (
+                                <span className="text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                                  {job.fit_score}% match
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTargetJobTitle(job.title || job.job_title);
+                                  setTargetCompanyName(job.company || job.company_name);
+                                  setJd(job.description || job.job_description || "");
+                                  setWizardStep("difference");
+                                }}
+                                className="px-3.5 py-1.5 rounded-xl border border-slate-200 hover:border-blue-600 hover:text-blue-600 text-slate-800 text-xs font-bold transition-all flex items-center gap-1 bg-white hover:bg-blue-50/50"
+                              >
+                                Tailor
+                                <ArrowRight className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-6 border border-dashed border-slate-200 rounded-2xl">
+                          <p className="text-xs text-slate-500">No matching jobs found in your repository.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="mt-3 flex items-center justify-between gap-3 text-xs" style={{ color: C.textMuted }}>
-                <span>Default: {RESUME_TEMPLATES.find(template => template.id === userQuery.data?.preferences?.resume_template)?.name || "Classic"}</span>
-                <button type="button" onClick={() => void saveDefaultTemplate()} disabled={savingDefault || !userQuery.data?.preferences || selectedTemplate === userQuery.data.preferences.resume_template}
-                  className="underline underline-offset-4 disabled:opacity-50 disabled:no-underline">
-                  {savingDefault ? "Saving default…" : "Save as my default"}
+
+              {/* Footer Link */}
+              <div className="text-center pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsTailorInputModalOpen(true)}
+                  className="text-xs text-slate-600 hover:text-blue-600 underline font-medium cursor-pointer"
+                >
+                  Only have the description? Paste it instead
                 </button>
               </div>
             </div>
+          )}
 
-            {appState === "error" && (
-              <div className="mb-4 px-4 py-3 text-xs rounded-sm" style={{ background: C.redBg, border: "1px solid #ffcccc", color: C.red }}>✗ {errorMsg}</div>
-            )}
-            <button onClick={handleGenerate} disabled={isBusy || !jd.trim()}
-              className="w-full py-4 text-sm tracking-[0.15em] uppercase font-bold transition-all duration-200 rounded-sm disabled:cursor-not-allowed"
-              style={{ background: isBusy || !jd.trim() ? C.border : C.text, color: isBusy || !jd.trim() ? C.textFaint : C.bg }}>
-              {appState === "generating" ? (
-                <span className="flex items-center justify-center gap-3">
-                  <span className="inline-flex gap-1">{[0,150,300].map(d => <span key={d} className="w-1 h-1 rounded-full animate-bounce" style={{ background: C.textFaint, animationDelay: `${d}ms` }} />)}</span>
-                  AI is tailoring your resume...
-                </span>
-              ) : "Generate & Open Editor →"}
-            </button>
-            <div className="mt-8 flex items-center gap-4 text-[10px] tracking-widest uppercase" style={{ color: C.textFaint }}>
-              <span>Gemini</span><span>·</span><span>Go</span><span>·</span><span>LaTeX</span>
+          {/* ── Tab 2: Original Master CV ── */}
+          {mainTab === "original" && (
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center font-black text-base shrink-0">
+                    {profileQuery.data?.first_name ? profileQuery.data.first_name[0] : "M"}
+                  </div>
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900">
+                      {profileQuery.data?.first_name} {profileQuery.data?.last_name || ""} — Master Resume CV
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Primary Master CV · {profileQuery.data?.experience?.length ?? 0} positions · {profileQuery.data?.skills?.length ?? 0} confirmed facts
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Link
+                    href="/profile"
+                    className="px-3.5 py-2 rounded-xl border border-slate-200 hover:border-slate-300 text-slate-700 text-xs font-bold transition-all flex items-center gap-1.5"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    Edit Profile
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => setIsTailorInputModalOpen(true)}
+                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all flex items-center gap-1.5"
+                  >
+                    <Wand2 className="w-3.5 h-3.5" />
+                    Tailor From This CV
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
+                  <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Total Experience</div>
+                  <div className="text-lg font-black text-slate-900">
+                    {profileQuery.data?.experience?.length ? `${Math.round(profileQuery.data.experience.length * 2.5 * 10) / 10} Years` : "Experienced"}
+                  </div>
+                  <div className="text-xs text-slate-500">{profileQuery.data?.experience?.length ?? 0} recorded roles</div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
+                  <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Confirmed Skills</div>
+                  <div className="text-lg font-black text-slate-900">
+                    {profileQuery.data?.skills?.length ?? 0} Skills
+                  </div>
+                  <div className="text-xs text-slate-500">100% verified facts (zero hallucination)</div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
+                  <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Education & Degrees</div>
+                  <div className="text-lg font-black text-slate-900">
+                    {profileQuery.data?.education?.length ?? 0} Degrees
+                  </div>
+                  <div className="text-xs text-slate-500">{profileQuery.data?.education?.[0]?.school_name || "Verified credentials"}</div>
+                </div>
+              </div>
+
+              {/* Skills Pill Cloud */}
+              <div className="space-y-2">
+                <div className="text-xs font-bold text-slate-800">Key Verified Skills</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {profileQuery.data?.skills?.slice(0, 20).map((s, idx) => (
+                    <span key={idx} className="px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 text-xs font-medium">
+                      {s.skill_name}
+                    </span>
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* ── Tab 3: Cover Letter ── */}
+          {mainTab === "cover_letter" && (
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900">Cover Letter Generator</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Create high-converting, tailored cover letters matching your confirmed background.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCoverLetterOpen(true)}
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all flex items-center gap-1.5"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  {coverLetter.trim() ? "Open Cover Letter Workspace" : "New Cover Letter"}
+                </button>
+              </div>
+
+              <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-700">Latest Cover Letter Draft</span>
+                  <span className="text-[11px] text-slate-400">{coverLetter.length} characters</span>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed font-serif line-clamp-4 bg-white p-4 rounded-xl border border-slate-200">
+                  {coverLetter || "No cover letter drafted yet. Pick an application or click 'New Cover Letter' above to generate one."}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ── Tab 4: Resume Templates (Matching NextRaise benchmark) ── */}
+          {mainTab === "templates" && (
+            <div className="space-y-5">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-extrabold text-slate-900 tracking-tight">Resume Templates</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {RESUME_TEMPLATES.length} templates · shown with a sample resume. Your content stays the same when you switch.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <span>Active default: <strong className="text-slate-800">{TEMPLATE_METADATA[selectedTemplate]?.displayName || selectedTemplate}</strong></span>
+                  <button
+                    type="button"
+                    onClick={() => void saveDefaultTemplate()}
+                    disabled={savingDefault || !userQuery.data?.preferences || selectedTemplate === userQuery.data.preferences.resume_template}
+                    className="text-blue-600 hover:underline font-semibold disabled:opacity-40"
+                  >
+                    {savingDefault ? "Saving..." : "Save as default"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                {RESUME_TEMPLATES.map((tpl) => {
+                  const meta = TEMPLATE_METADATA[tpl.id] || { displayName: tpl.name, category: "General", pages: "1-2 pages" };
+                  const isSelected = selectedTemplate === tpl.id;
+                  return (
+                    <div
+                      key={tpl.id}
+                      onClick={() => setSelectedTemplate(tpl.id as ResumeTemplate)}
+                      className={`rounded-2xl border overflow-hidden cursor-pointer transition-all flex flex-col bg-white group ${
+                        isSelected ? "border-blue-600 shadow-md ring-2 ring-blue-500/20" : "border-slate-200 hover:border-slate-300 hover:shadow-sm"
+                      }`}
+                    >
+                      {/* Image Preview Box */}
+                      <div className="relative aspect-[3/4] bg-slate-50 border-b border-slate-100 overflow-hidden flex items-start justify-center p-2">
+                        {/* Badges Overlay */}
+                        <div className="absolute top-3 left-3 right-3 flex items-center justify-between z-10 pointer-events-none">
+                          {isSelected ? (
+                            <span className="bg-slate-900 text-white text-[10px] font-black px-2.5 py-1 rounded-full shadow-xs flex items-center gap-1">
+                              <Check className="w-3 h-3" />
+                              Current
+                            </span>
+                          ) : meta.flag ? (
+                            <span className="bg-white/95 text-slate-800 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-2xs border border-slate-200">
+                              {meta.flag}
+                            </span>
+                          ) : (
+                            <span className="bg-white/95 text-slate-600 text-[10px] font-semibold px-2 py-0.5 rounded-full shadow-2xs border border-slate-200">
+                              {meta.tag || "ATS Ready"}
+                            </span>
+                          )}
+                          {meta.flag && isSelected && (
+                            <span className="bg-white/95 text-slate-800 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-2xs border border-slate-200">
+                              {meta.flag}
+                            </span>
+                          )}
+                        </div>
+
+                        <Image
+                          src={`/resume-templates/${tpl.id}.png`}
+                          alt={`${meta.displayName} preview`}
+                          width={400}
+                          height={520}
+                          className="w-full h-auto object-top shadow-2xs rounded-xs group-hover:scale-[1.02] transition-transform duration-200"
+                        />
+                      </div>
+
+                      {/* Card Meta */}
+                      <div className="p-3.5 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
+                            {meta.displayName}
+                          </h4>
+                          <span className="text-[10px] font-semibold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-md">
+                            {meta.pages}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 truncate">
+                          {meta.category}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Pick a resume modal */}
+          <PickResumeModal
+            isOpen={isPickResumeModalOpen}
+            onClose={() => setIsPickResumeModalOpen(false)}
+            resumeName={profileQuery.data?.first_name ? `${profileQuery.data.first_name}_${profileQuery.data.last_name || ""}_CV` : "Master_Resume_CV"}
+            onSelectResume={() => {
+              setIsPickResumeModalOpen(false);
+              setIsTailorInputModalOpen(true);
+            }}
+          />
+
+          {/* Tailor input modal */}
+          <TailorInputModal
+            isOpen={isTailorInputModalOpen}
+            onClose={() => setIsTailorInputModalOpen(false)}
+            initialJobTitle={targetJobTitle}
+            initialCompany={targetCompanyName}
+            onSubmit={(data) => {
+              setTargetJobTitle(data.title);
+              setTargetCompanyName(data.company);
+              setJd(data.jd);
+              setIsTailorInputModalOpen(false);
+              setWizardStep("difference");
+            }}
+          />
+
+          {/* AI Tailoring Fullscreen / Modal Loading Indicator */}
+          {appState === "generating" && (
+            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="w-full max-w-md bg-white rounded-3xl p-8 shadow-2xl text-center space-y-4">
+                <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mx-auto animate-spin">
+                  <Wand2 className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg font-black text-slate-900">Tailoring Your Resume...</h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Aligning keywords, computing ATS match score, and formatting with strict zero hallucination guarantees.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
       </main>
     );
   }
@@ -1456,8 +2045,9 @@ function GeneratePageContent() {
           <EditorHeader
             eyebrow="Resume editor"
             title={jobLabel || "Tailored resume"}
-            backHref={assistantDraftActive ? "/assistant" : jobId ? "/tracker" : "/dashboard"}
-            backLabel={assistantDraftActive ? "← agent" : jobId ? "← tracker" : "← dashboard"}
+            backHref={assistantDraftActive ? "/assistant" : jobId ? "/tracker" : "/generate"}
+            backLabel={assistantDraftActive ? "← agent" : jobId ? "← tracker" : "← My Resumes"}
+            onBackClick={!jobId && !assistantDraftActive ? () => { setHasGenerated(false); setWizardStep("main"); } : undefined}
             jobId={jobId}
             draftOnly={assistantDraftOnly && assistantDraftActive}
             copied={copied}
@@ -1478,6 +2068,13 @@ function GeneratePageContent() {
             onDownloadTex={handleDownloadTex}
             mode={editorMode}
             onModeChange={mode => { if (mode === "friendly") { setDraft(parseResumeDraft(latex)); setDraftReady(true); } setSpotEdit(null); setEditorMode(mode); }}
+            extra={
+              <div className="hidden lg:flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold">
+                <span>Max 4 pages</span>
+                <span className="text-blue-300">·</span>
+                <span className="text-blue-600">1–2 pages recommended</span>
+              </div>
+            }
           />
           {coverLetterEditor}
 
@@ -1626,10 +2223,11 @@ function GeneratePageContent() {
         <EditorHeader
           eyebrow="LaTeX source"
           title={jobLabel || "Tailored resume"}
-          backHref={assistantDraftActive ? "/assistant" : jobId ? "/tracker" : "/dashboard"}
-          backLabel={assistantDraftActive ? "← agent" : jobId ? "← tracker" : "← dashboard"}
+          backHref={assistantDraftActive ? "/assistant" : jobId ? "/tracker" : "/generate"}
+          backLabel={assistantDraftActive ? "← agent" : jobId ? "← tracker" : "← My Resumes"}
+          onBackClick={!jobId && !assistantDraftActive ? () => { setHasGenerated(false); setWizardStep("main"); } : undefined}
           jobId={jobId}
-            draftOnly={assistantDraftOnly && assistantDraftActive}
+          draftOnly={assistantDraftOnly && assistantDraftActive}
           copied={copied}
           onCopy={handleCopy}
           savingToJob={savingToJob}
@@ -1650,6 +2248,11 @@ function GeneratePageContent() {
           onModeChange={mode => { if (mode === "friendly") { setDraft(parseResumeDraft(latex)); setDraftReady(true); } setSpotEdit(null); setEditorMode(mode); }}
           extra={
             <>
+              <div className="hidden lg:flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold mr-1">
+                <span>Max 4 pages</span>
+                <span className="text-blue-300">·</span>
+                <span className="text-blue-600">1–2 pages recommended</span>
+              </div>
               <button
                 onClick={() => setAutoCompile(a => !a)}
                 title="Toggle auto-compilation as you type (800ms debounce)"

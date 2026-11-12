@@ -11,6 +11,7 @@ interface ResumeDifferenceProps {
   jobExperienceYears?: number;
   matchScore?: number;
   onProceedToAlign: () => void;
+  onBack?: () => void;
 }
 
 export function ResumeDifferenceView({
@@ -21,6 +22,7 @@ export function ResumeDifferenceView({
   jobExperienceYears = 5,
   matchScore = 6.5,
   onProceedToAlign,
+  onBack,
 }: ResumeDifferenceProps) {
   const scoreLabel = matchScore >= 8.5 ? "Strong" : matchScore >= 7.0 ? "Good" : matchScore >= 5.5 ? "Fair" : "Partial";
 
@@ -54,6 +56,17 @@ export function ResumeDifferenceView({
     <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-sm space-y-8 font-sans max-w-5xl mx-auto">
       {/* ── Top Header & Wizard Progress ── */}
       <div className="space-y-4">
+        {onBack && (
+          <div>
+            <button
+              type="button"
+              onClick={onBack}
+              className="text-xs font-bold text-slate-500 hover:text-slate-900 transition-colors flex items-center gap-1.5"
+            >
+              ← Back to My Resumes
+            </button>
+          </div>
+        )}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
           <div className="flex items-center gap-2">
             <span className="font-extrabold text-slate-900 text-sm sm:text-base">
