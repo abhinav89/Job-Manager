@@ -2,8 +2,8 @@ name: Automated Job Feeder Cron
 
 on:
   schedule:
-    # Runs once every 2 days at 00:00 UTC (5:30 AM IST)
-    - cron: '0 0 */2 * *'
+    # Runs twice a day at 00:00 UTC and 12:00 UTC (5:30 AM and 5:30 PM IST)
+    - cron: '0 0,12 * * *'
   workflow_dispatch:
     inputs:
       api_url:
