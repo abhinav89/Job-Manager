@@ -16,7 +16,8 @@ import { useDispatch, useSelector } from "react-redux";
 import InlineQueryError from "@/components/InlineQueryError";
 import ApplicationDocuments from "@/components/ApplicationDocuments";
 import { KanbanBoard } from "@/components/tracker/KanbanBoard";
-import { FileSpreadsheet, Download, LayoutGrid, List, Plus, Search } from "lucide-react";
+import { FileSpreadsheet, Download, LayoutGrid, List, Plus, Search, Lock, LogIn } from "lucide-react";
+import { useAuth } from "@/lib/authContext";
 
 const Document = dynamic(() => import("react-pdf").then(m => m.Document), { ssr: false });
 const Page = dynamic(() => import("react-pdf").then(m => m.Page), { ssr: false });
@@ -305,6 +306,7 @@ function CoverLetterModal({ job, onClose, onSave }: { job: Job; onClose: () => v
 export default function TrackerPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { isAuthenticated, setIsAuthModalOpen } = useAuth();
   const dispatch = useDispatch();
   const trackerUi = useSelector((state: RootState) => state.trackerUi);
   const workspaceQuery = useWorkspace();
@@ -639,6 +641,30 @@ export default function TrackerPage() {
     const matchSearch = !q || j.company_name.toLowerCase().includes(q) || j.job_title.toLowerCase().includes(q) || (j.location || "").toLowerCase().includes(q);
     return matchStatus && matchSearch && Boolean(j.is_archived) === showArchived;
   });
+
+  if (!isAuthenticated) {
+    return (
+      <div className="p-4 sm:p-8 max-w-4xl mx-auto space-y-6 text-center py-20 font-sans">
+        <div className="w-16 h-16 rounded-3xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto shadow-xs border border-blue-100">
+          <Lock className="w-8 h-8" />
+        </div>
+        <div className="space-y-2 max-w-md mx-auto">
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Private Application Tracker</h2>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Your applied roles, interview schedules, notes, and application documents are private to your authenticated account. Please sign in to access your tracker.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsAuthModalOpen(true)}
+          className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
+        >
+          <LogIn className="w-4 h-4" />
+          Sign In to Access Tracker
+        </button>
+      </div>
+    );
+  }
 
   return (
     <>

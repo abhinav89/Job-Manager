@@ -22,8 +22,11 @@ import {
   ShieldCheck,
   Wand2,
   Mail,
+  LogIn,
+  LogOut,
 } from "lucide-react";
 import { useWorkspace, useProfile, useTrackerJobs } from "@/lib/queries";
+import { useAuth } from "@/lib/authContext";
 import { setExpandedJob } from "@/lib/store";
 
 export default function Sidebar() {
@@ -33,13 +36,18 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  const { user, isAuthenticated, logout, setIsAuthModalOpen } = useAuth();
   const { data: workspace } = useWorkspace();
   const { data: profile } = useProfile();
   const { data: trackerJobs = [] } = useTrackerJobs(false);
 
-  const userName = profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}`.trim() : "Abhinav Agrawal";
-  const userEmail = profile?.email || workspace?.email || "abhinava2015@email.iimcal.ac.in";
-  const avatarLetter = userName ? userName[0].toUpperCase() : "A";
+  const userName = isAuthenticated
+    ? (user?.name || (profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}`.trim() : "User"))
+    : "Guest";
+  const userEmail = isAuthenticated
+    ? (user?.email || profile?.email || workspace?.email || "")
+    : "Sign in to access";
+  const avatarLetter = isAuthenticated && userName ? userName[0].toUpperCase() : "G";
 
   const closeMobile = () => setMobileOpen(false);
 
@@ -87,9 +95,24 @@ export default function Sidebar() {
           <span className="font-extrabold text-sm text-slate-900 tracking-tight">Job-Manager</span>
         </div>
 
-        <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-xs">
-          {avatarLetter}
-        </div>
+        {isAuthenticated ? (
+          <button
+            type="button"
+            onClick={() => logout()}
+            className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-xs"
+            title="Log Out"
+          >
+            {avatarLetter}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setIsAuthModalOpen(true)}
+            className="px-2.5 py-1 rounded-lg bg-blue-600 text-white font-bold text-xs"
+          >
+            Sign In
+          </button>
+        )}
       </div>
 
       {/* ── Mobile Backdrop ── */}
@@ -225,30 +248,57 @@ export default function Sidebar() {
         {/* User Account / Tier Footer */}
         <div className="p-3 border-t border-slate-100 shrink-0 space-y-2">
           {!collapsed ? (
-            <div className="p-2 rounded-xl bg-slate-50 flex items-center justify-between gap-2.5">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-full bg-slate-900 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-2xs">
-                  {avatarLetter}
+            isAuthenticated ? (
+              <div className="p-2 rounded-xl bg-slate-50 flex items-center justify-between gap-2.5">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-full bg-slate-900 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-2xs">
+                    {avatarLetter}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-slate-900 truncate">{userName}</div>
+                    <div className="text-[10px] text-slate-500 truncate">{userEmail}</div>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <div className="text-xs font-bold text-slate-900 truncate">{userName}</div>
-                  <div className="text-[10px] text-slate-500 truncate">{userEmail}</div>
-                </div>
-              </div>
 
-              <Link
-                href="/settings"
-                className="text-[10px] font-bold text-blue-600 hover:underline shrink-0"
-              >
-                Free
-              </Link>
-            </div>
-          ) : (
-            <div className="flex justify-center" title={`${userName} (${userEmail})`}>
-              <div className="w-8 h-8 rounded-full bg-slate-900 text-white font-bold flex items-center justify-center text-xs shadow-2xs">
-                {avatarLetter}
+                <button
+                  type="button"
+                  onClick={() => logout()}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                  title="Log Out"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
               </div>
-            </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsAuthModalOpen(true)}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition-all"
+              >
+                <LogIn className="w-4 h-4" />
+                Sign In
+              </button>
+            )
+          ) : (
+            isAuthenticated ? (
+              <button
+                type="button"
+                onClick={() => logout()}
+                className="w-full flex justify-center p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                title={`Logged in as ${userName}. Click to Log Out.`}
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsAuthModalOpen(true)}
+                className="w-full flex justify-center p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors"
+                title="Sign In"
+              >
+                <LogIn className="w-4 h-4" />
+              </button>
+            )
           )}
         </div>
       </aside>

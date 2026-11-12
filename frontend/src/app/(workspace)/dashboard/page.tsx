@@ -18,8 +18,11 @@ import {
   TrendingUp,
   AlertTriangle,
   BookmarkCheck,
+  Lock,
+  LogIn,
 } from "lucide-react";
 import { usePipelineSummary, useRepositoryJobs, useProfile } from "@/lib/queries";
+import { useAuth } from "@/lib/authContext";
 import { API_URL } from "@/lib/api";
 import { ResumeOnboardingModal } from "@/components/ResumeOnboardingModal";
 import { JobCard } from "@/components/tracker/JobCard";
@@ -27,12 +30,15 @@ import { toast } from "sonner";
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { user, isAuthenticated, setIsAuthModalOpen } = useAuth();
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const { data: profile } = useProfile();
   const { data: pipeline, isLoading: isPipelineLoading } = usePipelineSummary();
   const { data: repoData, isLoading: isJobsLoading } = useRepositoryJobs();
 
-  const userName = profile?.first_name || "Abhinav";
+  const userName = isAuthenticated
+    ? (user?.name || (profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}`.trim() : "User"))
+    : "Guest";
   const recommendedJobs = repoData?.jobs?.slice(0, 3) || [];
 
   const handleExport = (format: "csv" | "xlsx") => {
@@ -56,23 +62,36 @@ export default function DashboardPage() {
             Executive Career Pipeline
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-            Welcome back, {userName}
+            {isAuthenticated ? `Welcome back, ${userName}` : "Welcome to Job-Manager"}
           </h1>
           <p className="text-xs sm:text-sm text-slate-500">
-            Track openings across 100+ company career pages, align resumes truthfully, and drive applications.
+            {isAuthenticated
+              ? "Track openings across 100+ company career pages, align resumes truthfully, and drive applications."
+              : "Explore curated job openings, or sign in to track your personal applications and tailor resumes."}
           </p>
         </div>
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            type="button"
-            onClick={() => setIsOnboardingOpen(true)}
-            className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs transition-all inline-flex items-center gap-2"
-          >
-            <FileText className="w-4 h-4 text-slate-500" />
-            Update CV
-          </button>
+          {!isAuthenticated ? (
+            <button
+              type="button"
+              onClick={() => setIsAuthModalOpen(true)}
+              className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition-all inline-flex items-center gap-2 cursor-pointer"
+            >
+              <LogIn className="w-4 h-4" />
+              Sign In to Your Workspace
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsOnboardingOpen(true)}
+              className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs transition-all inline-flex items-center gap-2"
+            >
+              <FileText className="w-4 h-4 text-slate-500" />
+              Update CV
+            </button>
+          )}
 
           <button
             type="button"

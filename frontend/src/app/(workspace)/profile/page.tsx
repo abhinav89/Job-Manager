@@ -23,8 +23,11 @@ import {
   TrendingUp,
   Tag,
   Calendar,
+  Lock,
+  LogIn,
 } from "lucide-react";
 import { API_URL } from "@/lib/api";
+import { useAuth } from "@/lib/authContext";
 import { useProfile, usePresets, useThemes, queryKeys, type Profile, type CareerTheme } from "@/lib/queries";
 import { ResumeOnboardingModal } from "@/components/ResumeOnboardingModal";
 
@@ -77,6 +80,7 @@ const THEME_SKILL_SUGGESTIONS: Record<string, string[]> = {
 
 export default function ProfilePage() {
   const queryClient = useQueryClient();
+  const { isAuthenticated, setIsAuthModalOpen } = useAuth();
   const { data: initialProfile, isLoading } = useProfile();
   const { data: presets = [] } = usePresets();
   const { data: themesData } = useThemes();
@@ -196,6 +200,30 @@ export default function ProfilePage() {
     updated[index].is_confirmed = !updated[index].is_confirmed;
     setFormData({ ...formData, skills: updated });
   };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="p-4 sm:p-8 max-w-4xl mx-auto space-y-6 text-center py-20 font-sans">
+        <div className="w-16 h-16 rounded-3xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto shadow-xs border border-blue-100">
+          <Lock className="w-8 h-8" />
+        </div>
+        <div className="space-y-2 max-w-md mx-auto">
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Private Career Profile</h2>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Your verified career facts, work experience, education, and skills are private to your authenticated account. Please sign in to view or manage your profile.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsAuthModalOpen(true)}
+          className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
+        >
+          <LogIn className="w-4 h-4" />
+          Sign In to Access Profile
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 sm:p-8 max-w-5xl mx-auto space-y-6 font-sans">

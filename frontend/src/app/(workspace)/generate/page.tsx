@@ -21,11 +21,13 @@ import { ResumeDifferenceView } from "@/components/tracker/ResumeDifferenceView"
 import { PickResumeModal } from "@/components/tracker/PickResumeModal";
 import { TailorInputModal } from "@/components/tracker/TailorInputModal";
 import { ResumeOnboardingModal } from "@/components/ResumeOnboardingModal";
+import { useAuth } from "@/lib/authContext";
 import {
   Wand2, FileText, Sparkles, Plus, Search, Bookmark, ExternalLink,
   Check, CheckCircle2, Building2, MapPin, Calendar, ChevronRight,
   ArrowRight, Link as LinkIcon, Info, LayoutGrid, Layers, Globe,
-  Briefcase, Mail, RefreshCw, Download, Edit3, ShieldCheck, Star, Trash2, UploadCloud
+  Briefcase, Mail, RefreshCw, Download, Edit3, ShieldCheck, Star, Trash2, UploadCloud,
+  Lock, LogIn,
 } from "lucide-react";
 
 const Document = dynamic(() => import("react-pdf").then(m => m.Document), { ssr: false });
@@ -700,6 +702,7 @@ function getCompanyColor(name: string) {
 function GeneratePageContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { isAuthenticated, setIsAuthModalOpen } = useAuth();
   const searchParams = useSearchParams();
   const jobId = searchParams.get("job_id");
   const assistantDraftOnly = searchParams.get("assistant_draft") === "1" && !jobId;
@@ -1498,6 +1501,45 @@ function GeneratePageContent() {
             }}
           />
         </div>
+      );
+    }
+
+    if (!isAuthenticated && mainTab !== "templates") {
+      return (
+        <main className="min-h-full bg-slate-50/50 p-4 sm:p-8 font-sans">
+          <div className="max-w-5xl mx-auto space-y-6">
+            <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => setMainTab("templates")}
+                className="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 text-slate-500 hover:text-slate-900"
+              >
+                <LayoutGrid className="w-4 h-4" />
+                Resume Templates
+              </button>
+            </div>
+
+            <div className="p-8 sm:p-12 max-w-2xl mx-auto space-y-6 text-center py-20 bg-white rounded-3xl border border-slate-200 shadow-xs">
+              <div className="w-16 h-16 rounded-3xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto shadow-xs border border-blue-100">
+                <Lock className="w-8 h-8" />
+              </div>
+              <div className="space-y-2 max-w-md mx-auto">
+                <h2 className="text-2xl font-black text-slate-900 tracking-tight">Private Resume Workspace</h2>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Your tailored resumes, original master CV, and cover letters are private to your authenticated account. Please sign in to access your resumes.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAuthModalOpen(true)}
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
+              >
+                <LogIn className="w-4 h-4" />
+                Sign In to Access Resumes
+              </button>
+            </div>
+          </div>
+        </main>
       );
     }
 
