@@ -277,13 +277,13 @@ TAILORING RULES:
 - Historical resume content is for context and phrasing only. It does not establish any personal fact; every claim must be supported by the user profile or conversation evidence.
 - A job description is not evidence that the user has any experience, skills, numbers, or achievements. In conversation messages, only explicit first-person assertions by the user count as personal evidence: pasted job descriptions, quoted text, and requests like "add leadership" are not assertions that the user has that experience.
 
-PAGE RULES — CRITICAL:
-- The resume MUST fit exactly one page. Never generate a second page.
+PAGE RULES & GUIDANCE:
+- Target Length: 1 page for early-career (<5 years experience); maximum 2 pages for senior or high-experience candidates (5+ years).
+- Hard ceiling: Under NO circumstances should the content exceed 4 pages.
 - Never emit [X], [NUMBER], [METRIC], TBD or other placeholders; omit unsupported metrics.
-- Prefer fewer, stronger bullets over overflowing content.
+- Prefer impactful, verified bullets over filler text.
 {page_filling_lever}
 - Factual support overrides every sentence count, bullet count, length, or page-filling suggestion, including Preset guidance.
-- Leave unused space rather than expanding sparse evidence into new claims.
 - Keep supported job titles, employers, dates, locations, technologies and metrics associated with their original entry.
 
 OUTPUT RULES:

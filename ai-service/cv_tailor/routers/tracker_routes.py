@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from cv_tailor.routers.database_routes import PROFILE_LOAD_OPTIONS
 from cv_tailor.services.snapshots import resume_snapshot, profile_snapshot
 from cv_tailor.services.external_work import run_blocking
-from cv_tailor.routers.generate_routes import require_one_page
+from cv_tailor.routers.generate_routes import validate_page_limit
 from typing import List
 from datetime import date, datetime
 from cv_tailor.database import get_db
@@ -159,7 +159,7 @@ async def generate_pdf_for_job(job_id: int, request: Request, db: Session = Depe
     except PDFCompilationError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
-    require_one_page(pdf_bytes)
+    validate_page_limit(pdf_bytes)
     db.rollback()
     db.connection().exec_driver_sql("BEGIN IMMEDIATE")
     job = get_job_for_user(db, job_id, workspace_id)

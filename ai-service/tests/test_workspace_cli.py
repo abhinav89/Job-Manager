@@ -112,9 +112,9 @@ def test_resume_build_edit_and_overflow(local_workspace, profile_payload, monkey
     before, after = draft["content"], revised["content"]
     assert before.replace("I use Python.", "Python developer.") == after
     assert len(w.export_draft(revised["id"], "pdf")) > 100
-    monkeypatch.setattr(pdf_service, "compile_latex_to_pdf", lambda text: pdf(2))
+    monkeypatch.setattr(pdf_service, "compile_latex_to_pdf", lambda text: pdf(5))
     overflow = w.import_draft("resume", content, app["id"])
-    with pytest.raises(w.WorkspaceError, match="one page"):
+    with pytest.raises(w.WorkspaceError, match="maximum allowed length of 4 pages"):
         w.apply_draft(overflow["id"], 1)
     assert not w.application_get(app["id"])["has_pdf"]
 

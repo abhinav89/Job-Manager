@@ -25,13 +25,19 @@ router = APIRouter(
 )
 
 
-def require_one_page(pdf_bytes: bytes) -> None:
+MAX_RESUME_PAGES = 4
+
+def validate_page_limit(pdf_bytes: bytes, max_pages: int = MAX_RESUME_PAGES) -> int:
     pages = pdf_page_count(pdf_bytes)
-    if pages != 1:
+    if pages > max_pages:
         raise HTTPException(
             status_code=422,
-            detail=f"Generated resume must be exactly one page; the current output is {pages} pages.",
+            detail=f"Generated resume exceeds the maximum limit of {max_pages} pages (currently {pages} pages). Please shorten sections to stay within {max_pages} pages.",
         )
+    return pages
+
+# Backwards compatible alias
+require_one_page = validate_page_limit
 
 
 def get_profile_or_404(db: Session, workspace_id: int) -> db_models.Profile:
@@ -90,7 +96,7 @@ async def generate_pdf(data: GenerateRequest, request: Request, db: Session = De
         pdf_bytes = await run_blocking(compile_latex_to_pdf, latex_code)
     except PDFCompilationError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-    require_one_page(pdf_bytes)
+    validate_page_limit(pdf_bytes)
 
     return Response(
         content=pdf_bytes,
@@ -106,7 +112,7 @@ async def compile_latex(data: CompileLatexRequest, request: Request):
         pdf_bytes = await run_blocking(compile_latex_to_pdf, data.latex)
     except PDFCompilationError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-    require_one_page(pdf_bytes)
+    validate_page_limit(pdf_bytes)
 
     return Response(content=pdf_bytes, media_type="application/pdf")
 
@@ -169,6 +175,9 @@ async def compile_latex_with_check(data: CompileLatexRequest, request: Request):
         "pdf_b64": base64.b64encode(pdf_bytes).decode("utf-8"),
         "ats": ats_result,
         "num_pages": pages,
+        "max_pages": MAX_RESUME_PAGES,
+        "recommended_pages": 1 if pages <= 1 else 2,
+        "is_recommended": pages in (1, 2),
         "auto_fitted": auto_fitted,
         "latex": latex_code if auto_fitted else None
     }

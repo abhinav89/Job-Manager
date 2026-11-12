@@ -12,7 +12,7 @@ from pathlib import Path
 from uuid import uuid4
 from pydantic import ValidationError
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from cv_tailor.database import SessionLocal
 from cv_tailor.models import database_models as m
 from cv_tailor.models.schemas import UserProfile, JobApplicationCreate, JobApplicationUpdate, PreferencesUpdate
@@ -144,6 +144,34 @@ def profile_save(payload, revision=None):
         db.flush()
         return serialize_profile(row)
     return mutation("profile.save", payload, save)
+
+
+def profile_reset():
+    with SessionLocal() as db:
+        profile = db.scalar(select(m.Profile).where(m.Profile.workspace_id == 1))
+        if profile:
+            db.execute(delete(m.Education).where(m.Education.profile_id == profile.id))
+            db.execute(delete(m.Experience).where(m.Experience.profile_id == profile.id))
+            db.execute(delete(m.Project).where(m.Project.profile_id == profile.id))
+            db.execute(delete(m.Skill).where(m.Skill.profile_id == profile.id))
+            db.execute(delete(m.Certification).where(m.Certification.profile_id == profile.id))
+            profile.first_name = ""
+            profile.last_name = ""
+            profile.mobile_no = ""
+            profile.email = ""
+            profile.linkedin = ""
+            profile.github = ""
+            profile.portfolio = ""
+            profile.preset_slug = "blank"
+            profile.target_roles = []
+            profile.target_locations = []
+            profile.target_work_modes = []
+            profile.target_salary = ""
+            profile.revision += 1
+            db.commit()
+            fresh = db.scalar(select(m.Profile).options(*PROFILE_LOAD_OPTIONS).where(m.Profile.workspace_id == 1))
+            return serialize_profile(fresh)
+        return {"status": "success", "message": "Clean state ready"}
 
 
 def application_dict(row, details=True):
@@ -378,8 +406,9 @@ def apply_draft(identifier, revision):
         if kind == "resume":
             from cv_tailor.services.pdf_service import compile_latex_to_pdf, pdf_page_count
             pdf = pdf or compile_latex_to_pdf(text)
-            if pdf_page_count(pdf) != 1:
-                raise WorkspaceError("Resume must fit exactly one page before it can be applied", "page_overflow")
+            page_total = pdf_page_count(pdf)
+            if page_total > 4:
+                raise WorkspaceError(f"Resume exceeds maximum allowed length of 4 pages (currently {page_total} pages)", "page_overflow")
     def apply(db):
         row = require(db.get(m.JobApplication, app_id), "Application")
         check_revision(row, revision)
@@ -408,8 +437,9 @@ def save_latex(identifier, latex, revision):
     if not latex.strip():
         raise WorkspaceError("Resume source cannot be empty")
     pdf = compile_latex_to_pdf(latex)
-    if pdf_page_count(pdf) != 1:
-        raise WorkspaceError("Resume must fit exactly one page before saving", "page_overflow")
+    page_total = pdf_page_count(pdf)
+    if page_total > 4:
+        raise WorkspaceError(f"Resume exceeds maximum allowed length of 4 pages (currently {page_total} pages)", "page_overflow")
     def save(db):
         job = require(db.get(m.JobApplication, identifier), "Application")
         check_revision(job, revision)
@@ -418,7 +448,7 @@ def save_latex(identifier, latex, revision):
             db.add(m.AssistantDraft(conversation_id=conversation.id, type="resume", content=job.latex_source,
                 pdf_data=job.pdf_data, details={"source": "previous_current_document"}))
         db.add(m.AssistantDraft(conversation_id=conversation.id, type="resume", content=latex, pdf_data=pdf,
-            details={"source": "manual_edit", "pages": 1, "one_page": True}))
+            details={"source": "manual_edit", "pages": page_total, "one_page": page_total == 1, "max_pages": 4, "recommended_pages": 1 if page_total == 1 else 2}))
         job.latex_source, job.pdf_data = latex, pdf
         job.pdf_generated_at = datetime.now(timezone.utc)
         job.revision += 1
@@ -446,8 +476,9 @@ def export_draft(identifier, format="text"):
             raise WorkspaceError("PDF export supports resumes and cheat sheets")
         from cv_tailor.services.pdf_service import compile_latex_to_pdf, pdf_page_count
         pdf = pdf or compile_latex_to_pdf(text)
-        if pdf_page_count(pdf) != 1:
-            raise WorkspaceError("Resume must fit one page before PDF export", "page_overflow")
+        page_total = pdf_page_count(pdf)
+        if page_total > 4:
+            raise WorkspaceError(f"Resume exceeds maximum allowed length of 4 pages (currently {page_total} pages)", "page_overflow")
         return pdf
     if format == "docx" and kind == "resume":
         from cv_tailor.services.docx_service import convert_latex_to_docx

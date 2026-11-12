@@ -40,8 +40,8 @@ async def busy_error(request, exc):
 async def limited(request, exc):
     return JSONResponse(status_code=429, content={"detail": "Too many requests. Try again shortly."})
 
-from cv_tailor.routers import database_routes, generate_routes, tracker_routes, interview_routes, code_routes, presets_routes, scraper_routes, assistant_routes, workspace_routes
-for router in (workspace_routes, database_routes, generate_routes, tracker_routes, interview_routes, code_routes, presets_routes, scraper_routes, assistant_routes):
+from cv_tailor.routers import database_routes, generate_routes, tracker_routes, interview_routes, code_routes, presets_routes, scraper_routes, assistant_routes, workspace_routes, feeder_routes
+for router in (workspace_routes, database_routes, generate_routes, tracker_routes, interview_routes, code_routes, presets_routes, scraper_routes, assistant_routes, feeder_routes):
     api.include_router(router.router)
 
 @api.get("/health")

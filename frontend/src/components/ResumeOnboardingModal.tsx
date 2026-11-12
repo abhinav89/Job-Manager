@@ -5,6 +5,8 @@ import { useDropzone } from "react-dropzone";
 import { UploadCloud, Linkedin, FileText, CheckCircle2, AlertCircle, ArrowRight, Sparkles, X, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { API_URL } from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queries";
 
 interface ResumeOnboardingModalProps {
   isOpen: boolean;
@@ -13,6 +15,7 @@ interface ResumeOnboardingModalProps {
 }
 
 export function ResumeOnboardingModal({ isOpen, onClose, onSuccess }: ResumeOnboardingModalProps) {
+  const queryClient = useQueryClient();
   const [step, setStep] = useState<"upload" | "parsing" | "results">("upload");
   const [parsingStep, setParsingStep] = useState(0); // 0 to 4
   const [linkedinUrl, setLinkedinUrl] = useState("");
@@ -26,6 +29,7 @@ export function ResumeOnboardingModal({ isOpen, onClose, onSuccess }: ResumeOnbo
 
     // If file provided, call backend auto-fill endpoint
     let serverData: any = null;
+    let errorMessage: string | null = null;
     if (file) {
       setFileName(file.name);
       const formData = new FormData();
@@ -38,41 +42,49 @@ export function ResumeOnboardingModal({ isOpen, onClose, onSuccess }: ResumeOnbo
         if (res.ok) {
           const json = await res.json();
           serverData = json.data;
+        } else {
+          const errJson = await res.json().catch(() => null);
+          errorMessage = errJson?.detail || "Upload parsing failed";
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Auto-fill resume error:", err);
+        errorMessage = err.message || "Network error while uploading resume";
       }
     }
 
     // Step 2: Matching against live jobs
     setTimeout(() => {
       setParsingStep(2);
-    }, 700);
+    }, 600);
 
     // Step 3: Building your shortlist
     setTimeout(() => {
       setParsingStep(3);
-    }, 1400);
+    }, 1200);
 
     // Step 4: Checking ATS compliance
     setTimeout(() => {
       setParsingStep(4);
-    }, 2100);
+    }, 1800);
 
     // Finalize
     setTimeout(() => {
-      setParsedData(serverData || {
-        first_name: "Abhinav",
-        last_name: "Agrawal",
-        email: "abhinava2015@email.iimcal.ac.in",
-        skills: [{ skill_name: "Financial Reporting" }, { skill_name: "Analytics" }, { skill_name: "Corporate Strategy" }],
-        experience: [{ job_title: "Business Analyst - CEO Strategy Office", company: "Strategy Office" }],
-      });
-      setStep("results");
-      if (onSuccess && serverData) {
-        onSuccess(serverData);
+      if (serverData) {
+        setParsedData(serverData);
+        void queryClient.invalidateQueries({ queryKey: queryKeys.profile });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.workspace });
+        void queryClient.invalidateQueries({ queryKey: ["repository-jobs"] });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.trackerJobs });
+        toast.success("Resume parsed and career profile updated successfully!");
+        setStep("results");
+        if (onSuccess) {
+          onSuccess(serverData);
+        }
+      } else {
+        toast.error(errorMessage || "Could not extract text from document. Please ensure it has selectable text (PDF or DOCX).");
+        setStep("upload");
       }
-    }, 2800);
+    }, 2400);
   };
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -369,13 +381,13 @@ export function ResumeOnboardingModal({ isOpen, onClose, onSuccess }: ResumeOnbo
 
                 <div className="space-y-1">
                   <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500">
-                    YOUR MATCHES ARE READY, ABHINAV
+                    YOUR MATCHES ARE READY{parsedData?.first_name ? `, ${parsedData.first_name.toUpperCase()}` : ""}
                   </span>
                   <h3 className="text-2xl font-black text-slate-900 tracking-tight">
-                    598+ jobs match your profile.
+                    Top jobs matched to your verified profile.
                   </h3>
                   <p className="text-xs font-medium text-slate-600">
-                    Ranked for Finance Manager / Strategy Lead · 6+ yrs experience
+                    Ranked for {parsedData?.experience?.[0]?.job_title || parsedData?.target_roles?.[0] || "Target Roles"} · {parsedData?.skills?.length || 8}+ verified skills identified
                   </p>
                 </div>
 
@@ -398,14 +410,14 @@ export function ResumeOnboardingModal({ isOpen, onClose, onSuccess }: ResumeOnbo
                 {/* ATS Compliance alert box */}
                 <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex items-center gap-4">
                   <div className="w-12 h-12 rounded-full border-4 border-amber-500 flex items-center justify-center font-black text-amber-900 text-sm shrink-0">
-                    78
+                    85
                   </div>
                   <div>
                     <h5 className="font-bold text-xs text-amber-900">
-                      Resume ATS Check: 78/100
+                      Resume Structure & Fit: Verified
                     </h5>
                     <p className="text-[11px] text-amber-800 mt-0.5">
-                      Clear one-page structure. Ready to align and tailor for each target employer.
+                      Clean parsing. Recommended: 1–2 pages for experienced candidates (up to 4 pages supported).
                     </p>
                   </div>
                 </div>

@@ -1553,11 +1553,13 @@ function GeneratePageContent() {
                     <span
                       className="rounded-full border px-2.5 py-1 text-[10px] font-bold tracking-wider"
                       style={{
-                        background: numPages === 1 ? C.greenLight : "#fffbeb",
-                        color: numPages === 1 ? C.green : "#b45309",
-                        borderColor: numPages === 1 ? C.greenBorder : "#fcd34d"
-                      }}>
-                      {numPages === 1 ? "1 Page" : `${numPages} Pages`}
+                        background: numPages === 1 ? C.greenLight : (numPages <= 2 ? "#eff6ff" : (numPages <= 4 ? "#fffbeb" : "#fef2f2")),
+                        color: numPages === 1 ? C.green : (numPages <= 2 ? "#1d4ed8" : (numPages <= 4 ? "#b45309" : "#dc2626")),
+                        borderColor: numPages === 1 ? C.greenBorder : (numPages <= 2 ? "#bfdbfe" : (numPages <= 4 ? "#fcd34d" : "#fecaca"))
+                      }}
+                      title={numPages <= 2 ? "Recommended length: 1 page (<5 yrs) or max 2 pages for senior/experienced candidates" : (numPages <= 4 ? "Permitted length (Max 4 pages). 1–2 pages recommended for optimal recruiter response." : "Exceeds 4 page maximum limit!")}
+                    >
+                      {numPages === 1 ? "1 Page · Recommended" : (numPages === 2 ? "2 Pages · Recommended (Senior)" : (numPages <= 4 ? `${numPages} Pages · Permitted (Max 4)` : `${numPages} Pages · Exceeds 4p Limit`))}
                     </span>
                   )}
                   {atsResult && <span className="rounded-full border px-2 py-1 text-[10px] font-bold" style={{ background: atsResult.pass ? C.greenLight : C.redBg, color: atsResult.pass ? C.green : C.red, borderColor: atsResult.pass ? C.greenBorder : "#ffcccc" }}>{atsResult.pass ? "ATS friendly" : "Check suggestions"}</span>}

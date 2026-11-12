@@ -19,6 +19,7 @@ import {
   MapPin,
   DollarSign,
   Building,
+  RotateCcw,
 } from "lucide-react";
 import { API_URL } from "@/lib/api";
 import { useProfile, usePresets, queryKeys, type Profile } from "@/lib/queries";
@@ -139,14 +140,54 @@ export default function ProfilePage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={async () => {
+              if (!confirm("Are you sure you want to reset to a completely clean, fresh profile? This will clear all entered facts so you can start fresh.")) return;
+              try {
+                const res = await fetch(`${API_URL}/profile/reset`, { method: "POST" });
+                if (res.ok) {
+                  setFormData({
+                    first_name: "",
+                    last_name: "",
+                    mobile_no: "",
+                    email: "",
+                    linkedin: "",
+                    github: "",
+                    portfolio: "",
+                    education: [],
+                    experience: [],
+                    projects: [],
+                    skills: [],
+                    certifications: [],
+                    target_roles: [],
+                    target_locations: [],
+                    target_work_modes: ["Hybrid"],
+                    target_salary: "",
+                  });
+                  void queryClient.invalidateQueries({ queryKey: queryKeys.profile });
+                  void queryClient.invalidateQueries({ queryKey: queryKeys.workspace });
+                  toast.success("Reset to clean state. Ready for your fresh CV!");
+                }
+              } catch (err) {
+                toast.error("Failed to reset profile.");
+              }
+            }}
+            className="px-3.5 py-2.5 rounded-xl border border-red-200 hover:bg-red-50 text-red-600 font-semibold text-xs transition-all inline-flex items-center gap-1.5"
+            title="Wipe previous data and start fresh"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Reset Clean
+          </button>
+
           <button
             type="button"
             onClick={() => setIsOnboardingOpen(true)}
             className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs transition-all inline-flex items-center gap-2"
           >
             <UploadCloud className="w-4 h-4 text-blue-600" />
-            Import from CV
+            Upload CV (PDF/DOCX)
           </button>
 
           <button

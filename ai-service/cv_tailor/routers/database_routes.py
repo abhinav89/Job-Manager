@@ -35,28 +35,62 @@ def load_current_profile():
 def save_profile(data: UserProfile):
     return w.profile_save(data.model_dump(), data.revision)
 
+@router.post("/reset")
+def reset_profile():
+    """Resets user profile to a clean, fresh state."""
+    return w.profile_reset()
+
 @router.post("/auto-fill-resume")
 async def auto_fill_resume(file: UploadFile = File(...)):
     from cv_tailor.config import ai_enabled
     from cv_tailor.services.llm_service import extract_profile_from_resume
     from cv_tailor.services.heuristic_parser import parse_resume_text_heuristic
     from cv_tailor.services.external_work import run_blocking
-    from pypdf import PdfReader
     import io
 
+    filename = (file.filename or "resume.pdf").lower()
     content = await file.read()
-    reader = PdfReader(io.BytesIO(content))
-    text = "\n".join(page.extract_text() or "" for page in reader.pages)
-    if not text.strip():
-        raise w.WorkspaceError("No selectable text in this PDF. Please ensure the PDF has selectable text.")
+    text = ""
 
+    if filename.endswith(".docx"):
+        try:
+            import docx
+            doc = docx.Document(io.BytesIO(content))
+            paragraphs = [p.text for p in doc.paragraphs if p.text and p.text.strip()]
+            for table in doc.tables:
+                for row in table.rows:
+                    row_text = " | ".join(cell.text.strip() for cell in row.cells)
+                    if row_text.strip():
+                        paragraphs.append(row_text)
+            text = "\n".join(paragraphs)
+        except Exception as exc:
+            raise w.WorkspaceError(f"Could not read DOCX document: {exc}")
+    else:
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(io.BytesIO(content))
+            text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        except Exception as exc:
+            raise w.WorkspaceError(f"Could not parse PDF file: {exc}")
+
+    if not text.strip():
+        raise w.WorkspaceError("No selectable text in this document. Please ensure it contains selectable text.")
+
+    parsed = None
     if ai_enabled():
         try:
             parsed = await run_blocking(extract_profile_from_resume, text[:64000])
-            return {"status": "success", "data": parsed}
         except Exception:
-            pass
+            parsed = None
 
-    # Heuristic parsing fallback when AI mode is external or API key not set
-    parsed = parse_resume_text_heuristic(text)
-    return {"status": "success", "data": parsed}
+    if not parsed:
+        parsed = parse_resume_text_heuristic(text)
+
+    # Automatically save parsed profile into the workspace so the app immediately reflects it
+    try:
+        current = w.profile_get()
+        rev = current.get("revision", 1) if isinstance(current, dict) else 1
+        saved = w.profile_save(parsed, rev)
+        return {"status": "success", "data": saved, "message": "Resume uploaded and profile updated."}
+    except Exception:
+        return {"status": "success", "data": parsed, "message": "Resume parsed successfully."}
