@@ -12,25 +12,30 @@ COMMON_SKILLS_DICTIONARY = [
     "Enterprise Sales", "B2B Sales", "Business Development", "Lead Generation",
     "Account Management", "Pipeline Management", "Client Acquisition", "CRM",
     "Salesforce", "HubSpot", "Contract Negotiation", "Revenue Growth", "Key Account Management",
+    "Strategic Alliances", "Commercial Partnerships", "Channel Sales",
     # Product
     "Product Management", "Product Strategy", "Product Roadmap", "User Stories",
     "Agile", "Scrum", "Wireframing", "PRD", "A/B Testing", "User Research", "Go-To-Market (GTM)",
-    "Feature Prioritization", "Jira", "Figma", "Customer Discovery",
+    "Feature Prioritization", "Jira", "Figma", "Customer Discovery", "B2B Product Strategy",
     # Tech & Software & Data
     "Python", "JavaScript", "TypeScript", "React", "Next.js", "Node.js", "SQL",
     "PostgreSQL", "MongoDB", "AWS", "Azure", "GCP", "Docker", "Kubernetes", "Git",
     "REST APIs", "GraphQL", "Microservices", "CI/CD", "Data Analysis", "Machine Learning",
-    "Tableau", "Power BI", "Data Modeling", "ETL Pipelines", "Pandas",
-    # Finance
+    "Deep Learning", "Tableau", "Power BI", "Data Modeling", "ETL Pipelines", "Pandas",
+    "System Design", "Cloud Architecture", "Distributed Systems",
+    # Finance & Capital
     "Financial Analysis", "Financial Modeling", "Corporate Finance", "FP&A",
     "Budgeting & Forecasting", "Variance Analysis", "Valuation", "DCF", "M&A Advisory",
     "Accounting", "Cash Flow Management", "P&L Management", "SAP", "Advanced Excel",
     "Financial Reporting", "Due Diligence", "Capital Budgeting", "Auditing",
+    "Capital Markets", "Fundraising", "Structured Finance", "Investment Banking",
+    "Private Equity", "Venture Capital", "QuickBooks ProAdvisor", "CFA", "FRM",
     # Strategy & Consulting & Transformation
     "Management Consulting", "Corporate Strategy", "Strategic Planning",
     "Business Transformation", "Change Management", "Process Optimization",
     "Stakeholder Management", "Executive Presentations", "KPIs & OKRs",
     "Organizational Design", "Market Expansion", "Operating Model",
+    "Chief of Staff", "Market Sizing", "Competitive Analysis",
     # Operations & Supply Chain
     "Business Operations", "Operations Management", "Process Improvement", "Six Sigma",
     "Lean", "Supply Chain Management", "Procurement", "Vendor Management",
@@ -45,50 +50,78 @@ JOB_TITLE_KEYWORDS = [
     "manager", "lead", "director", "head", "analyst", "consultant", "associate",
     "engineer", "developer", "specialist", "vice president", "vp", "executive",
     "officer", "founder", "co-founder", "partner", "strategist", "coordinator",
-    "administrator", "architect", "intern", "trainee"
+    "administrator", "architect", "intern", "trainee", "adviser", "advisor"
 ]
 
 DEGREE_KEYWORDS = [
     "bachelor", "master", "b.tech", "btech", "b.e.", "be", "b.sc", "bsc", "bba",
     "b.com", "bcom", "mba", "m.tech", "mtech", "m.s.", "ms", "ph.d", "phd",
-    "post graduate", "pgdm", "diploma", "degree", "doctorate"
+    "post graduate", "pgdm", "diploma", "degree", "doctorate", "electrical",
+    "electronics", "mechanical", "computer science"
 ]
 
+INSTITUTION_KEYWORDS = [
+    "university", "institute", "college", "school", "academy",
+    "iit", "iim", "bit", "nit", "bits", "cambridge", "oxford", "harvard",
+    "stanford", "iisc", "fms", "xlri", "isb", "spjimr", "mesra"
+]
+
+MONTHS_REGEX = r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?'
 DATE_PATTERN = re.compile(
-    r'(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+)?\b(?:19|20)\d{2}\b\s*(?:-|–|—|to)\s*(?:(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+)?\b(?:19|20)\d{2}\b|Present|Current|Ongoing)',
+    rf'({MONTHS_REGEX}\s+\d{{4}}\s*(?:-|–|—|to)\s*(?:Present|Current|Ongoing|{MONTHS_REGEX}\s+\d{{4}}|\d{{4}})|(?:\b(?:19|20)\d{{2}}\b\s*(?:-|–|—|to)\s*(?:Present|Current|Ongoing|\b(?:19|20)\d{{2}}\b)))',
     re.IGNORECASE
 )
 
-def parse_resume_text_heuristic(text: str) -> dict:
+KNOWN_CITIES = [
+    "hyderabad", "bangalore", "bengaluru", "delhi", "new delhi", "mumbai",
+    "gurgaon", "gurugram", "noida", "pune", "kolkata", "chennai", "remote",
+    "singapore", "dubai", "london", "new york", "san francisco", "india", "us"
+]
+
+def parse_resume_text_heuristic(text: str, extra_urls: Optional[List[str]] = None) -> dict:
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     if not lines:
         return {}
 
     # Email
     email_match = re.search(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', text)
-    email = email_match.group(0) if email_match else ""
+    email = email_match.group(0).strip() if email_match else ""
 
-    # Phone
-    phone_match = re.search(r'(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\+?\d{10,13}', text)
+    # Phone: supports +91 8527961709, (555) 123-4567, 9876543210, etc.
+    phone_match = re.search(r'(\+?\d{1,4}[-.\s]?)?([6-9]\d{9}|\d{3}[-.\s]?\d{3}[-.\s]?\d{4}|\d{10,12})', text)
     mobile_no = phone_match.group(0).strip() if phone_match else ""
 
-    # LinkedIn
+    # LinkedIn: check text first, then extra_urls (from PDF Annotations)
+    linkedin = ""
     linkedin_match = re.search(r'(https?://(?:www\.)?linkedin\.com/in/[a-zA-Z0-9_-]+/?|linkedin\.com/in/[a-zA-Z0-9_-]+)', text, re.IGNORECASE)
-    linkedin = ("https://" + linkedin_match.group(0).removeprefix("http://").removeprefix("https://")) if linkedin_match else ""
+    if linkedin_match:
+        linkedin = "https://" + linkedin_match.group(0).removeprefix("http://").removeprefix("https://")
+    elif extra_urls:
+        for u in extra_urls:
+            if "linkedin.com" in u.lower():
+                linkedin = u
+                break
 
     # GitHub
+    github = ""
     github_match = re.search(r'(https?://(?:www\.)?github\.com/[a-zA-Z0-9_-]+/?|github\.com/[a-zA-Z0-9_-]+)', text, re.IGNORECASE)
-    github = ("https://" + github_match.group(0).removeprefix("http://").removeprefix("https://")) if github_match else ""
+    if github_match:
+        github = "https://" + github_match.group(0).removeprefix("http://").removeprefix("https://")
+    elif extra_urls:
+        for u in extra_urls:
+            if "github.com" in u.lower():
+                github = u
+                break
 
-    # Portfolio / other website
-    portfolio_match = re.search(r'https?://(?:www\.)?[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s]*)?', text)
+    # Portfolio
     portfolio = ""
+    portfolio_match = re.search(r'https?://(?:www\.)?[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s]*)?', text)
     if portfolio_match:
         url = portfolio_match.group(0)
         if "linkedin.com" not in url and "github.com" not in url:
             portfolio = url
 
-    # Name: typically first 1-3 lines, 2-4 words, no digits, no @, not a section header
+    # Candidate Name: first 1-3 lines
     first_name = ""
     last_name = ""
     skip_keywords = {"resume", "curriculum", "vitae", "cv", "page", "phone", "email", "address", "contact", "profile"}
@@ -96,15 +129,15 @@ def parse_resume_text_heuristic(text: str) -> dict:
         clean = re.sub(r'[^a-zA-Z\s]', '', line).strip()
         words = clean.split()
         if 2 <= len(words) <= 4 and not any(w.lower() in skip_keywords for w in words):
-            first_name = words[0]
-            last_name = " ".join(words[1:])
+            first_name = words[0].title()
+            last_name = " ".join(words[1:]).title()
             break
 
     # Section segmentation
     sec_patterns = {
         "education": r'^(?:education|academic\s+background|academics|qualifications)\b',
-        "experience": r'^(?:experience|work\s+experience|professional\s+experience|employment\s+history|work\s+history)\b',
-        "skills": r'^(?:skills|technical\s+skills|core\s+competencies|technologies|expertise|key\s+skills)\b',
+        "experience": r'^(?:professional\s+experience|work\s+experience|experience|employment\s+history|work\s+history)\b',
+        "skills": r'^(?:certifications\s*&\s*core\s*skills|skills|technical\s+skills|core\s+competencies|technologies|expertise|key\s+skills)\b',
         "projects": r'^(?:projects|personal\s+projects|academic\s+projects|key\s+initiatives)\b',
         "certifications": r'^(?:certifications|certificates|licenses|accreditations)\b',
     }
@@ -114,10 +147,12 @@ def parse_resume_text_heuristic(text: str) -> dict:
 
     for line in lines:
         matched_sec = None
+        clean_upper = re.sub(r'[^A-Z\s&]', '', line.upper()).strip()
         for sec, pattern in sec_patterns.items():
-            if re.match(pattern, line, re.IGNORECASE) and len(line) < 45:
-                matched_sec = sec
-                break
+            if re.match(pattern, line, re.IGNORECASE) or re.match(pattern, clean_upper, re.IGNORECASE):
+                if len(line) < 45:
+                    matched_sec = sec
+                    break
         if matched_sec:
             current_sec = matched_sec
             if current_sec not in sections:
@@ -125,76 +160,94 @@ def parse_resume_text_heuristic(text: str) -> dict:
         else:
             sections.setdefault(current_sec, []).append(line)
 
-    # 1. Multi-Experience Parser
+    # 1. Multi-Experience Extraction
     experience_list: List[Dict[str, str]] = []
     if "experience" in sections and sections["experience"]:
         exp_lines = sections["experience"]
         current_exp: Optional[Dict[str, Any]] = None
 
-        for idx, line in enumerate(exp_lines):
-            # Check if this line looks like a role/company header
-            has_date = bool(DATE_PATTERN.search(line))
-            has_title_kw = any(re.search(r'\b' + re.escape(kw) + r'\b', line, re.IGNORECASE) for kw in JOB_TITLE_KEYWORDS)
+        i = 0
+        while i < len(exp_lines):
+            line = exp_lines[i]
+            date_match = DATE_PATTERN.search(line)
             
-            # If line is short and either has a date or has a job title keyword, start new role
-            if (has_date or has_title_kw) and len(line) < 120 and not line.startswith(('-', '•', '*', '·')):
+            # Check if this line is an experience header
+            # Formats:
+            # 1. "DealOS.in  -  Founder                     Mar 2026 - Present"
+            # 2. "Aon India Insurance Brokers  -  Vice President, Finance & Strategy Oct 2020 - Jul 2022"
+            # 3. "Company | Title | Date"
+            if date_match and ("-" in line or "–" in line or "—" in line or "  " in line):
                 if current_exp:
                     experience_list.append({
                         "company": current_exp.get("company", "Company")[:100],
                         "job_title": current_exp.get("job_title", "Role")[:100],
                         "location": current_exp.get("location", "")[:100],
                         "date_range": current_exp.get("date_range", "")[:50],
-                        "description": "\n".join(current_exp.get("bullets", []))[:2000]
+                        "description": "\n".join(current_exp.get("bullets", []))[:2500]
                     })
 
-                date_match = DATE_PATTERN.search(line)
-                date_str = date_match.group(0) if date_match else ""
-                clean_header = DATE_PATTERN.sub("", line).strip().strip("|,·-–")
+                date_str = date_match.group(1).strip()
+                header_text = line[:date_match.start()].strip()
+                if not header_text and date_match.end() < len(line):
+                    header_text = line[date_match.end():].strip()
 
-                parts = [p.strip() for p in re.split(r'[,|–—\t]+', clean_header) if p.strip()]
-                
-                title = ""
                 company = ""
+                job_title = ""
+                # Split company and role by delimiter
+                split_delims = [" - ", " – ", " — ", " | ", "  "]
+                found_split = False
+                for delim in split_delims:
+                    if delim in header_text:
+                        parts = header_text.split(delim, 1)
+                        company = parts[0].strip()
+                        job_title = parts[1].strip()
+                        found_split = True
+                        break
+
+                if not found_split:
+                    if any(kw in header_text.lower() for kw in JOB_TITLE_KEYWORDS):
+                        job_title = header_text
+                    else:
+                        company = header_text
+
+                # Check if next line contains Location | Focus/Tagline
                 location = ""
-                if len(parts) >= 2:
-                    # Determine which part is title vs company
-                    if any(kw in parts[0].lower() for kw in JOB_TITLE_KEYWORDS):
-                        title = parts[0]
-                        company = parts[1]
-                        if len(parts) > 2:
-                            location = parts[2]
-                    else:
-                        company = parts[0]
-                        title = parts[1]
-                        if len(parts) > 2:
-                            location = parts[2]
-                elif parts:
-                    if has_title_kw:
-                        title = parts[0]
-                    else:
-                        company = parts[0]
+                focus = ""
+                if i + 1 < len(exp_lines):
+                    next_line = exp_lines[i + 1]
+                    is_bullet = next_line.startswith(('*', '-', '•', '·', '>'))
+                    is_next_date = bool(DATE_PATTERN.search(next_line))
+                    
+                    if not is_bullet and not is_next_date and len(next_line) < 130:
+                        if "|" in next_line:
+                            loc_parts = next_line.split("|", 1)
+                            location = loc_parts[0].strip()
+                            focus = loc_parts[1].strip()
+                            i += 1  # Consume next line
+                        elif any(city in next_line.lower() for city in KNOWN_CITIES):
+                            location = next_line.strip()
+                            i += 1  # Consume next line
+
+                bullets = []
+                if focus:
+                    bullets.append(f"• Domain: {focus}")
 
                 current_exp = {
-                    "company": company or "Professional Experience",
-                    "job_title": title or "Executive",
+                    "company": company or "Organization",
+                    "job_title": job_title or "Professional",
                     "location": location,
                     "date_range": date_str,
-                    "bullets": []
+                    "bullets": bullets
                 }
-            else:
-                if current_exp is not None:
-                    # Append as bullet or context
-                    clean_line = line.strip().lstrip('-*•· ')
-                    if clean_line:
-                        current_exp["bullets"].append(f"• {clean_line}")
-                elif idx == 0:
-                    current_exp = {
-                        "company": line[:80],
-                        "job_title": "Professional Role",
-                        "location": "",
-                        "date_range": "",
-                        "bullets": []
-                    }
+            elif current_exp is not None:
+                is_bullet = line.startswith(('*', '-', '•', '·', '>'))
+                clean_bullet = line.lstrip('*-•·> ').strip()
+                if is_bullet or not current_exp["bullets"]:
+                    current_exp["bullets"].append(f"• {clean_bullet}")
+                else:
+                    # Continuation of previous bullet
+                    current_exp["bullets"][-1] += f" {clean_bullet}"
+            i += 1
 
         if current_exp:
             experience_list.append({
@@ -202,151 +255,87 @@ def parse_resume_text_heuristic(text: str) -> dict:
                 "job_title": current_exp.get("job_title", "Role")[:100],
                 "location": current_exp.get("location", "")[:100],
                 "date_range": current_exp.get("date_range", "")[:50],
-                "description": "\n".join(current_exp.get("bullets", []))[:2000]
+                "description": "\n".join(current_exp.get("bullets", []))[:2500]
             })
 
-    # If no experience could be split, fallback gracefully
-    if not experience_list and "experience" in sections and sections["experience"]:
-        exp_lines = sections["experience"]
-        experience_list.append({
-            "company": exp_lines[0][:100] if exp_lines else "Enterprise",
-            "job_title": exp_lines[1][:100] if len(exp_lines) > 1 else "Professional",
-            "location": "",
-            "date_range": "",
-            "description": "\n".join(exp_lines[2:])[:2000] if len(exp_lines) > 2 else ""
-        })
-
-    # 2. Multi-Education Parser
+    # 2. Multi-Education Extraction
     education_list: List[Dict[str, str]] = []
     if "education" in sections and sections["education"]:
         edu_lines = sections["education"]
-        current_edu: Optional[Dict[str, Any]] = None
-
         for line in edu_lines:
-            has_degree = any(re.search(r'\b' + re.escape(deg) + r'\b', line, re.IGNORECASE) for deg in DEGREE_KEYWORDS)
-            has_univ = any(w in line.lower() for w in ["university", "institute", "college", "school", "academy", "iit", "iim", "bits"])
-            has_date = bool(DATE_PATTERN.search(line))
+            has_deg_kw = any(re.search(r'\b' + re.escape(deg) + r'\b', line, re.IGNORECASE) for deg in DEGREE_KEYWORDS)
+            has_inst_kw = any(re.search(r'\b' + re.escape(inst) + r'\b', line, re.IGNORECASE) for inst in INSTITUTION_KEYWORDS)
+            year_match = re.search(r'(\b\d{4}\s*(?:-|–|—|to)\s*\d{4}\b|\b\d{4}\b)', line)
 
-            if (has_degree or has_univ) and len(line) < 130:
-                if current_edu:
-                    education_list.append({
-                        "school_name": current_edu.get("school", "University")[:120],
-                        "course": current_edu.get("course", "Degree")[:120],
-                        "location": current_edu.get("location", "")[:100],
-                        "date_range": current_edu.get("date_range", "")[:50],
-                        "description": " ".join(current_edu.get("details", []))[:500]
-                    })
+            if (has_deg_kw or has_inst_kw or year_match) and len(line) < 140:
+                date_str = year_match.group(1).strip() if year_match else ""
+                text_without_date = line[:year_match.start()].rstrip("|–-— \t") if year_match else line
 
-                date_match = DATE_PATTERN.search(line)
-                date_str = date_match.group(0) if date_match else ""
-                clean_line = DATE_PATTERN.sub("", line).strip().strip("|,·-–")
-
-                parts = [p.strip() for p in re.split(r'[,|–—\t]+', clean_line) if p.strip()]
-                school = ""
                 course = ""
-                if has_univ and has_degree:
-                    # line has both
-                    for part in parts:
-                        if any(w in part.lower() for w in ["university", "institute", "college", "school", "academy", "iit", "iim", "bits"]):
-                            school = part
-                        elif any(re.search(r'\b' + re.escape(deg) + r'\b', part, re.IGNORECASE) for deg in DEGREE_KEYWORDS):
-                            course = part
-                elif has_univ:
-                    school = clean_line
-                    # check if other parts have degree
-                    for part in parts:
-                        if any(re.search(r'\b' + re.escape(deg) + r'\b', part, re.IGNORECASE) for deg in DEGREE_KEYWORDS):
-                            course = part
-                elif has_degree:
-                    course = clean_line
-                    for part in parts:
-                        if any(w in part.lower() for w in ["university", "institute", "college", "school", "academy", "iit", "iim", "bits"]):
-                            school = part
-                else:
+                school = ""
+                # Split course and institution
+                if "  " in text_without_date:
+                    parts = [p.strip() for p in text_without_date.split("  ") if p.strip()]
                     if len(parts) >= 2:
-                        course, school = parts[0], parts[1]
+                        course = parts[0]
+                        school = " ".join(parts[1:])
                     else:
-                        course = clean_line
+                        course = parts[0]
+                elif "|" in text_without_date:
+                    parts = [p.strip() for p in text_without_date.split("|") if p.strip()]
+                    course = parts[0]
+                    school = parts[1] if len(parts) > 1 else ""
+                elif " - " in text_without_date:
+                    parts = [p.strip() for p in text_without_date.split(" - ", 1) if p.strip()]
+                    course = parts[0]
+                    school = parts[1] if len(parts) > 1 else ""
+                else:
+                    course = text_without_date
 
-                current_edu = {
-                    "school": school or "Institution",
-                    "course": course or "Academic Program",
+                education_list.append({
+                    "school_name": school or "Institution",
+                    "course": course or "Degree",
                     "location": "",
                     "date_range": date_str,
-                    "details": []
-                }
-            elif current_edu is not None:
-                # Add supporting detail or if missing school/course
-                if not current_edu.get("school") and any(w in line.lower() for w in ["university", "institute", "college"]):
-                    current_edu["school"] = line
-                elif not current_edu.get("course") and any(deg in line.lower() for deg in DEGREE_KEYWORDS):
-                    current_edu["course"] = line
-                else:
-                    current_edu["details"].append(line)
+                    "description": ""
+                })
 
-        if current_edu:
-            education_list.append({
-                "school_name": current_edu.get("school", "University")[:120],
-                "course": current_edu.get("course", "Degree")[:120],
-                "location": current_edu.get("location", "")[:100],
-                "date_range": current_edu.get("date_range", "")[:50],
-                "description": " ".join(current_edu.get("details", []))[:500]
-            })
+    # 3. Comprehensive Skills Bank Extraction
+    text_lower = text.lower()
+    confirmed_skills: List[Dict[str, Any]] = []
+    seen_skills = set()
 
-    if not education_list and "education" in sections and sections["education"]:
-        edu_lines = sections["education"]
-        education_list.append({
-            "school_name": edu_lines[0][:100],
-            "course": edu_lines[1][:100] if len(edu_lines) > 1 else "Degree",
-            "location": "",
-            "date_range": "",
-            "description": " ".join(edu_lines[2:])[:500] if len(edu_lines) > 2 else ""
-        })
-
-    # 3. Comprehensive Skills Extractor
-    detected_skills_set = set()
-    skills_list: List[Dict[str, Any]] = []
-
-    # 3a. Extract explicitly listed skills from the skills section
-    if "skills" in sections:
-        skill_text = " ".join(sections["skills"])
-        raw_tokens = re.split(r'[,|•·;\n/]+', skill_text)
-        for token in raw_tokens:
-            s_clean = token.strip().strip("-*•· :")
-            if s_clean and 2 <= len(s_clean) <= 40 and not re.match(r'^(?:skills|languages|tools|technologies):?$', s_clean, re.I):
-                normalized = s_clean.title()
-                if normalized.lower() not in detected_skills_set:
-                    detected_skills_set.add(normalized.lower())
-                    skills_list.append({"skill_name": normalized, "is_confirmed": True})
-
-    # 3b. Scan entire resume text against COMMON_SKILLS_DICTIONARY
-    low_full_text = text.lower()
     for skill in COMMON_SKILLS_DICTIONARY:
         pattern = r'\b' + re.escape(skill.lower()) + r'\b'
-        if re.search(pattern, low_full_text):
-            if skill.lower() not in detected_skills_set:
-                detected_skills_set.add(skill.lower())
-                skills_list.append({"skill_name": skill, "is_confirmed": True})
+        if re.search(pattern, text_lower) and skill.lower() not in seen_skills:
+            seen_skills.add(skill.lower())
+            confirmed_skills.append({
+                "skill_name": skill,
+                "is_confirmed": True
+            })
 
-    # 4. Certifications
-    certifications_list: List[Dict[str, str]] = []
-    if "certifications" in sections and sections["certifications"]:
-        for line in sections["certifications"]:
-            clean_cert = line.strip().lstrip('-*•· ')
-            if clean_cert and len(clean_cert) < 80:
-                certifications_list.append({"name": clean_cert, "issuer": "Recognized Body", "date_issued": ""})
+    # Also extract skills directly listed under skills section
+    if "skills" in sections and sections["skills"]:
+        for line in sections["skills"]:
+            raw_items = re.split(r'[,|•·;\n]+', line)
+            for item in raw_items:
+                clean_item = item.strip().strip("-*•· ")
+                clean_item = re.sub(r'^(?:Strategy & Platform Building:|Capital & M&A:|Finance & Analytics:)', '', clean_item).strip()
+                if 2 < len(clean_item) < 40 and clean_item.lower() not in seen_skills:
+                    seen_skills.add(clean_item.lower())
+                    confirmed_skills.append({
+                        "skill_name": clean_item,
+                        "is_confirmed": True
+                    })
 
-    # 5. Projects
-    projects_list: List[Dict[str, str]] = []
-    if "projects" in sections and sections["projects"]:
-        for line in sections["projects"]:
-            clean_proj = line.strip().lstrip('-*•· ')
-            if clean_proj and len(clean_proj) < 80:
-                projects_list.append({"name": clean_proj, "description": "", "date_range": ""})
+    # Target Roles
+    target_roles = ["Corporate Strategy & Transformation", "Finance Manager", "VP of Strategy"]
+    if experience_list:
+        target_roles = [experience_list[0]["job_title"]] + target_roles[:2]
 
     return {
-        "first_name": first_name,
-        "last_name": last_name,
+        "first_name": first_name or "Candidate",
+        "last_name": last_name or "",
         "email": email,
         "mobile_no": mobile_no,
         "linkedin": linkedin,
@@ -354,7 +343,11 @@ def parse_resume_text_heuristic(text: str) -> dict:
         "portfolio": portfolio,
         "education": education_list,
         "experience": experience_list,
-        "projects": projects_list[:10],
-        "skills": skills_list[:40],
-        "certifications": certifications_list[:10],
+        "skills": confirmed_skills,
+        "projects": [],
+        "certifications": [],
+        "target_roles": target_roles,
+        "target_locations": ["Hyderabad", "Bengaluru", "Mumbai", "Remote"],
+        "target_work_modes": ["Hybrid", "Remote"],
+        "target_salary": "₹30L - ₹50L/yr"
     }

@@ -125,7 +125,7 @@ export function ResumeOnboardingModal({ isOpen, onClose, onSuccess }: ResumeOnbo
           <X className="w-4 h-4" />
         </button>
 
-        {/* ── STAGE 1: UPLOAD (NextRaise benchmark: upload resume.png) ── */}
+        {/* ── STAGE 1: UPLOAD ── */}
         {step === "upload" && (
           <div className="grid grid-cols-1 md:grid-cols-5 min-h-[440px]">
             {/* Left promo banner */}
@@ -252,7 +252,7 @@ export function ResumeOnboardingModal({ isOpen, onClose, onSuccess }: ResumeOnbo
           </div>
         )}
 
-        {/* ── STAGE 2: PARSING PROGRESS (NextRaise benchmark: parsing resume.png) ── */}
+        {/* ── STAGE 2: PARSING PROGRESS ── */}
         {step === "parsing" && (
           <div className="grid grid-cols-1 md:grid-cols-5 min-h-[440px]">
             {/* Left Steps List */}
@@ -333,7 +333,7 @@ export function ResumeOnboardingModal({ isOpen, onClose, onSuccess }: ResumeOnbo
           </div>
         )}
 
-        {/* ── STAGE 3: OUTPUT RESULTS (NextRaise benchmark: output parsing.png) ── */}
+        {/* ── STAGE 3: OUTPUT RESULTS ── */}
         {step === "results" && (
           <div className="grid grid-cols-1 md:grid-cols-5 min-h-[440px]">
             {/* Left Confirmed Steps */}

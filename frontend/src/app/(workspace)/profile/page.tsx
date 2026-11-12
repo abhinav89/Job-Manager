@@ -394,21 +394,6 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <div className="pt-4 border-t border-slate-100">
-              <label className="block font-bold text-slate-700 mb-1.5 text-xs">Primary Candidate Archetype Preset</label>
-              <select
-                value={formData.preset_slug || "blank"}
-                onChange={(e) => setFormData({ ...formData, preset_slug: e.target.value })}
-                className="w-full sm:w-1/2 p-3 rounded-xl border border-slate-300 focus:outline-none focus:border-blue-600 text-xs bg-white text-slate-900 font-medium"
-              >
-                <option value="blank">General / Blank Preset</option>
-                {presets.map((p) => (
-                  <option key={p.slug} value={p.slug}>
-                    {p.display_name}
-                  </option>
-                ))}
-              </select>
-            </div>
           </div>
         )}
 

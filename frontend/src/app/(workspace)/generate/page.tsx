@@ -716,7 +716,21 @@ function GeneratePageContent() {
   const [wizardStep, setWizardStep] = useState<"difference" | "editor" | "main">(
     Boolean(queryTitle || queryCompany) ? "difference" : "main"
   );
-  const [mainTab, setMainTab] = useState<"tailored" | "original" | "cover_letter" | "templates">("tailored");
+  const queryTab = searchParams.get("tab");
+  const initialMainTab: "tailored" | "original" | "cover_letter" | "templates" =
+    queryTab === "original" || queryTab === "tailored" || queryTab === "cover_letter" || queryTab === "templates"
+      ? queryTab
+      : queryTitle || queryCompany
+      ? "tailored"
+      : "original";
+  const [mainTab, setMainTab] = useState<"tailored" | "original" | "cover_letter" | "templates">(initialMainTab);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "original" || tab === "tailored" || tab === "cover_letter" || tab === "templates") {
+      setMainTab(tab);
+    }
+  }, [searchParams]);
   const [trackerSubTab, setTrackerSubTab] = useState<"tracker" | "search">("tracker");
   const [linkInput, setLinkInput] = useState("");
   const [repoSearchKeyword, setRepoSearchKeyword] = useState("");
@@ -1844,7 +1858,7 @@ function GeneratePageContent() {
                 <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 flex items-start gap-3 text-xs text-amber-900">
                   <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                   <div>
-                    <span className="font-extrabold">NextRaise Resume Standard: </span>
+                    <span className="font-extrabold">Executive Resume Standard: </span>
                     1 page recommended for candidates under 10 years experience; max 2 pages recommended for senior leaders & executives. Maximum hard ceiling: 4 pages. Zero hallucination guaranteed across all tailored variants.
                   </div>
                 </div>
@@ -2030,7 +2044,7 @@ function GeneratePageContent() {
             </div>
           )}
 
-          {/* ── Tab 4: Resume Templates (Matching NextRaise benchmark) ── */}
+          {/* ── Tab 4: Resume Templates ── */}
           {mainTab === "templates" && (
             <div className="space-y-5">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">

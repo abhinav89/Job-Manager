@@ -52,6 +52,7 @@ async def auto_fill_resume(file: UploadFile = File(...)):
     content = await file.read()
     text = ""
 
+    extra_urls = []
     if filename.endswith(".docx"):
         try:
             import docx
@@ -70,6 +71,12 @@ async def auto_fill_resume(file: UploadFile = File(...)):
             from pypdf import PdfReader
             reader = PdfReader(io.BytesIO(content))
             text = "\n".join(page.extract_text() or "" for page in reader.pages)
+            for page in reader.pages:
+                if "/Annots" in page:
+                    for a in page["/Annots"]:
+                        obj = a.get_object()
+                        if "/A" in obj and "/URI" in obj["/A"]:
+                            extra_urls.append(obj["/A"]["/URI"])
         except Exception as exc:
             raise w.WorkspaceError(f"Could not parse PDF file: {exc}")
 
@@ -84,7 +91,13 @@ async def auto_fill_resume(file: UploadFile = File(...)):
             parsed = None
 
     if not parsed:
-        parsed = parse_resume_text_heuristic(text)
+        parsed = parse_resume_text_heuristic(text, extra_urls=extra_urls)
+    elif extra_urls:
+        if not parsed.get("linkedin"):
+            for u in extra_urls:
+                if "linkedin.com" in u.lower():
+                    parsed["linkedin"] = u
+                    break
 
     # Automatically save parsed profile into the workspace so the app immediately reflects it
     try:

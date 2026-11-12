@@ -20,6 +20,8 @@ import {
   Menu,
   X,
   ShieldCheck,
+  Wand2,
+  Mail,
 } from "lucide-react";
 import { useWorkspace, useProfile, useTrackerJobs } from "@/lib/queries";
 import { setExpandedJob } from "@/lib/store";
@@ -42,6 +44,11 @@ export default function Sidebar() {
   const closeMobile = () => setMobileOpen(false);
 
   const isActive = (href: string) => {
+    if (href.includes("?")) {
+      const [path] = href.split("?");
+      if (pathname !== path) return false;
+      return true;
+    }
     if (href === "/dashboard") return pathname === "/dashboard";
     return pathname === href || pathname.startsWith(href + "/");
   };
@@ -49,16 +56,17 @@ export default function Sidebar() {
   const navItems = [
     { label: "Dashboard", href: "/dashboard", icon: <LayoutDashboard className="w-4 h-4" /> },
     { label: "Find Jobs", href: "/discover", icon: <Search className="w-4 h-4" />, badge: "24 new" },
-    { label: "My Jobs", href: "/tracker", icon: <Kanban className="w-4 h-4" />, count: trackerJobs.length },
-    { label: "Tailor Resume", href: "/generate", icon: <FileText className="w-4 h-4" /> },
-    { label: "Career Profile", href: "/profile", icon: <User className="w-4 h-4" /> },
-    { label: "Settings", href: "/settings", icon: <Settings className="w-4 h-4" /> },
+    { label: "Job Tracker", href: "/tracker", icon: <Kanban className="w-4 h-4" />, count: trackerJobs.length },
+    { label: "My Resumes", href: "/generate?tab=original", icon: <FileText className="w-4 h-4" /> },
   ];
 
   const toolItems = [
-    { label: "Career Agent", href: "/assistant", icon: <Bot className="w-4 h-4" /> },
-    { label: "Insights", href: "/insights", icon: <BarChart3 className="w-4 h-4" /> },
+    { label: "Job Tailor", href: "/generate?tab=tailored", icon: <Wand2 className="w-4 h-4" /> },
+    { label: "Cover Letter", href: "/generate?tab=cover_letter", icon: <Mail className="w-4 h-4" /> },
     { label: "Interview Prep", href: "/interview", icon: <MessageSquare className="w-4 h-4" />, isNew: true },
+    { label: "Career Profile", href: "/profile", icon: <User className="w-4 h-4" /> },
+    { label: "Career Agent", href: "/assistant", icon: <Bot className="w-4 h-4" /> },
+    { label: "Settings", href: "/settings", icon: <Settings className="w-4 h-4" /> },
   ];
 
   return (
@@ -214,7 +222,7 @@ export default function Sidebar() {
           </div>
         </div>
 
-        {/* User Account / Tier Footer (NextRaise Benchmark Style) */}
+        {/* User Account / Tier Footer */}
         <div className="p-3 border-t border-slate-100 shrink-0 space-y-2">
           {!collapsed ? (
             <div className="p-2 rounded-xl bg-slate-50 flex items-center justify-between gap-2.5">

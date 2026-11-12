@@ -26,7 +26,7 @@ export function ResumeDifferenceView({
 }: ResumeDifferenceProps) {
   const scoreLabel = matchScore >= 8.5 ? "Strong" : matchScore >= 7.0 ? "Good" : matchScore >= 5.5 ? "Fair" : "Partial";
 
-  // Pre-configured comparison tags matching NextRaise benchmark (tailor cv p1.png)
+  // Pre-configured comparison tags
   const requiredQualifications = [
     "5+ years", "Coordinating deliverables", "Developing", "Developing presentations",
     "Managing operational processes", "Performing quality checks", "Microsoft Excel", "Business degree"

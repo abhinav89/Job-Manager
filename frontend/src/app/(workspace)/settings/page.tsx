@@ -165,13 +165,13 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* Tier Quotas & Pricing (Benchmark NextRaise superapply pricing.png) */}
+        {/* Tier Quotas & Pricing */}
         {activeTab === "plans" && (
           <div className="space-y-6 text-xs">
             <div className="border-b pb-4">
               <h3 className="text-base font-bold text-slate-900">Subscription Tiers &amp; Restrictions</h3>
               <p className="text-slate-500 mt-1">
-                Modeled after NextRaise benchmark tiers. Prepared for future commercial restrictions.
+                Standard application tiers. Prepared for future commercial capabilities.
               </p>
             </div>
 

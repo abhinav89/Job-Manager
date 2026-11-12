@@ -149,7 +149,7 @@ export function JobCard({ job, onSaveToTracker, onTailorAndApply, isSaved = fals
 
         {/* Right: Relevance Widget & Primary Actions */}
         <div className="flex flex-row lg:flex-col items-center lg:items-end justify-between w-full lg:w-auto gap-3 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100">
-          {/* Circular Profile Relevance Widget (NextRaise Benchmark Style) */}
+          {/* Circular Profile Relevance Widget */}
           <div className="bg-slate-950 text-white rounded-xl p-3 flex flex-col items-center justify-center min-w-[100px] shadow-sm">
             <span className="text-[9px] tracking-wider uppercase font-semibold text-slate-400 mb-1">
               PROFILE FIT

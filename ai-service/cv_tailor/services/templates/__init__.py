@@ -3,6 +3,7 @@ from .modern_resume import MODERN_RESUME
 from .layouts import ADDITIONAL_TEMPLATES
 
 TEMPLATES = {
+    "original": JAKES_RESUME,
     "classic": JAKES_RESUME,
     "modern": MODERN_RESUME,
     **ADDITIONAL_TEMPLATES,

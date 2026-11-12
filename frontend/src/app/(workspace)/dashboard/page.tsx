@@ -196,7 +196,7 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      {/* ── Top Recommended Openings Feed (NextRaise Style) ── */}
+      {/* ── Top Recommended Openings Feed ── */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div>

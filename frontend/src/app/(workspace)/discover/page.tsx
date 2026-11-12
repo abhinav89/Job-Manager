@@ -137,7 +137,7 @@ export default function DiscoverJobsPage() {
         </button>
       </div>
 
-      {/* ── Benchmark Filter Chips Bar (NextRaise Style) ── */}
+      {/* ── Benchmark Filter Chips Bar ── */}
       <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
         {/* Country Quick Dropdown */}
         <select
@@ -291,7 +291,7 @@ export default function DiscoverJobsPage() {
 
         {/* Right 1 Column: Benchmark Info Rail (Primary Resume, ATS Check, Tracked Sources) */}
         <div className="space-y-5 lg:sticky lg:top-6">
-          {/* Primary Resume Card (NextRaise benchmark right rail) */}
+          {/* Primary Resume Card */}
           <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4 text-xs">
             <div className="flex items-center justify-between">
               <span className="font-extrabold uppercase tracking-wider text-[10px] text-slate-400">

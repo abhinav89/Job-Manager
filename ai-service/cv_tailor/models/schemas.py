@@ -3,7 +3,7 @@ from typing import List, Optional, Literal
 from datetime import date as DateType, datetime
 from typing import Optional
 
-ResumeTemplate = Literal["classic", "modern", "minimal", "serif", "executive", "technical", "compact", "sidebar"]
+ResumeTemplate = Literal["classic", "modern", "minimal", "serif", "executive", "technical", "compact", "sidebar", "original"]
 
 
 class ConnectionPreference(BaseModel):
