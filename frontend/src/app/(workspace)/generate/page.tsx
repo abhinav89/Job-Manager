@@ -15,16 +15,17 @@ import InlineQueryError from "@/components/InlineQueryError";
 import RouteLoading from "@/components/RouteLoading";
 import Alert from "@/components/Alert";
 import { ButtonLink } from "@/components/Button";
-import { ApiQueryError, queryKeys, type JobDetails, type Workspace, type WorkspacePreferences, type ResumeTemplate, useWorkspace, usePresets, useProfile, useTrackerDetails, useTrackerJobs, useRepositoryJobs } from "@/lib/queries";
+import { ApiQueryError, queryKeys, type JobDetails, type Workspace, type WorkspacePreferences, type ResumeTemplate, type ResumeItem, type CareerTheme, useWorkspace, usePresets, useProfile, useTrackerDetails, useTrackerJobs, useRepositoryJobs, useResumes, useThemes } from "@/lib/queries";
 import { applyBlockText, formatEducationDetails, replaceProjectHeading, parseResumeBlocks, parseResumeDraft, replaceCommandArgument, replaceResumeItem, replaceResumeName, replaceSectionDetail, replaceSummary, resolveSelectionToBlocks, type ResumeBlock, type ResumeDraft } from "@/lib/resumeDraft";
 import { ResumeDifferenceView } from "@/components/tracker/ResumeDifferenceView";
 import { PickResumeModal } from "@/components/tracker/PickResumeModal";
 import { TailorInputModal } from "@/components/tracker/TailorInputModal";
+import { ResumeOnboardingModal } from "@/components/ResumeOnboardingModal";
 import {
   Wand2, FileText, Sparkles, Plus, Search, Bookmark, ExternalLink,
   Check, CheckCircle2, Building2, MapPin, Calendar, ChevronRight,
   ArrowRight, Link as LinkIcon, Info, LayoutGrid, Layers, Globe,
-  Briefcase, Mail, RefreshCw, Download, Edit3, ShieldCheck, Star
+  Briefcase, Mail, RefreshCw, Download, Edit3, ShieldCheck, Star, Trash2, UploadCloud
 } from "lucide-react";
 
 const Document = dynamic(() => import("react-pdf").then(m => m.Document), { ssr: false });
@@ -721,9 +722,13 @@ function GeneratePageContent() {
   const [repoSearchKeyword, setRepoSearchKeyword] = useState("");
   const [isPickResumeModalOpen, setIsPickResumeModalOpen] = useState(false);
   const [isTailorInputModalOpen, setIsTailorInputModalOpen] = useState(false);
+  const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
+  const [selectedThemeFilter, setSelectedThemeFilter] = useState<string>("all");
 
   const trackerJobsQuery = useTrackerJobs();
   const repositoryJobsQuery = useRepositoryJobs({ keyword: repoSearchKeyword });
+  const resumesQuery = useResumes();
+  const themesQuery = useThemes();
   const { selectedTemplate, setSelectedTemplate, editorMode, setEditorMode } = useResumeUiStore();
   const initializedTemplateScope = useRef<string | null>(null);
   const [savingDefault, setSavingDefault] = useState(false);
@@ -1795,79 +1800,200 @@ function GeneratePageContent() {
             </div>
           )}
 
-          {/* ── Tab 2: Original Master CV ── */}
+          {/* ── Tab 2: Profile Resumes & Career Themes Suite ── */}
           {mainTab === "original" && (
-            <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center font-black text-base shrink-0">
-                    {profileQuery.data?.first_name ? profileQuery.data.first_name[0] : "M"}
-                  </div>
+            <div className="space-y-6">
+              {/* Header & Length Recommendation Banner */}
+              <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xs space-y-5">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div>
-                    <h3 className="text-base font-extrabold text-slate-900">
-                      {profileQuery.data?.first_name} {profileQuery.data?.last_name || ""} — Master Resume CV
-                    </h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Primary Master CV · {profileQuery.data?.experience?.length ?? 0} positions · {profileQuery.data?.skills?.length ?? 0} confirmed facts
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold mb-2">
+                      <Layers className="w-3.5 h-3.5" />
+                      Multi-Theme Resume Suite
+                    </div>
+                    <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
+                      Resumes by Profile Theme
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
+                      Maintain targeted resumes tailored to each career archetype (Sales, BD, Product, Tech, Marketing, Finance, Ops, SCM, HR, Strategy). All resumes strictly reference your 100% verified career facts.
                     </p>
                   </div>
+
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setIsOnboardingModalOpen(true)}
+                      className="px-3.5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs transition-all inline-flex items-center gap-1.5"
+                    >
+                      <UploadCloud className="w-4 h-4 text-blue-600" />
+                      Upload Fresh CV
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsPickResumeModalOpen(true)}
+                      className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition-all inline-flex items-center gap-1.5"
+                    >
+                      <Plus className="w-4 h-4" />
+                      New Theme Resume
+                    </button>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <Link
-                    href="/profile"
-                    className="px-3.5 py-2 rounded-xl border border-slate-200 hover:border-slate-300 text-slate-700 text-xs font-bold transition-all flex items-center gap-1.5"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" />
-                    Edit Profile
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => setIsTailorInputModalOpen(true)}
-                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all flex items-center gap-1.5"
-                  >
-                    <Wand2 className="w-3.5 h-3.5" />
-                    Tailor From This CV
-                  </button>
+                {/* Length Recommendation Notice */}
+                <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 flex items-start gap-3 text-xs text-amber-900">
+                  <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-extrabold">NextRaise Resume Standard: </span>
+                    1 page recommended for candidates under 10 years experience; max 2 pages recommended for senior leaders & executives. Maximum hard ceiling: 4 pages. Zero hallucination guaranteed across all tailored variants.
+                  </div>
+                </div>
+
+                {/* Theme Filter Bar */}
+                <div className="space-y-2 pt-2 border-t border-slate-100">
+                  <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                    Filter by Career Archetype
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { id: "all", label: "All Resumes" },
+                      { id: "master", label: "Master CV" },
+                      { id: "strategy-transformation", label: "Strategy & Transformation" },
+                      { id: "finance", label: "Finance & FP&A" },
+                      { id: "product", label: "Product Management" },
+                      { id: "tech-engineer", label: "Tech & Engineering" },
+                      { id: "sales", label: "Enterprise Sales" },
+                      { id: "bd", label: "Business Development" },
+                      { id: "operations", label: "Operations & BizOps" },
+                      { id: "supply-chain", label: "Supply Chain" },
+                      { id: "marketing", label: "Marketing & Growth" },
+                      { id: "hr", label: "Human Resources" },
+                    ].map((t) => {
+                      const isActive = selectedThemeFilter === t.id;
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => setSelectedThemeFilter(t.id)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                            isActive
+                              ? "bg-slate-900 text-white shadow-2xs"
+                              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                          }`}
+                        >
+                          {t.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
-                  <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Total Experience</div>
-                  <div className="text-lg font-black text-slate-900">
-                    {profileQuery.data?.experience?.length ? `${Math.round(profileQuery.data.experience.length * 2.5 * 10) / 10} Years` : "Experienced"}
-                  </div>
-                  <div className="text-xs text-slate-500">{profileQuery.data?.experience?.length ?? 0} recorded roles</div>
-                </div>
+              {/* Resumes Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {(resumesQuery.data?.resumes || [
+                  {
+                    id: "master-cv",
+                    name: profileQuery.data?.first_name ? `${profileQuery.data.first_name}_Master_Resume_CV` : "Master_Resume_CV",
+                    display_title: `${profileQuery.data?.first_name || "Primary"} Master CV`,
+                    theme_id: "master",
+                    theme_name: "Master CV",
+                    template_id: "classic" as const,
+                    target_roles: ["Executive Strategy", "Operations"],
+                    experience_count: profileQuery.data?.experience?.length ?? 3,
+                    skills_count: profileQuery.data?.skills?.length ?? 20,
+                    education_count: profileQuery.data?.education?.length ?? 2,
+                    last_updated: "Today",
+                    is_master: true,
+                    description: "Your master source of truth with 100% verified facts.",
+                  }
+                ])
+                  .filter((r) => selectedThemeFilter === "all" || r.theme_id === selectedThemeFilter)
+                  .map((resume: ResumeItem) => (
+                    <div
+                      key={resume.id}
+                      className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs flex flex-col justify-between space-y-4 hover:border-blue-400 transition-all group"
+                    >
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span
+                            className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-wider ${
+                              resume.is_master
+                                ? "bg-blue-100 text-blue-800"
+                                : "bg-indigo-100 text-indigo-800"
+                            }`}
+                          >
+                            {resume.is_master ? "Master CV" : resume.theme_name}
+                          </span>
+                          <span className="text-[11px] font-bold text-slate-400">
+                            {resume.template_id} template
+                          </span>
+                        </div>
 
-                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
-                  <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Confirmed Skills</div>
-                  <div className="text-lg font-black text-slate-900">
-                    {profileQuery.data?.skills?.length ?? 0} Skills
-                  </div>
-                  <div className="text-xs text-slate-500">100% verified facts (zero hallucination)</div>
-                </div>
+                        <div>
+                          <h3 className="text-base font-extrabold text-slate-900 group-hover:text-blue-700 transition-colors">
+                            {resume.display_title || resume.name}
+                          </h3>
+                          <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
+                            {resume.description || `Optimized for ${resume.theme_name} roles.`}
+                          </p>
+                        </div>
 
-                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
-                  <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Education & Degrees</div>
-                  <div className="text-lg font-black text-slate-900">
-                    {profileQuery.data?.education?.length ?? 0} Degrees
-                  </div>
-                  <div className="text-xs text-slate-500">{profileQuery.data?.education?.[0]?.school_name || "Verified credentials"}</div>
-                </div>
-              </div>
+                        {/* Metrics Pills */}
+                        <div className="flex flex-wrap gap-2 text-[11px] font-semibold text-slate-600">
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100">
+                            {resume.experience_count} roles
+                          </span>
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100">
+                            {resume.skills_count} skills
+                          </span>
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100">
+                            {resume.education_count} degrees
+                          </span>
+                        </div>
+                      </div>
 
-              {/* Skills Pill Cloud */}
-              <div className="space-y-2">
-                <div className="text-xs font-bold text-slate-800">Key Verified Skills</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {profileQuery.data?.skills?.slice(0, 20).map((s, idx) => (
-                    <span key={idx} className="px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 text-xs font-medium">
-                      {s.skill_name}
-                    </span>
+                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                        {resume.is_master ? (
+                          <Link
+                            href="/profile"
+                            className="text-xs font-bold text-slate-600 hover:text-slate-900 inline-flex items-center gap-1"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            Edit Facts
+                          </Link>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!confirm(`Are you sure you want to delete "${resume.name}"?`)) return;
+                              fetch(`${API_URL}/resumes/${resume.id}`, { method: "DELETE" })
+                                .then(() => {
+                                  toast.success("Resume deleted");
+                                  queryClient.invalidateQueries({ queryKey: queryKeys.resumes });
+                                })
+                                .catch(() => toast.error("Could not delete resume"));
+                            }}
+                            className="text-xs font-bold text-slate-400 hover:text-rose-600 inline-flex items-center gap-1"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Delete
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsTailorInputModalOpen(true);
+                          }}
+                          className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs inline-flex items-center gap-1.5 shadow-2xs"
+                        >
+                          <Wand2 className="w-3.5 h-3.5" />
+                          Tailor From This CV
+                        </button>
+                      </div>
+                    </div>
                   ))}
-                </div>
               </div>
             </div>
           )}
@@ -1999,9 +2125,26 @@ function GeneratePageContent() {
             isOpen={isPickResumeModalOpen}
             onClose={() => setIsPickResumeModalOpen(false)}
             resumeName={profileQuery.data?.first_name ? `${profileQuery.data.first_name}_${profileQuery.data.last_name || ""}_CV` : "Master_Resume_CV"}
-            onSelectResume={() => {
+            onUploadNewResume={() => {
+              setIsPickResumeModalOpen(false);
+              setIsOnboardingModalOpen(true);
+            }}
+            onSelectResume={(resumeName) => {
               setIsPickResumeModalOpen(false);
               setIsTailorInputModalOpen(true);
+            }}
+          />
+
+          {/* Fresh CV Onboarding / Upload Modal */}
+          <ResumeOnboardingModal
+            isOpen={isOnboardingModalOpen}
+            onClose={() => setIsOnboardingModalOpen(false)}
+            onSuccess={async (parsed) => {
+              if (parsed) {
+                await queryClient.invalidateQueries({ queryKey: queryKeys.profile });
+                await queryClient.invalidateQueries({ queryKey: queryKeys.resumes });
+                toast.success("Fresh resume parsed and added to your portfolio!");
+              }
             }}
           />
 

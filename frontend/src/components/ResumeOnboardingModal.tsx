@@ -117,10 +117,12 @@ export function ResumeOnboardingModal({ isOpen, onClose, onSuccess }: ResumeOnbo
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="w-full max-w-3xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200 relative">
         <button
+          type="button"
           onClick={onClose}
-          className="absolute top-5 right-5 p-2 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors z-10"
+          aria-label="Close"
+          className="absolute top-4 right-4 z-50 w-9 h-9 rounded-full bg-white/95 hover:bg-slate-100 text-slate-500 hover:text-slate-900 border border-slate-200 shadow-sm flex items-center justify-center transition-all cursor-pointer"
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4" />
         </button>
 
         {/* ── STAGE 1: UPLOAD (NextRaise benchmark: upload resume.png) ── */}

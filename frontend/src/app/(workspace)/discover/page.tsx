@@ -214,6 +214,42 @@ export default function DiscoverJobsPage() {
         </div>
       </div>
 
+      {/* ── Career Themes Quick Filters ── */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-1">
+          Themes:
+        </span>
+        {[
+          { label: "All Roles", value: "" },
+          { label: "Strategy & Transformation", value: "Strategy" },
+          { label: "Finance & FP&A", value: "Finance" },
+          { label: "Product", value: "Product" },
+          { label: "Tech & Engineering", value: "Software" },
+          { label: "Enterprise Sales", value: "Sales" },
+          { label: "Business Development", value: "Partnerships" },
+          { label: "Operations & BizOps", value: "Operations" },
+          { label: "Supply Chain", value: "Supply Chain" },
+          { label: "Marketing", value: "Marketing" },
+          { label: "HR & People", value: "HR" },
+        ].map((t) => {
+          const isActive = keyword === t.value || (!keyword && !t.value);
+          return (
+            <button
+              key={t.label}
+              type="button"
+              onClick={() => setKeyword(t.value)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                isActive
+                  ? "bg-blue-600 text-white shadow-2xs"
+                  : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+              }`}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
       {/* ── Main Content Grid: Job Cards Feed + Right Summary Rail ── */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
         {/* Left 3 Columns: Job Cards Feed */}

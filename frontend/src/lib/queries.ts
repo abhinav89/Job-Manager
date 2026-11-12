@@ -125,6 +125,35 @@ export type ApplicationDocument = {
   } | null;
 };
 
+export type CareerTheme = {
+  id: string;
+  name: string;
+  category: string;
+  icon?: string;
+  description: string;
+  target_roles: string[];
+  recommended_template: ResumeTemplate;
+  is_custom?: boolean;
+};
+
+export type ResumeItem = {
+  id: string;
+  name: string;
+  display_title: string;
+  theme_id: string;
+  theme_name: string;
+  template_id: ResumeTemplate;
+  target_roles: string[];
+  experience_count: number;
+  skills_count: number;
+  education_count: number;
+  last_updated: string;
+  is_master: boolean;
+  summary?: string;
+  notes?: string;
+  description?: string;
+};
+
 export class ApiQueryError extends Error {
   constructor(message: string, readonly status: number) {
     super(message);
@@ -151,6 +180,8 @@ export const queryKeys = {
   trackedCompanies: ["scraper", "companies"] as const,
   trackerDetails: (id: number) => ["workspace-data", "tracker", "details", id] as const,
   applicationDocuments: (id: number) => ["workspace-data", "tracker", "documents", id] as const,
+  resumes: ["workspace-data", "resumes"] as const,
+  themes: ["workspace-data", "themes"] as const,
 };
 
 export const workspaceQueryOptions = () => queryOptions({
@@ -263,6 +294,20 @@ export function useApplicationDocuments(id: number) {
   return useQuery({
     queryKey: queryKeys.applicationDocuments(id),
     queryFn: () => readJson<ApplicationDocument[]>(`/tracker/${id}/documents`, "Unable to load application documents."),
+  });
+}
+
+export function useResumes() {
+  return useQuery<{ status: string; total: number; resumes: ResumeItem[] }>({
+    queryKey: queryKeys.resumes,
+    queryFn: () => readJson<{ status: string; total: number; resumes: ResumeItem[] }>("/resumes", "Unable to load resumes."),
+  });
+}
+
+export function useThemes() {
+  return useQuery<{ status: string; themes: CareerTheme[] }>({
+    queryKey: queryKeys.themes,
+    queryFn: () => readJson<{ status: string; themes: CareerTheme[] }>("/resumes/themes", "Unable to load career themes."),
   });
 }
 
