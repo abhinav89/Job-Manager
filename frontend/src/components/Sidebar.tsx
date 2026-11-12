@@ -25,6 +25,7 @@ import {
   Mail,
   LogIn,
   LogOut,
+  CreditCard,
 } from "lucide-react";
 import { useWorkspace, useProfile, useTrackerJobs } from "@/lib/queries";
 import { useAuth } from "@/lib/authContext";
@@ -64,7 +65,7 @@ export default function Sidebar() {
 
   const navItems = [
     { label: "Dashboard", href: "/dashboard", icon: <LayoutDashboard className="w-4 h-4" /> },
-    { label: "Find Jobs", href: "/discover", icon: <Search className="w-4 h-4" />, badge: "24 new" },
+    { label: "Find Jobs", href: "/discover", icon: <Search className="w-4 h-4" />, badge: "1.7k+ new" },
     { label: "Job Tracker", href: "/tracker", icon: <Kanban className="w-4 h-4" />, count: trackerJobs.length },
     { label: "My Resumes", href: "/generate?tab=original", icon: <FileText className="w-4 h-4" /> },
   ];
@@ -75,6 +76,7 @@ export default function Sidebar() {
     { label: "Career Profile", href: "/profile", icon: <User className="w-4 h-4" /> },
     { label: "Interview Prep", href: "#", icon: <MessageSquare className="w-4 h-4" />, badge: "Upcoming", isFuture: true },
     { label: "Career Agent", href: "#", icon: <Bot className="w-4 h-4" />, badge: "Upcoming", isFuture: true },
+    { label: "Pricing & Plans", href: "/pricing", icon: <CreditCard className="w-4 h-4" /> },
     { label: "Settings", href: "/settings", icon: <Settings className="w-4 h-4" /> },
   ];
 

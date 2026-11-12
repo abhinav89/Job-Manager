@@ -41,6 +41,8 @@ graphify-out/
 # Local runtime and build artifacts
 .venv/
 data/
+!ai-service/cv_tailor/data/
+!ai-service/cv_tailor/data/**
 *.egg-info/
 .pytest_cache/
 *.sqlite3

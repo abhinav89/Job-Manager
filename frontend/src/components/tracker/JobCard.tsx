@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { Bookmark, ExternalLink, Sparkles, ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Building2, MapPin, Briefcase, Clock, DollarSign } from "lucide-react";
+import { Bookmark, ExternalLink, Sparkles, ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Building2, MapPin, Briefcase, Clock, DollarSign, FileText, Copy, Check } from "lucide-react";
+import { toast } from "sonner";
 
 export interface JobCardData {
   id?: string | number;
@@ -36,12 +37,14 @@ interface JobCardProps {
   job: JobCardData;
   onSaveToTracker?: (job: JobCardData, status: "To Review" | "To Apply") => void;
   onTailorAndApply?: (job: JobCardData) => void;
+  onDirectApply?: (job: JobCardData) => void;
   isSaved?: boolean;
 }
 
-export function JobCard({ job, onSaveToTracker, onTailorAndApply, isSaved = false }: JobCardProps) {
+export function JobCard({ job, onSaveToTracker, onTailorAndApply, onDirectApply, isSaved = false }: JobCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [saved, setSaved] = useState(isSaved);
+  const [copiedDesc, setCopiedDesc] = useState(false);
 
   const score = job.match_score ?? 7.5;
   const label = job.match_label || (score >= 8.5 ? "STRONG" : score >= 7.0 ? "GOOD" : score >= 5.5 ? "FAIR" : "PARTIAL");
@@ -163,11 +166,11 @@ export function JobCard({ job, onSaveToTracker, onTailorAndApply, isSaved = fals
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={handleSave}
-              className={`p-2.5 rounded-xl border text-xs font-medium transition-all ${
+              className={`p-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
                 saved
                   ? "bg-slate-100 text-slate-800 border-slate-300"
                   : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-900"
@@ -183,7 +186,7 @@ export function JobCard({ job, onSaveToTracker, onTailorAndApply, isSaved = fals
                 target="_blank"
                 rel="noopener noreferrer"
                 className="p-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-slate-900 text-xs font-medium transition-all"
-                title="Open employer job posting"
+                title="Open employer job posting directly"
               >
                 <ExternalLink className="w-4 h-4" />
               </a>
@@ -191,22 +194,32 @@ export function JobCard({ job, onSaveToTracker, onTailorAndApply, isSaved = fals
 
             <button
               type="button"
+              onClick={() => onDirectApply ? onDirectApply(job) : null}
+              className="px-3.5 py-2.5 rounded-xl border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-bold text-xs shadow-2xs transition-all inline-flex items-center gap-1.5 cursor-pointer"
+              title="Apply with selected resume theme without tailoring"
+            >
+              <FileText className="w-3.5 h-3.5 text-slate-600" />
+              Direct Apply
+            </button>
+
+            <button
+              type="button"
               onClick={() => onTailorAndApply ? onTailorAndApply(job) : null}
-              className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-sm hover:shadow transition-all inline-flex items-center gap-1.5"
+              className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm hover:shadow transition-all inline-flex items-center gap-1.5 cursor-pointer"
             >
               <Sparkles className="w-3.5 h-3.5" />
-              Tailor & Apply
+              Tailor &amp; Apply
             </button>
           </div>
         </div>
       </div>
 
-      {/* Expanded Match Evidence & Gaps Drawer */}
+      {/* Expanded Match Evidence & Full Job Description */}
       {expanded && (
-        <div className="border-t border-slate-100 bg-slate-50/80 p-5 space-y-4 text-xs animate-in fade-in duration-150">
+        <div className="border-t border-slate-100 bg-slate-50/80 p-5 sm:p-6 space-y-5 text-xs animate-in fade-in duration-150">
           {/* Fit Summary */}
           {job.match_analysis && (
-            <div className="space-y-2">
+            <div className="space-y-3 bg-white p-4 rounded-xl border border-slate-200/80">
               <p className="font-medium text-slate-800">
                 <span className="font-bold text-slate-900">Match Summary: </span>
                 {job.match_analysis.summary}
@@ -219,9 +232,9 @@ export function JobCard({ job, onSaveToTracker, onTailorAndApply, isSaved = fals
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                     Confirmed Evidence Supporting Match:
                   </div>
-                  <ul className="list-disc list-inside space-y-0.5 text-slate-600 pl-2">
+                  <ul className="list-disc list-inside space-y-1 text-slate-600 pl-2">
                     {job.match_analysis.pros.map((pro, idx) => (
-                      <li key={idx}>{pro}</li>
+                      <li key={idx} className="leading-relaxed">{pro}</li>
                     ))}
                   </ul>
                 </div>
@@ -234,9 +247,9 @@ export function JobCard({ job, onSaveToTracker, onTailorAndApply, isSaved = fals
                     <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
                     Potential Gaps / Detail to Confirm:
                   </div>
-                  <ul className="list-disc list-inside space-y-0.5 text-slate-600 pl-2">
+                  <ul className="list-disc list-inside space-y-1 text-slate-600 pl-2">
                     {job.match_analysis.cons.map((con, idx) => (
-                      <li key={idx}>{con}</li>
+                      <li key={idx} className="leading-relaxed">{con}</li>
                     ))}
                   </ul>
                 </div>
@@ -244,13 +257,47 @@ export function JobCard({ job, onSaveToTracker, onTailorAndApply, isSaved = fals
             </div>
           )}
 
-          {/* Description Snippet */}
+          {/* Full Job Description */}
           {job.job_description && (
-            <div className="pt-2 border-t border-slate-200/60">
-              <p className="font-semibold text-slate-800 mb-1">Job Description Excerpt:</p>
-              <p className="text-slate-600 whitespace-pre-line line-clamp-4 leading-relaxed font-sans">
+            <div className="pt-2 bg-white p-5 rounded-2xl border border-slate-200/90 space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <p className="font-black text-slate-900 text-sm flex items-center gap-1.5">
+                  <FileText className="w-4 h-4 text-blue-600" />
+                  Full Job Description &amp; Requirements
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(job.job_description || "");
+                    setCopiedDesc(true);
+                    toast.success("Job description copied to clipboard!");
+                    setTimeout(() => setCopiedDesc(false), 2000);
+                  }}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                >
+                  {copiedDesc ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                  {copiedDesc ? "Copied" : "Copy JD"}
+                </button>
+              </div>
+
+              <div className="text-slate-700 whitespace-pre-line leading-relaxed font-sans text-xs max-h-[500px] overflow-y-auto pr-2 space-y-2">
                 {job.job_description}
-              </p>
+              </div>
+
+              {job.job_url && (
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-400">Apply link verified from employer portal</span>
+                  <a
+                    href={job.job_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-bold text-blue-600 hover:text-blue-800 inline-flex items-center gap-1"
+                  >
+                    Open Official Application Page
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              )}
             </div>
           )}
         </div>

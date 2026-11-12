@@ -66,9 +66,10 @@ INSTITUTION_KEYWORDS = [
     "stanford", "iisc", "fms", "xlri", "isb", "spjimr", "mesra"
 ]
 
-MONTHS_REGEX = r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?'
+MONTHS_REGEX = r'(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?'
+DATE_CHUNK = rf'(?:(?:0?[1-9]|1[0-2])[\/.-](?:19|20)?\d{{2}}|{MONTHS_REGEX}\s+(?:19|20)?\d{{2}}|{MONTHS_REGEX}\s*\'?\d{{2}}|\b(?:19|20)\d{{2}}\b)'
 DATE_PATTERN = re.compile(
-    rf'({MONTHS_REGEX}\s+\d{{4}}\s*(?:-|–|—|to)\s*(?:Present|Current|Ongoing|{MONTHS_REGEX}\s+\d{{4}}|\d{{4}})|(?:\b(?:19|20)\d{{2}}\b\s*(?:-|–|—|to)\s*(?:Present|Current|Ongoing|\b(?:19|20)\d{{2}}\b)))',
+    rf'({DATE_CHUNK}\s*(?:-|–|—|to)\s*(?:Present|Current|Ongoing|Now|{DATE_CHUNK}))',
     re.IGNORECASE
 )
 
@@ -87,9 +88,33 @@ def parse_resume_text_heuristic(text: str, extra_urls: Optional[List[str]] = Non
     email_match = re.search(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', text)
     email = email_match.group(0).strip() if email_match else ""
 
-    # Phone: supports +91 8527961709, (555) 123-4567, 9876543210, etc.
-    phone_match = re.search(r'(\+?\d{1,4}[-.\s]?)?([6-9]\d{9}|\d{3}[-.\s]?\d{3}[-.\s]?\d{4}|\d{10,12})', text)
-    mobile_no = phone_match.group(0).strip() if phone_match else ""
+    # Phone: supports explicit labels, +91 85279 61709, +91-8527961709, 85279 61709, (555) 123-4567, etc.
+    mobile_no = ""
+    phone_label_match = re.search(
+        r'(?:phone|mobile|cell|contact|tel|m)[\s.:#*-]*([+]?[\d\s().-]{9,22}\d)',
+        text,
+        re.IGNORECASE
+    )
+    if phone_label_match:
+        cand = phone_label_match.group(1).strip()
+        digits = re.sub(r'\D', '', cand)
+        if 10 <= len(digits) <= 15:
+            mobile_no = cand
+
+    if not mobile_no:
+        # Check Indian mobile (10 digits starting with 6-9, with optional +91 and spaces/dashes)
+        india_mobile_match = re.search(r'(?:\+?91[\s.-]?)?([6-9]\d{4}[\s.-]?\d{5}|[6-9]\d{9})', text)
+        if india_mobile_match:
+            cand = india_mobile_match.group(0).strip()
+            digits = re.sub(r'\D', '', cand)
+            if 10 <= len(digits) <= 12:
+                mobile_no = cand
+
+    if not mobile_no:
+        # General international/US phone match
+        phone_match = re.search(r'(\+?\d{1,4}[\s.-]?)?(\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}|\d{10,12})', text)
+        if phone_match:
+            mobile_no = phone_match.group(0).strip()
 
     # LinkedIn: check text first, then extra_urls (from PDF Annotations)
     linkedin = ""
@@ -173,72 +198,109 @@ def parse_resume_text_heuristic(text: str, extra_urls: Optional[List[str]] = Non
             
             # Check if this line is an experience header
             # Formats:
-            # 1. "DealOS.in  -  Founder                     Mar 2026 - Present"
-            # 2. "Aon India Insurance Brokers  -  Vice President, Finance & Strategy Oct 2020 - Jul 2022"
-            # 3. "Company | Title | Date"
-            if date_match and ("-" in line or "–" in line or "—" in line or "  " in line):
-                if current_exp:
-                    experience_list.append({
-                        "company": current_exp.get("company", "Company")[:100],
-                        "job_title": current_exp.get("job_title", "Role")[:100],
-                        "location": current_exp.get("location", "")[:100],
-                        "date_range": current_exp.get("date_range", "")[:50],
-                        "description": "\n".join(current_exp.get("bullets", []))[:2500]
-                    })
-
+            # 1. "DealOS.in | Founder | 04/2026 - Present"
+            # 2. "Founder - DealOS.in (04/2026 – Present)"
+            # 3. "Company | Title | Date" or Date on its own line after Title/Company
+            if date_match:
                 date_str = date_match.group(1).strip()
                 header_text = line[:date_match.start()].strip()
                 if not header_text and date_match.end() < len(line):
                     header_text = line[date_match.end():].strip()
+                header_text = header_text.strip(" ,|–-—()")
 
-                company = ""
-                job_title = ""
-                # Split company and role by delimiter
-                split_delims = [" - ", " – ", " — ", " | ", "  "]
-                found_split = False
-                for delim in split_delims:
-                    if delim in header_text:
-                        parts = header_text.split(delim, 1)
-                        company = parts[0].strip()
-                        job_title = parts[1].strip()
-                        found_split = True
-                        break
+                # If date is on a line by itself, inspect previous line for company/title
+                if not header_text and i > 0:
+                    prev_line = exp_lines[i - 1].strip()
+                    if not prev_line.startswith(('*', '-', '•', '·', '>')) and len(prev_line) < 140:
+                        header_text = prev_line.strip(" ,|–-—()")
 
-                if not found_split:
-                    if any(kw in header_text.lower() for kw in JOB_TITLE_KEYWORDS):
-                        job_title = header_text
+                if header_text:
+                    if current_exp:
+                        experience_list.append({
+                            "company": current_exp.get("company", "Company")[:100],
+                            "job_title": current_exp.get("job_title", "Role")[:100],
+                            "location": current_exp.get("location", "")[:100],
+                            "date_range": current_exp.get("date_range", "")[:50],
+                            "description": "\n".join(current_exp.get("bullets", []))[:2500]
+                        })
+
+                    company = ""
+                    job_title = ""
+                    extracted_loc = ""
+
+                    # Check for multi-part delimiter: " | ", " - ", " – ", " — ", ", ", "  "
+                    parts = []
+                    for delim in [" | ", " – ", " — ", " - ", " at ", " @ ", ", ", "  "]:
+                        if delim in header_text:
+                            candidate_parts = [p.strip(" ,|–-—()") for p in header_text.split(delim) if p.strip(" ,|–-—()")]
+                            if len(candidate_parts) >= 2:
+                                parts = candidate_parts
+                                break
+
+                    if parts:
+                        # If 3+ parts (e.g. [Company, Title, Location])
+                        non_loc_parts = []
+                        for p in parts:
+                            if any(c in p.lower() for c in KNOWN_CITIES):
+                                extracted_loc = p
+                            else:
+                                non_loc_parts.append(p)
+                        if len(non_loc_parts) >= 2:
+                            p0 = non_loc_parts[0]
+                            p1 = non_loc_parts[1]
+                        else:
+                            p0 = parts[0]
+                            p1 = parts[1]
+
+                        p0_title = any(re.search(r'\b' + re.escape(kw) + r'\b', p0, re.IGNORECASE) for kw in JOB_TITLE_KEYWORDS)
+                        p1_title = any(re.search(r'\b' + re.escape(kw) + r'\b', p1, re.IGNORECASE) for kw in JOB_TITLE_KEYWORDS)
+
+                        if p0_title and not p1_title:
+                            job_title = p0
+                            company = p1
+                        elif p1_title and not p0_title:
+                            job_title = p1
+                            company = p0
+                        else:
+                            company = p0
+                            job_title = p1
                     else:
-                        company = header_text
+                        if any(kw in header_text.lower() for kw in JOB_TITLE_KEYWORDS):
+                            job_title = header_text
+                        else:
+                            company = header_text
 
-                # Check if next line contains Location | Focus/Tagline
-                location = ""
-                focus = ""
-                if i + 1 < len(exp_lines):
-                    next_line = exp_lines[i + 1]
-                    is_bullet = next_line.startswith(('*', '-', '•', '·', '>'))
-                    is_next_date = bool(DATE_PATTERN.search(next_line))
-                    
-                    if not is_bullet and not is_next_date and len(next_line) < 130:
-                        if "|" in next_line:
-                            loc_parts = next_line.split("|", 1)
-                            location = loc_parts[0].strip()
-                            focus = loc_parts[1].strip()
-                            i += 1  # Consume next line
-                        elif any(city in next_line.lower() for city in KNOWN_CITIES):
-                            location = next_line.strip()
-                            i += 1  # Consume next line
+                    # Check if next line contains Location | Focus/Tagline
+                    location = extracted_loc
+                    focus = ""
+                    if i + 1 < len(exp_lines):
+                        next_line = exp_lines[i + 1]
+                        is_bullet = next_line.startswith(('*', '-', '•', '·', '>'))
+                        is_next_date = bool(DATE_PATTERN.search(next_line))
+                        
+                        if not is_bullet and not is_next_date and len(next_line) < 130:
+                            if "|" in next_line:
+                                loc_parts = next_line.split("|", 1)
+                                if not location:
+                                    location = loc_parts[0].strip()
+                                focus = loc_parts[1].strip()
+                                i += 1  # Consume next line
+                            elif any(city in next_line.lower() for city in KNOWN_CITIES):
+                                if not location:
+                                    location = next_line.strip()
+                                i += 1  # Consume next line
 
-                bullets = []
-                if focus:
-                    bullets.append(f"• Domain: {focus}")
+                    bullets = []
+                    if focus:
+                        bullets.append(f"• Domain: {focus}")
 
-                current_exp = {
-                    "company": company or "Organization",
-                    "job_title": job_title or "Professional",
-                    "location": location,
-                    "date_range": date_str,
-                    "bullets": bullets
-                }
+                    current_exp = {
+                        "company": company or "Organization",
+                        "job_title": job_title or "Professional",
+                        "location": location,
+                        "date_range": date_str,
+                        "bullets": bullets
+                    }
             elif current_exp is not None:
                 is_bullet = line.startswith(('*', '-', '•', '·', '>'))
                 clean_bullet = line.lstrip('*-•·> ').strip()

@@ -18,17 +18,21 @@ import {
   FileText,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useRepositoryJobs, useProfile } from "@/lib/queries";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys, useRepositoryJobs, useProfile } from "@/lib/queries";
 import { API_URL } from "@/lib/api";
 import { JobCard } from "@/components/tracker/JobCard";
 import { FilterDrawer, FilterState, defaultFilterState } from "@/components/tracker/FilterDrawer";
+import { DirectApplyModal } from "@/components/tracker/DirectApplyModal";
 
 export default function DiscoverJobsPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { data: profile } = useProfile();
   const [keyword, setKeyword] = useState("");
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
   const [isAddJobModalOpen, setIsAddJobModalOpen] = useState(false);
+  const [selectedJobForDirectApply, setSelectedJobForDirectApply] = useState<any | null>(null);
   const [filterState, setFilterState] = useState<FilterState>(defaultFilterState);
 
   // Manual intake state
@@ -47,7 +51,7 @@ export default function DiscoverJobsPage() {
 
   const jobs = repoData?.jobs || [];
 
-  const handleSaveToTracker = async (job: any, status: "To Review" | "To Apply") => {
+  const handleSaveToTracker = async (job: any, status: "To Review" | "To Apply" = "To Review") => {
     try {
       const res = await fetch(`${API_URL}/scraper/import`, {
         method: "POST",
@@ -67,17 +71,49 @@ export default function DiscoverJobsPage() {
           match_analysis: job.match_analysis,
         }),
       });
-      if (res.ok) {
-        toast.success(`Saved "${job.job_title}" to Tracker under ${status}!`);
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.detail || "Could not save to tracker");
       }
-    } catch {
-      toast.error("Failed to save job to tracker.");
+      queryClient.invalidateQueries({ queryKey: queryKeys.tracker });
+      toast.success(`Saved "${job.job_title}" to Tracker under ${status}!`);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to save job to tracker.");
     }
   };
 
-  const handleTailorAndApply = (job: any) => {
-    handleSaveToTracker(job, "To Apply");
-    router.push(`/generate?title=${encodeURIComponent(job.job_title)}&company=${encodeURIComponent(job.company_name)}`);
+  const handleTailorAndApply = async (job: any) => {
+    try {
+      if (typeof window !== "undefined" && job.job_description) {
+        sessionStorage.setItem("tailor_jd", job.job_description);
+        sessionStorage.setItem("tailor_job_title", job.job_title);
+        sessionStorage.setItem("tailor_company", job.company_name);
+      }
+      const res = await fetch(`${API_URL}/scraper/import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          company_name: job.company_name,
+          job_title: job.job_title,
+          job_url: job.job_url,
+          source: job.source,
+          job_description: job.job_description,
+          location: job.location,
+          salary_range: job.salary_range,
+          job_type: job.job_type,
+          status: "To Apply",
+          priority: "High",
+          match_score: job.match_score ? Math.round(job.match_score) : null,
+          match_analysis: job.match_analysis,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      queryClient.invalidateQueries({ queryKey: queryKeys.tracker });
+      const jobIdParam = data?.job_id ? `&job_id=${data.job_id}` : "";
+      router.push(`/generate?tab=tailored&title=${encodeURIComponent(job.job_title)}&company=${encodeURIComponent(job.company_name)}${jobIdParam}`);
+    } catch {
+      router.push(`/generate?tab=tailored&title=${encodeURIComponent(job.job_title)}&company=${encodeURIComponent(job.company_name)}`);
+    }
   };
 
   const handleManualIntake = async (e: React.FormEvent) => {
@@ -214,8 +250,8 @@ export default function DiscoverJobsPage() {
         </div>
       </div>
 
-      {/* ── Career Themes Quick Filters ── */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+      {/* ── Career Themes Quick Filters (Clean Wrapped Pills - No Scrollbar) ── */}
+      <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs">
         <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-1">
           Themes:
         </span>
@@ -238,7 +274,7 @@ export default function DiscoverJobsPage() {
               key={t.label}
               type="button"
               onClick={() => setKeyword(t.value)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                 isActive
                   ? "bg-blue-600 text-white shadow-2xs"
                   : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
@@ -272,7 +308,7 @@ export default function DiscoverJobsPage() {
                   setKeyword("");
                   setFilterState(defaultFilterState);
                 }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold"
+                className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold cursor-pointer"
               >
                 Reset filters
               </button>
@@ -284,6 +320,7 @@ export default function DiscoverJobsPage() {
                 job={job}
                 onSaveToTracker={handleSaveToTracker}
                 onTailorAndApply={handleTailorAndApply}
+                onDirectApply={(j) => setSelectedJobForDirectApply(j)}
               />
             ))
           )}
@@ -421,6 +458,13 @@ export default function DiscoverJobsPage() {
           </div>
         </div>
       )}
+
+      {/* ── Direct Apply with Selected Resume Theme Modal ── */}
+      <DirectApplyModal
+        isOpen={Boolean(selectedJobForDirectApply)}
+        job={selectedJobForDirectApply}
+        onClose={() => setSelectedJobForDirectApply(null)}
+      />
     </div>
   );
 }

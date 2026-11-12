@@ -10,6 +10,7 @@ import json
 import logging
 import re
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -895,23 +896,43 @@ class JobRepositoryService:
     def __init__(self):
         from cv_tailor.config import data_dir
         self._storage_path = data_dir() / "repository_jobs.json"
-        self._jobs: List[Dict[str, Any]] = list(SEEDED_REPOSITORY_JOBS)
+        self._package_path = Path(__file__).resolve().parent.parent / "data" / "repository_jobs.json"
+        self._jobs: List[Dict[str, Any]] = []
         self._companies: List[Dict[str, Any]] = list(MASTER_COMPANIES)
         self._load_from_disk()
 
     def _load_from_disk(self):
         try:
+            # 1. Prefer packaged data/repository_jobs.json (contains all 1,700+ verified jobs)
+            loaded_jobs = []
+            if self._package_path.exists():
+                with open(self._package_path, "r", encoding="utf-8") as f:
+                    loaded_jobs = json.load(f)
+
+            # 2. Merge any user-added jobs from local storage path if present
             if self._storage_path.exists():
                 with open(self._storage_path, "r", encoding="utf-8") as f:
                     saved = json.load(f)
                     if isinstance(saved, list):
-                        seen = {j.get("id") for j in self._jobs if j.get("id")}
-                        for item in saved:
-                            if item.get("id") and item.get("id") not in seen:
-                                seen.add(item.get("id"))
-                                self._jobs.append(item)
+                        if not loaded_jobs:
+                            loaded_jobs = saved
+                        else:
+                            seen = {j.get("id") or j.get("fingerprint") for j in loaded_jobs if j.get("id") or j.get("fingerprint")}
+                            for item in saved:
+                                key = item.get("id") or item.get("fingerprint")
+                                if key and key not in seen:
+                                    seen.add(key)
+                                    loaded_jobs.append(item)
+
+            if loaded_jobs:
+                self._jobs = loaded_jobs
+            else:
+                self._jobs = list(SEEDED_REPOSITORY_JOBS)
+            logger.info(f"JobRepositoryService initialized with {len(self._jobs)} jobs.")
         except Exception as e:
             logger.error(f"Error loading repository jobs from disk: {e}")
+            if not self._jobs:
+                self._jobs = list(SEEDED_REPOSITORY_JOBS)
 
     def _save_to_disk(self):
         try:
@@ -956,7 +977,15 @@ class JobRepositoryService:
             # Location filter
             if location:
                 loc_q = location.strip().lower()
-                if loc_q not in (job.get("location") or "").lower():
+                job_loc = (job.get("location") or "").lower()
+                if loc_q in ["india", "in"]:
+                    is_in_india = "india" in job_loc or any(c in job_loc for c in [
+                        "mumbai", "delhi", "bengaluru", "bangalore", "hyderabad", "pune",
+                        "gurgaon", "gurugram", "noida", "kolkata", "chennai", "ahmedabad", "pan india"
+                    ])
+                    if not is_in_india:
+                        continue
+                elif loc_q not in job_loc:
                     continue
 
             # Work model filter

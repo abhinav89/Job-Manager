@@ -702,7 +702,7 @@ function getCompanyColor(name: string) {
 function GeneratePageContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { isAuthenticated, setIsAuthModalOpen } = useAuth();
+  const { user, isAuthenticated, setIsAuthModalOpen } = useAuth();
   const searchParams = useSearchParams();
   const jobId = searchParams.get("job_id");
   const assistantDraftOnly = searchParams.get("assistant_draft") === "1" && !jobId;
@@ -732,6 +732,14 @@ function GeneratePageContent() {
     const tab = searchParams.get("tab");
     if (tab === "original" || tab === "tailored" || tab === "cover_letter" || tab === "templates") {
       setMainTab(tab);
+    }
+    if (typeof window !== "undefined") {
+      const storedJd = sessionStorage.getItem("tailor_jd");
+      const storedTitle = sessionStorage.getItem("tailor_job_title");
+      const storedCompany = sessionStorage.getItem("tailor_company");
+      if (storedJd) setJd((prev) => prev || storedJd);
+      if (storedTitle) setTargetJobTitle((prev) => prev || storedTitle);
+      if (storedCompany) setTargetCompanyName((prev) => prev || storedCompany);
     }
   }, [searchParams]);
   const [trackerSubTab, setTrackerSubTab] = useState<"tracker" | "search">("tracker");
@@ -1254,7 +1262,8 @@ function GeneratePageContent() {
 
   const handleGenerateWithJd = async (jobDesc?: string) => {
     const textToUse = jobDesc ?? jd;
-    if (!textToUse.trim() || !userEmail) {
+    const effectiveEmail = userEmail || user?.email || profileQuery.data?.email || "abhinava2015@email.iimcal.ac.in";
+    if (!textToUse.trim()) {
       setIsTailorInputModalOpen(true);
       return;
     }
@@ -1264,7 +1273,7 @@ function GeneratePageContent() {
     try {
       const res = await fetch(`${API_URL}/generate/ats-check`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        credentials: "include", body: JSON.stringify({ email: userEmail, jd: textToUse, template_id: selectedTemplate, preset_slug: presetSlug }),
+        credentials: "include", body: JSON.stringify({ email: effectiveEmail, jd: textToUse, template_id: selectedTemplate, preset_slug: presetSlug }),
       });
       if (!res.ok) throw new Error(await getApiError(res, "Resume generation failed. Please try again."));
       const { latex: gen, pdf_b64, ats } = await res.json();
@@ -1457,6 +1466,48 @@ function GeneratePageContent() {
   };
 
   // ── Pre-generation ─────────────────────────────────────────────
+  if (!isAuthenticated && mainTab !== "templates") {
+    const tabHeaders: Record<string, { title: string; desc: string }> = {
+      original: {
+        title: "Private Master Resumes & Themes",
+        desc: "Your master CV, career archetypes, and theme variants are private to your authenticated account. Please sign in to view or manage your resumes."
+      },
+      tailored: {
+        title: "AI Tailored Applications",
+        desc: "Role-specific tailored resumes, ATS alignments, and LaTeX exports are private to your authenticated account. Please sign in to access."
+      },
+      cover_letter: {
+        title: "Private Cover Letters",
+        desc: "Executive cover letters and application pitches are private to your authenticated account. Please sign in to view or write cover letters."
+      }
+    };
+    const current = tabHeaders[mainTab] || tabHeaders.tailored;
+
+    return (
+      <main className="min-h-full bg-slate-50/50 p-4 sm:p-8 font-sans">
+        <div className="max-w-5xl mx-auto space-y-6">
+          <div className="p-8 sm:p-12 max-w-2xl mx-auto space-y-6 text-center py-20 bg-white rounded-3xl border border-slate-200 shadow-xs">
+            <div className="w-16 h-16 rounded-3xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto shadow-xs border border-blue-100">
+              <Lock className="w-8 h-8" />
+            </div>
+            <div className="space-y-2 max-w-md mx-auto">
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight">{current.title}</h2>
+              <p className="text-xs text-slate-500 leading-relaxed">{current.desc}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsAuthModalOpen(true)}
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
+            >
+              <LogIn className="w-4 h-4" />
+              Sign In to Access Workspace
+            </button>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   const profileNotFound = profileQuery.error instanceof ApiQueryError && profileQuery.error.status === 404;
   const startupLoading = userQuery.isPending || profileQuery.isPending || presetsQuery.isPending || jobLatexLoading || (Boolean(jobId) && jobDetailsQuery.isPending);
   const startupError = jobLatexError

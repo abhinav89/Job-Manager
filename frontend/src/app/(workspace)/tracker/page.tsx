@@ -16,7 +16,7 @@ import { useDispatch, useSelector } from "react-redux";
 import InlineQueryError from "@/components/InlineQueryError";
 import ApplicationDocuments from "@/components/ApplicationDocuments";
 import { KanbanBoard } from "@/components/tracker/KanbanBoard";
-import { FileSpreadsheet, Download, LayoutGrid, List, Plus, Search, Lock, LogIn } from "lucide-react";
+import { FileSpreadsheet, Download, LayoutGrid, List, Plus, Search, Lock, LogIn, Kanban } from "lucide-react";
 import { useAuth } from "@/lib/authContext";
 
 const Document = dynamic(() => import("react-pdf").then(m => m.Document), { ssr: false });
@@ -67,15 +67,15 @@ type JobPayload = {
 const STATUSES: Status[] = ["To Review", "To Apply", "Applied", "Interview", "Offer", "Rejected", "Saved", "Tech Test", "Ghosted"];
 
 const SC: Record<Status, { bg: string; text: string; border: string; dot: string }> = {
-  "To Review":  { bg: "#f0ede8", text: "#4a4540", border: "#d4cfc7", dot: "#a8a39c" },
-  "To Apply":   { bg: "#eef2ff", text: "#3730a3", border: "#c7d2fe", dot: "#4f46e5" },
-  Saved:       { bg: "#f0ede8", text: "#4a4540", border: "#d4cfc7", dot: "#a8a39c" },
-  Applied:     { bg: "#e8f0ff", text: "#2a4a8a", border: "#b8d0f8", dot: "#4a7acc" },
-  Interview:   { bg: "#fff8e0", text: "#7a5a00", border: "#f0d880", dot: "#c8a800" },
-  "Tech Test": { bg: "#f0e8ff", text: "#5a2a8a", border: "#d0b8f8", dot: "#8a4acc" },
-  Offer:       { bg: "#e8f5c0", text: "#3d6600", border: "#8ab030", dot: "#5a8a00" },
-  Rejected:    { bg: "#ffeaea", text: "#8a2a2a", border: "#f8b8b8", dot: "#cc3333" },
-  Ghosted:     { bg: "#f0ede8", text: "#7a7570", border: "#d4cfc7", dot: "#b0aba4" },
+  "To Review":  { bg: "#f8fafc", text: "#334155", border: "#e2e8f0", dot: "#94a3b8" },
+  "To Apply":   { bg: "#eff6ff", text: "#1d4ed8", border: "#bfdbfe", dot: "#3b82f6" },
+  Saved:       { bg: "#f8fafc", text: "#475569", border: "#cbd5e1", dot: "#64748b" },
+  Applied:     { bg: "#eef2ff", text: "#4338ca", border: "#c7d2fe", dot: "#6366f1" },
+  Interview:   { bg: "#fef3c7", text: "#b45309", border: "#fde68a", dot: "#f59e0b" },
+  "Tech Test": { bg: "#f5f3ff", text: "#6d28d9", border: "#ddd6fe", dot: "#8b5cf6" },
+  Offer:       { bg: "#ecfdf5", text: "#047857", border: "#a7f3d0", dot: "#10b981" },
+  Rejected:    { bg: "#fff1f2", text: "#be123c", border: "#fecdd3", dot: "#f43f5e" },
+  Ghosted:     { bg: "#f8fafc", text: "#64748b", border: "#e2e8f0", dot: "#94a3b8" },
 };
 
 const PC: Record<Priority, { text: string; bg: string }> = {
@@ -119,14 +119,16 @@ function InputField({ label, value, onChange, type = "text", placeholder = "", r
 }) {
   return (
     <div>
-      <label className="block text-[10px] tracking-[0.2em] uppercase mb-1.5" style={{ color: "#7a7570" }}>
-        {label}{required && <span style={{ color: "#b83030" }}> *</span>}
+      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+        {label}{required && <span className="text-rose-500"> *</span>}
       </label>
-      <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-        className="w-full text-sm p-2.5 rounded-sm outline-none transition-colors font-mono"
-        style={{ background: "#e8e4dd", color: "#1a1814", border: "1px solid #d4cfc7", caretColor: "#3d6600" }}
-        onFocus={e => e.target.style.borderColor = "#8ab030"}
-        onBlur={e => e.target.style.borderColor = "#d4cfc7"} />
+      <input
+        type={type}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 outline-none transition-colors focus:border-blue-600 focus:bg-white font-sans"
+      />
     </div>
   );
 }
@@ -136,10 +138,13 @@ function SelectField({ label, value, onChange, options }: {
 }) {
   return (
     <div>
-      <label className="block text-[10px] tracking-[0.2em] uppercase mb-1.5" style={{ color: "#7a7570" }}>{label}</label>
-      <select aria-label={label} value={value} onChange={e => onChange(e.target.value)}
-        className="w-full text-sm p-2.5 rounded-sm outline-none appearance-none font-mono"
-        style={{ background: "#e8e4dd", color: "#1a1814", border: "1px solid #d4cfc7" }}>
+      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">{label}</label>
+      <select
+        aria-label={label}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 outline-none transition-colors focus:border-blue-600 focus:bg-white font-sans"
+      >
         {options.map(o => <option key={o} value={o}>{o || "— Select —"}</option>)}
       </select>
     </div>
@@ -150,14 +155,17 @@ function IconBtn({ onClick, title, children, danger = false, green = false }: {
   onClick: () => void; title: string; children: React.ReactNode; danger?: boolean; green?: boolean;
 }) {
   return (
-    <button onClick={onClick} title={title}
-      className="w-7 h-7 flex items-center justify-center rounded-sm transition-all shrink-0"
-      style={{ color: "#a8a39c", background: "transparent" }}
-      onMouseEnter={e => {
-        e.currentTarget.style.color = danger ? "#b83030" : green ? "#3d6600" : "#1a1814";
-        e.currentTarget.style.background = danger ? "#ffeaea" : green ? "#e8f5c0" : "#e8e4dd";
-      }}
-      onMouseLeave={e => { e.currentTarget.style.color = "#a8a39c"; e.currentTarget.style.background = "transparent"; }}>
+    <button
+      onClick={onClick}
+      title={title}
+      className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all shrink-0 cursor-pointer ${
+        danger
+          ? "text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+          : green
+          ? "text-slate-400 hover:text-emerald-600 hover:bg-emerald-50"
+          : "text-slate-400 hover:text-slate-800 hover:bg-slate-100"
+      }`}
+    >
       {children}
     </button>
   );
@@ -189,16 +197,15 @@ function PdfModal({ jobId, companyName, onClose }: { jobId: number; companyName:
   }, [jobId]);
   
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 font-mono"
-      style={{ background: "rgba(26,24,20,0.6)" }}
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 font-sans bg-slate-900/60 backdrop-blur-xs"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="flex w-[calc(100vw-2rem)] max-w-[680px] flex-col rounded-sm shadow-2xl overflow-hidden" style={{ maxHeight: "90vh", background: "#f5f2ed", border: "1px solid #d4cfc7" }}>
+      <div className="flex w-[calc(100vw-2rem)] max-w-[680px] flex-col rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden" style={{ maxHeight: "90vh" }}>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 shrink-0" style={{ background: "#edeae4", borderBottom: "1px solid #d4cfc7" }}>
-          <div className="flex items-center gap-3">
-            <span className="w-2 h-2 rounded-full" style={{ background: "#5a8a00" }} />
-            <span className="text-[11px] font-bold tracking-[0.1em] uppercase" style={{ color: "#1a1814" }}>
+        <div className="flex items-center justify-between px-6 py-4 shrink-0 bg-slate-50 border-b border-slate-100">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-600" />
+            <span className="text-xs font-bold text-slate-900">
               {companyName} — Tailored Resume
             </span>
           </div>
@@ -206,33 +213,30 @@ function PdfModal({ jobId, companyName, onClose }: { jobId: number; companyName:
             {numPages > 1 && (
               <div className="flex items-center gap-2">
                 <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}
-                  className="text-[11px] disabled:opacity-20" style={{ color: "#7a7570" }}>←</button>
-                <span className="text-[10px]" style={{ color: "#a8a39c" }}>{page}/{numPages}</span>
+                  className="text-xs font-bold text-slate-500 hover:text-slate-800 disabled:opacity-20 cursor-pointer">←</button>
+                <span className="text-xs text-slate-400 font-medium">{page}/{numPages}</span>
                 <button onClick={() => setPage(p => Math.min(numPages, p + 1))} disabled={page >= numPages}
-                  className="text-[11px] disabled:opacity-20" style={{ color: "#7a7570" }}>→</button>
+                  className="text-xs font-bold text-slate-500 hover:text-slate-800 disabled:opacity-20 cursor-pointer">→</button>
               </div>
             )}
             <a href={`${API}/tracker/${jobId}/pdf`} target="_blank" rel="noopener noreferrer"
-              className="text-[10px] px-3 py-1 rounded-sm font-bold tracking-[0.1em] uppercase transition-colors"
-              style={{ background: "#1a1814", color: "#f5f2ed" }}>
+              className="text-xs px-3 py-1.5 rounded-xl font-bold bg-slate-900 hover:bg-blue-600 text-white transition-colors">
               ↓ Download
             </a>
-            <button onClick={onClose} className="text-lg leading-none transition-colors" style={{ color: "#a8a39c" }}
-              onMouseEnter={e => e.currentTarget.style.color = "#1a1814"}
-              onMouseLeave={e => e.currentTarget.style.color = "#a8a39c"}>✕</button>
+            <button onClick={onClose} className="p-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer">✕</button>
           </div>
         </div>
 
         {/* PDF */}
-        <div className="flex-1 overflow-auto flex items-start justify-center py-6 px-4" style={{ background: "#e8e4dd" }}>
+        <div className="flex-1 overflow-auto flex items-start justify-center py-6 px-4 bg-slate-100/70">
           {!pdfUrl ? (
             <div className="flex items-center justify-center h-40 gap-2">
-              {[0,150,300].map(d => <span key={d} className="w-2 h-2 rounded-full animate-bounce" style={{ background: "#5a8a00", animationDelay: `${d}ms` }} />)}
+              {[0,150,300].map(d => <span key={d} className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: `${d}ms` }} />)}
             </div>
           ) : (
-            <div style={{ filter: "drop-shadow(0 4px 20px rgba(0,0,0,0.15))" }}>
+            <div className="shadow-lg">
               <Document file={pdfUrl} onLoadSuccess={onLoad}
-                loading={<div className="flex items-center justify-center h-40 text-xs" style={{ color: "#a8a39c" }}>Loading...</div>}>
+                loading={<div className="flex items-center justify-center h-40 text-xs text-slate-400 font-bold">Loading PDF...</div>}>
                 <Page pageNumber={page} renderTextLayer={true} renderAnnotationLayer={true} width={Math.min(620, window.innerWidth - 56)} />
               </Document>
             </div>
@@ -256,45 +260,38 @@ function CoverLetterModal({ job, onClose, onSave }: { job: Job; onClose: () => v
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 font-mono"
-      style={{ background: "rgba(26,24,20,0.6)" }}
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 font-sans bg-slate-900/60 backdrop-blur-xs"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="flex w-[calc(100vw-2rem)] max-w-[680px] flex-col rounded-sm shadow-2xl overflow-hidden" style={{ maxHeight: "90vh", background: "#f5f2ed", border: "1px solid #d4cfc7" }}>
+      <div className="flex w-[calc(100vw-2rem)] max-w-[680px] flex-col rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden" style={{ maxHeight: "90vh" }}>
         
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 shrink-0" style={{ background: "#edeae4", borderBottom: "1px solid #d4cfc7" }}>
-          <div className="flex items-center gap-3">
-            <span className="w-2 h-2 rounded-full" style={{ background: "#5a8a00" }} />
-            <span className="text-[11px] font-bold tracking-[0.1em] uppercase" style={{ color: "#1a1814" }}>
+        <div className="flex items-center justify-between px-6 py-4 shrink-0 bg-slate-50 border-b border-slate-100">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-600" />
+            <span className="text-xs font-bold text-slate-900">
               {job.company_name} — Cover Letter
             </span>
           </div>
-          <div className="flex items-center gap-3">
-            <button onClick={onClose} className="text-lg leading-none transition-colors" style={{ color: "#a8a39c" }}
-              onMouseEnter={e => e.currentTarget.style.color = "#1a1814"}
-              onMouseLeave={e => e.currentTarget.style.color = "#a8a39c"}>✕</button>
-          </div>
+          <button onClick={onClose} className="p-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer">✕</button>
         </div>
 
         {/* Text Area */}
-        <div className="flex-1 overflow-auto flex flex-col p-4">
+        <div className="flex-1 overflow-auto flex flex-col p-6">
           <textarea
             value={text}
             onChange={e => setText(e.target.value)}
-            className="w-full flex-1 p-4 text-sm rounded-sm outline-none resize-none font-mono"
-            style={{ background: "#e8e4dd", color: "#1a1814", border: "1px solid #d4cfc7", minHeight: "400px" }}
-            onFocus={e => e.target.style.borderColor = "#8ab030"}
-            onBlur={e => e.target.style.borderColor = "#d4cfc7"}
+            className="w-full flex-1 p-4 text-xs rounded-2xl border border-slate-200 bg-slate-50 text-slate-800 outline-none resize-none font-sans leading-relaxed focus:border-blue-600 focus:bg-white"
+            style={{ minHeight: "380px" }}
           />
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-5 py-3 shrink-0" style={{ borderTop: "1px solid #d4cfc7" }}>
-          <button onClick={onClose} className="px-4 py-2 text-xs font-bold tracking-[0.1em] uppercase rounded-sm transition-colors" style={{ border: "1px solid #d4cfc7", color: "#7a7570" }}>
+        <div className="flex items-center justify-end gap-3 px-6 py-4 shrink-0 bg-slate-50 border-t border-slate-100">
+          <button onClick={onClose} className="px-4 py-2.5 text-xs font-bold rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer">
             Cancel
           </button>
-          <button onClick={handleSave} disabled={saving} className="px-5 py-2 text-xs font-bold tracking-[0.1em] uppercase rounded-sm transition-colors" style={{ background: "#1a1814", color: "#f5f2ed" }}>
-            {saving ? "Saving..." : "Save"}
+          <button onClick={handleSave} disabled={saving} className="px-5 py-2.5 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-xs cursor-pointer disabled:opacity-50">
+            {saving ? "Saving..." : "Save Cover Letter"}
           </button>
         </div>
       </div>
@@ -750,36 +747,43 @@ export default function TrackerPage() {
             </div>
           </div>
 
-          {/* Stats */}
-          <section className="mb-8 overflow-hidden rounded-xl border border-[#d4cfc7] bg-[#fffdf9] shadow-sm">
+          {/* Stats Overview */}
+          <section className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xs">
             <button
               type="button"
               onClick={() => dispatch(setStatsOpen(!trackerUi.statsOpen))}
-              className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left sm:px-5"
+              className="flex w-full items-center justify-between gap-4 px-5 py-3.5 text-left hover:bg-slate-50/50 transition-colors cursor-pointer"
               aria-expanded={trackerUi.statsOpen}
             >
-              <span>
-                <span className="block text-[10px] uppercase tracking-[0.2em] text-[#5a8a00]">Application overview</span>
-                <span className="mt-1 block text-xs text-[#7a7570]">
-                  {stats.total} total · {filterStatus === "All" ? "All statuses" : `${filterStatus} selected`}
+              <div>
+                <span className="block text-[10px] uppercase tracking-wider font-extrabold text-blue-600">Application Pipeline Overview</span>
+                <span className="mt-0.5 block text-xs font-semibold text-slate-500">
+                  {stats.total} total application{stats.total !== 1 ? "s" : ""} · {filterStatus === "All" ? "All statuses" : `${filterStatus} selected`}
                 </span>
-              </span>
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#d4cfc7] text-[#5a8a00]">
+              </div>
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 font-bold text-xs">
                 {trackerUi.statsOpen ? "−" : "+"}
               </span>
             </button>
             {trackerUi.statsOpen && (
-              <div className="grid grid-cols-2 gap-2 border-t border-[#eeeae4] p-3 sm:grid-cols-4 sm:p-4 lg:grid-cols-7">
+              <div className="grid grid-cols-2 gap-2 border-t border-slate-100 p-4 sm:grid-cols-4 lg:grid-cols-9 bg-slate-50/30">
                 {STATUSES.map(s => {
                   const c = SC[s];
                   const count = stats.by_status[s] || 0;
                   const active = filterStatus === s;
                   return (
-                    <button key={s} onClick={() => dispatch(setFilterStatus(active ? "All" : s))}
-                      className="rounded-lg p-3 text-center transition-all"
-                      style={{ background: active ? c.bg : "#edeae4", border: `1px solid ${active ? c.border : "#d4cfc7"}` }}>
-                      <div className="text-xl font-bold" style={{ color: active ? c.text : "#1a1814", fontFamily: "'Georgia', serif" }}>{count}</div>
-                      <div className="mt-0.5 text-[9px] uppercase tracking-[0.08em]" style={{ color: active ? c.text : "#a8a39c" }}>{s}</div>
+                    <button
+                      key={s}
+                      onClick={() => dispatch(setFilterStatus(active ? "All" : s))}
+                      className={`rounded-xl p-3 text-center transition-all cursor-pointer ${
+                        active
+                          ? "ring-2 ring-blue-600 shadow-2xs"
+                          : "hover:bg-slate-100/80"
+                      }`}
+                      style={{ background: c.bg, border: `1px solid ${c.border}` }}
+                    >
+                      <div className="text-lg font-black text-slate-900">{count}</div>
+                      <div className="mt-0.5 text-[10px] uppercase font-bold tracking-tight text-slate-600 truncate">{s}</div>
                     </button>
                   );
                 })}
@@ -787,32 +791,38 @@ export default function TrackerPage() {
             )}
           </section>
 
-          {/* Search */}
-          <div className="mb-5 flex flex-wrap items-center gap-3">
-            <div className="relative flex-1 max-w-sm">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2" width="11" height="11" viewBox="0 0 11 11" fill="none">
-                <circle cx="4.5" cy="4.5" r="3.5" stroke="#a8a39c" strokeWidth="1.2"/>
-                <line x1="7.5" y1="7.5" x2="10" y2="10" stroke="#a8a39c" strokeWidth="1.2" strokeLinecap="round"/>
-              </svg>
-              <input value={searchQuery} onChange={e => dispatch(setSearchQuery(e.target.value))}
-                placeholder="Search company, title, location..."
-                className="w-full pl-8 pr-3 py-2 text-xs outline-none rounded-sm font-mono"
-                style={{ background: "#edeae4", color: "#1a1814", border: "1px solid #d4cfc7" }} />
+          {/* Search & Filter Bar */}
+          <div className="mb-6 flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                value={searchQuery}
+                onChange={e => dispatch(setSearchQuery(e.target.value))}
+                placeholder="Search company, job title, location..."
+                className="w-full pl-10 pr-4 py-2.5 text-xs outline-none rounded-xl bg-white border border-slate-200 focus:border-blue-600 text-slate-800 transition-colors shadow-2xs font-sans"
+              />
             </div>
             {filterStatus !== "All" && (
-              <button onClick={() => dispatch(setFilterStatus("All"))}
-                className="flex items-center gap-1.5 px-3 py-2 text-[10px] rounded-sm"
-                style={{ background: "#edeae4", border: "1px solid #d4cfc7", color: "#7a7570" }}>
-                ✕ Clear
+              <button
+                onClick={() => dispatch(setFilterStatus("All"))}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
+              >
+                ✕ Clear {filterStatus}
               </button>
             )}
-            <span className="text-[10px] ml-auto" style={{ color: "#a8a39c" }}>{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
+            <span className="text-xs font-semibold ml-auto text-slate-400">{filtered.length} application{filtered.length !== 1 ? "s" : ""}</span>
           </div>
 
-          {/* List */}
+          {/* Applications Content */}
           {loading ? (
             <div className="flex items-center justify-center py-20 gap-2">
-              {[0,150,300].map(d => <span key={d} className="w-2 h-2 rounded-full animate-bounce" style={{ background: "#3d6600", animationDelay: `${d}ms` }} />)}
+              {[0, 150, 300].map(d => (
+                <span
+                  key={d}
+                  className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-bounce"
+                  style={{ animationDelay: `${d}ms` }}
+                />
+              ))}
             </div>
           ) : jobsQuery.isError && jobs.length === 0 ? (
             <InlineQueryError
@@ -820,20 +830,26 @@ export default function TrackerPage() {
               onRetry={() => { void jobsQuery.refetch(); }}
             />
           ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-3">
-              <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-                <rect x="4" y="4" width="28" height="28" rx="2" stroke="#d4cfc7" strokeWidth="1.5"/>
-                <line x1="10" y1="12" x2="26" y2="12" stroke="#d4cfc7" strokeWidth="1.5"/>
-                <line x1="10" y1="18" x2="22" y2="18" stroke="#d4cfc7" strokeWidth="1.5"/>
-                <line x1="10" y1="24" x2="18" y2="24" stroke="#d4cfc7" strokeWidth="1.5"/>
-              </svg>
-              <p className="text-sm" style={{ color: "#a8a39c" }}>
-                {searchQuery || filterStatus !== "All" ? "No jobs match your filter" : "No applications yet"}
-              </p>
+            <div className="flex flex-col items-center justify-center py-16 px-4 gap-3 bg-white border border-slate-200 rounded-3xl text-center shadow-xs">
+              <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                <Kanban className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-base font-bold text-slate-900">
+                  {searchQuery || filterStatus !== "All" ? "No applications match your filter" : "No applications tracked yet"}
+                </h4>
+                <p className="text-xs text-slate-500 max-w-sm">
+                  Save roles directly from &quot;Find Jobs&quot; or manually log an application to track your interview progress.
+                </p>
+              </div>
               {!searchQuery && filterStatus === "All" && (
-                <button onClick={openCreate} disabled={workspaceQuery.isPending || workspaceQuery.isError} className="text-xs px-4 py-2 rounded-sm"
-                  style={{ background: "#e8f5c0", color: "#3d6600", border: "1px solid #8ab030" }}>
-                  Add your first application →
+                <button
+                  onClick={openCreate}
+                  disabled={workspaceQuery.isPending || workspaceQuery.isError}
+                  className="mt-2 text-xs font-bold px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add your first application
                 </button>
               )}
             </div>
@@ -859,27 +875,27 @@ export default function TrackerPage() {
                 const isGenerating = generatingFor === job.id;
                 const err = generateError?.id === job.id ? generateError.msg : null;
                 return (
-                  <div key={job.id} className="tracker-job-card rounded-xl sm:rounded-sm" style={{ background: "#edeae4", border: "1px solid #d4cfc7" }}>
+                  <div key={job.id} className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs hover:border-slate-300 transition-all font-sans">
 
                     {/* Main row */}
-                    <div className="tracker-job-main flex flex-col gap-3 rounded-xl px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:px-4">
-                      <div className="tracker-job-dot w-2 h-2 rounded-full shrink-0" style={{ background: SC[job.status].dot }} />
+                    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: SC[job.status].dot }} />
 
                       {/* Info */}
-                      <div className="tracker-job-info flex-1 min-w-0">
+                      <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-bold" style={{ color: "#1a1814" }}>{job.company_name}</span>
-                          <span className="text-[10px]" style={{ color: "#d4cfc7" }}>·</span>
-                          <span className="text-sm" style={{ color: "#4a4540" }}>{job.job_title}</span>
+                          <span className="text-sm font-bold text-slate-900">{job.company_name}</span>
+                          <span className="text-xs text-slate-300">·</span>
+                          <span className="text-sm font-medium text-slate-600">{job.job_title}</span>
                         </div>
-                        {expanded && <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-                          {job.location && <span className="text-[10px]" style={{ color: "#a8a39c" }}>📍 {job.location}</span>}
-                          {job.job_source && <span className="text-[10px]" style={{ color: "#a8a39c" }}>Found via {job.job_source}</span>}
-                          {job.job_type && <span className="text-[10px]" style={{ color: "#a8a39c" }}>{job.job_type}</span>}
-                          {job.salary_range && <span className="text-[10px]" style={{ color: "#a8a39c" }}>💰 {job.salary_range}</span>}
-                          {job.date_applied && <span className="text-[10px]" style={{ color: "#a8a39c" }}>Applied {job.date_applied}</span>}
+                        {expanded && <div className="flex items-center gap-3 mt-1.5 flex-wrap text-xs text-slate-500">
+                          {job.location && <span className="inline-flex items-center gap-1">📍 {job.location}</span>}
+                          {job.job_source && <span>via {job.job_source}</span>}
+                          {job.job_type && <span>{job.job_type}</span>}
+                          {job.salary_range && <span>💰 {job.salary_range}</span>}
+                          {job.date_applied && <span>Applied {job.date_applied}</span>}
                           {job.has_pdf && job.pdf_generated_at && (
-                            <span className="text-[10px]" style={{ color: "#5a8a00" }}>
+                            <span className="text-emerald-700 font-semibold">
                               ✓ CV generated {new Date(job.pdf_generated_at).toLocaleDateString()}
                             </span>
                           )}
@@ -894,7 +910,7 @@ export default function TrackerPage() {
                             if (!response.ok) throw new Error(await getApiError(response, "Unable to update archive."));
                             void queryClient.invalidateQueries({ queryKey: queryKeys.tracker });
                           } catch (err) { toast.error(err instanceof Error ? err.message : "Unable to update archive."); }
-                        }} className="rounded-sm border border-[#d4cfc7] px-2 py-1 text-[10px]">{job.is_archived ? "Restore" : "Archive"}</button>
+                        }} className="rounded-xl border border-slate-200 bg-white hover:bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 cursor-pointer">{job.is_archived ? "Restore" : "Archive"}</button>
                         <button type="button" onClick={async () => {
                           try {
                             const response = await fetch(`${API}/assistant/conversations`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ job_id: job.id }) });
@@ -904,51 +920,32 @@ export default function TrackerPage() {
                             sessionStorage.setItem("career-assistant-fit-prompt", String(conversation.id));
                             router.push("/assistant");
                           } catch (err) { toast.error(err instanceof Error ? err.message : "Unable to open the assistant."); }
-                        }} className="rounded-sm border border-[#d4cfc7] px-2 py-1 text-[10px]">Analyze fit</button>
+                        }} className="rounded-xl border border-slate-200 bg-white hover:bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 cursor-pointer">Analyze fit</button>
                         <PriorityBadge priority={job.priority} />
                         <StatusBadge status={job.status} />
 
                         {/* Quick status */}
                         <select value={job.status} onChange={e => handleStatusChange(job, e.target.value as Status)}
-                          className="text-[10px] px-2 py-1 rounded-sm outline-none appearance-none cursor-pointer font-mono"
-                          style={{ background: "#f5f2ed", color: "#7a7570", border: "1px solid #d4cfc7" }}
+                          className="text-xs px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-700 font-medium outline-none cursor-pointer"
                           title="Change status">
                           {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
 
-                        <div className="hidden h-5 w-px shrink-0 sm:block" style={{ background: "#d4cfc7" }} />
+                        <div className="hidden h-5 w-px shrink-0 sm:block bg-slate-200" />
 
                         {/* Generate CV / Open Editor */}
                         <button
                           onClick={() => job.has_pdf ? router.push(`/generate?job_id=${job.id}`) : handleGeneratePdf(detailJob)}
                           disabled={isGenerating}
                           title={job.has_pdf ? "Open CV in editor" : job.job_description ? "Generate tailored CV for this job" : "Add job description first"}
-                          className="group flex min-h-11 items-center gap-2.5 rounded-sm px-4 py-2 text-left transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-md active:translate-y-0 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:brightness-100 disabled:hover:shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8ab030] focus-visible:ring-offset-2 motion-reduce:transform-none motion-reduce:transition-none"
-                          style={{
-                            background: isGenerating ? "#e8e4dd" : "#3d6600",
-                            color: isGenerating ? "#a8a39c" : "#fffdf9",
-                            border: `1px solid ${isGenerating ? "#d4cfc7" : "#315300"}`,
-                            boxShadow: isGenerating ? "none" : "0 2px 0 #274200",
-                          }}>
+                          className="flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition-all shadow-xs disabled:opacity-50 cursor-pointer bg-blue-600 hover:bg-blue-700 text-white">
                           {isGenerating ? (
-                            <span className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.1em]">
-                              <span className="inline-flex gap-0.5">
-                                {[0,100,200].map(d => <span key={d} className="w-1 h-1 rounded-full animate-bounce" style={{ background: "#a8a39c", animationDelay: `${d}ms` }} />)}
-                              </span>
-                              Tailoring CV
+                            <span className="flex items-center gap-2">
+                              Tailoring CV...
                             </span>
                           ) : (
-                            <span className="flex items-center gap-2.5">
-                              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm bg-white/15">
-                                <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
-                                  <path d="M2 1.5h6.5l2.5 2.5v7.5H2v-10Z" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round"/>
-                                  <path d="M4 6.5h5M4 8.75h3.25M8.5 1.5V4H11" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
-                                </svg>
-                              </span>
-                              <span className="flex flex-col gap-0.5 leading-none">
-                                <span className="text-[11px] font-bold uppercase tracking-[0.1em]">{job.has_pdf ? "Open Editor" : "Generate CV"}</span>
-                                <span className="text-[8px] font-medium normal-case tracking-[0.03em] opacity-75">{job.has_pdf ? "Review your tailored CV" : "Tailored to this role"}</span>
-                              </span>
+                            <span className="flex items-center gap-2">
+                              <span>{job.has_pdf ? "Open Tailored CV" : "Tailor Resume"}</span>
                             </span>
                           )}
                         </button>
@@ -958,52 +955,21 @@ export default function TrackerPage() {
                           onClick={() => handleGenerateCoverLetter(detailJob)}
                           disabled={generatingClFor === job.id}
                           title={job.job_description ? "Generate cover letter for this job" : "Add job description first"}
-                          className="group flex min-h-11 items-center gap-2.5 rounded-sm px-4 py-2 text-left transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-md active:translate-y-0 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:brightness-100 disabled:hover:shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4a4540] focus-visible:ring-offset-2 motion-reduce:transform-none motion-reduce:transition-none"
-                          style={{
-                            background: generatingClFor === job.id ? "#e8e4dd" : "#1a1814",
-                            color: generatingClFor === job.id ? "#a8a39c" : "#fffdf9",
-                            border: `1px solid ${generatingClFor === job.id ? "#d4cfc7" : "#090807"}`,
-                            boxShadow: generatingClFor === job.id ? "none" : "0 2px 0 #090807",
-                          }}>
+                          className="flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition-all shadow-xs disabled:opacity-50 cursor-pointer border border-slate-200 bg-white hover:bg-slate-50 text-slate-800">
                           {generatingClFor === job.id ? (
-                            <span className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.1em]">
-                              <span className="inline-flex gap-0.5">
-                                {[0,100,200].map(d => <span key={d} className="w-1 h-1 rounded-full animate-bounce" style={{ background: "#a8a39c", animationDelay: `${d}ms` }} />)}
-                              </span>
-                              Writing letter
-                            </span>
+                            <span>Writing letter...</span>
                           ) : (
-                            <span className="flex items-center gap-2.5">
-                              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm bg-white/10">
-                                <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
-                                  <path d="M1.5 3h10v7.5h-10V3Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
-                                  <path d="m2 3.5 4.5 3.25L11 3.5" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/>
-                                </svg>
-                              </span>
-                              <span className="flex flex-col gap-0.5 leading-none">
-                                <span className="text-[11px] font-bold uppercase tracking-[0.1em]">{job.cover_letter ? "Regenerate cover letter" : "Generate cover letter"}</span>
-                                <span className="text-[8px] font-medium normal-case tracking-[0.03em] opacity-70">Matched to this opening</span>
-                              </span>
-                            </span>
+                            <span>{job.cover_letter ? "Regenerate Cover Letter" : "Generate Cover Letter"}</span>
                           )}
                         </button>
-
-                        <div className="hidden h-5 w-px shrink-0 sm:block" style={{ background: "#d4cfc7" }} />
 
                         {/* View Cover Letter */}
                         {job.cover_letter && (
                           <button
                             onClick={() => setViewingClFor(detailJob)}
                             title="View and Edit Cover Letter"
-                            className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold tracking-[0.08em] uppercase rounded-sm transition-all"
-                            style={{ background: "#f5f2ed", color: "#4a4540", border: "1px solid #d4cfc7" }}
-                            onMouseEnter={e => { e.currentTarget.style.background = "#e8f5c0"; e.currentTarget.style.color = "#3d6600"; e.currentTarget.style.borderColor = "#8ab030"; }}
-                            onMouseLeave={e => { e.currentTarget.style.background = "#f5f2ed"; e.currentTarget.style.color = "#4a4540"; e.currentTarget.style.borderColor = "#d4cfc7"; }}>
-                            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                              <path d="M1.5 1H7L9 3V9H1.5V1Z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/>
-                              <path d="M3 5.5h4M3 7h2.5" stroke="currentColor" strokeWidth="1"/>
-                            </svg>
-                            Edit CL
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer transition-all">
+                            Edit Cover Letter
                           </button>
                         )}
 
@@ -1117,86 +1083,70 @@ export default function TrackerPage() {
         </div>
       </div>
 
-      {/* ── Add/Edit Modal ── */}
+      {/* ── Add/Edit Application Modal ── */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: "rgba(26,24,20,0.5)" }}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs font-sans"
           onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}>
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-sm shadow-2xl font-mono"
-            style={{ background: "#f5f2ed", border: "1px solid #d4cfc7" }}>
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white shadow-2xl border border-slate-200">
 
-            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4" style={{ borderBottom: "1px solid #d4cfc7" }}>
-              <h2 className="text-sm font-bold tracking-[0.1em] uppercase" style={{ color: "#1a1814" }}>
-                {editingJob ? "Edit Application" : "New Application"}
+            <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 bg-slate-50 border-b border-slate-100">
+              <h2 className="text-sm font-black tracking-tight text-slate-900">
+                {editingJob ? "Edit Job Application" : "Track New Job Application"}
               </h2>
-              <button onClick={() => setShowModal(false)} className="text-lg leading-none" style={{ color: "#a8a39c" }}
-                onMouseEnter={e => e.currentTarget.style.color = "#1a1814"}
-                onMouseLeave={e => e.currentTarget.style.color = "#a8a39c"}>✕</button>
+              <button onClick={() => setShowModal(false)} className="p-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer">✕</button>
             </div>
 
             <div className="px-6 py-5 space-y-4">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <InputField label="Company Name" value={form.company_name} onChange={v => setField("company_name", v)} placeholder="Google, Meta..." required />
-                <InputField label="Job Title" value={form.job_title} onChange={v => setField("job_title", v)} placeholder="Software Engineer..." required />
+                <InputField label="Company Name" value={form.company_name} onChange={v => setField("company_name", v)} placeholder="Zepto, Rubrik, Snowflake..." required />
+                <InputField label="Job Title" value={form.job_title} onChange={v => setField("job_title", v)} placeholder="Engineering Manager, Strategy Lead..." required />
               </div>
               
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <div className="flex-1">
-                  <InputField label="Job URL" value={form.job_url} onChange={v => setField("job_url", v)} placeholder="https://linkedin.com/jobs/..." />
+                  <InputField label="Job URL" value={form.job_url} onChange={v => setField("job_url", v)} placeholder="https://..." />
                 </div>
                 <button 
                   onClick={handleAutoFill} 
                   disabled={autoFilling || !form.job_url.trim()}
-                  className="h-[42px] w-full px-4 text-xs font-bold tracking-[0.1em] uppercase rounded-sm transition-colors flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto"
-                  style={{ background: "#e8f5c0", color: "#3d6600", border: "1px solid #8ab030", height: "42px" }}>
-                  {autoFilling ? "Loading..." : "Auto-Fill"}
+                  className="h-[42px] px-4 text-xs font-bold rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition-colors flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">
+                  {autoFilling ? "Extracting..." : "Auto-Fill from URL"}
                 </button>
               </div>
 
               <div>
-                <label className="block text-[10px] tracking-[0.2em] uppercase mb-1.5" style={{ color: "#7a7570" }}>Short Description</label>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Short Summary</label>
                 <textarea value={form.short_description} onChange={e => setField("short_description", e.target.value)}
                   placeholder="Brief overview of the role..." rows={2}
-                  className="w-full text-sm p-2.5 rounded-sm outline-none resize-none font-mono"
-                  style={{ background: "#e8e4dd", color: "#1a1814", border: "1px solid #d4cfc7" }}
-                  onFocus={e => e.target.style.borderColor = "#8ab030"}
-                  onBlur={e => e.target.style.borderColor = "#d4cfc7"} />
+                  className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 outline-none resize-none font-sans focus:border-blue-600 focus:bg-white" />
               </div>
 
-              {/* Job description — key field for AI */}
-              <div className="overflow-hidden rounded-sm" style={{ border: "1px solid #d4cfc7", background: "#edeae4" }}>
+              {/* Job description */}
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/50">
                 <button
                   type="button"
                   onClick={() => setJobDescriptionOpen(open => !open)}
-                  className="flex w-full items-center justify-between gap-4 px-3 py-3 text-left transition-colors"
-                  style={{ background: jobDescriptionOpen ? "#e8f5c0" : "transparent" }}
+                  className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-slate-100/50 cursor-pointer"
                   aria-expanded={jobDescriptionOpen}
                 >
                   <span className="min-w-0">
-                    <span className="block text-[10px] tracking-[0.2em] uppercase" style={{ color: "#7a7570" }}>Job Description</span>
-                    <span className="mt-1 block truncate text-xs" style={{ color: form.job_description ? "#4a4540" : "#a8a39c" }}>
-                      {form.job_description ? form.job_description.replace(/\s+/g, " ").slice(0, 110) : "Add the full job description for better AI tailoring"}
+                    <span className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">Job Description</span>
+                    <span className="mt-0.5 block truncate text-xs text-slate-500">
+                      {form.job_description ? form.job_description.replace(/\s+/g, " ").slice(0, 110) : "Paste full job description for ATS match & tailoring"}
                     </span>
                   </span>
-                  <span className="flex shrink-0 items-center gap-2 text-[10px] uppercase tracking-[0.12em]" style={{ color: "#3d6600" }}>
-                    {jobDescriptionOpen ? "Close" : "Read / edit"}
-                    <span style={{ transform: jobDescriptionOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>⌄</span>
+                  <span className="text-xs font-bold text-blue-600 shrink-0">
+                    {jobDescriptionOpen ? "Close ▲" : "Expand ▼"}
                   </span>
                 </button>
                 {jobDescriptionOpen && (
-                  <div className="border-t p-3" style={{ borderColor: "#d4cfc7", background: "#f5f2ed" }}>
-                    <p className="mb-2 text-[10px] leading-4" style={{ color: "#7a7570" }}>
-                      Paste the complete posting here. CV Tailor uses it to match your resume to the role.
-                    </p>
+                  <div className="border-t border-slate-200 p-4 bg-white">
                     <textarea value={form.job_description} onChange={e => setField("job_description", e.target.value)}
-                      placeholder="Paste the full job description here..." rows={12}
-                      className="w-full min-h-[240px] text-sm leading-6 p-3 rounded-sm outline-none resize-y font-mono"
-                      style={{ background: "#e8e4dd", color: "#1a1814", border: "1px solid #d4cfc7" }}
-                      onFocus={e => e.target.style.borderColor = "#8ab030"}
-                      onBlur={e => e.target.style.borderColor = "#d4cfc7"} />
-                    <div className="mt-1 flex justify-between text-[9px]" style={{ color: "#a8a39c" }}>
-                      <span>Drag the corner to resize</span>
-                      <span>{form.job_description.length} chars</span>
+                      placeholder="Paste the full job description here..." rows={10}
+                      className="w-full min-h-[220px] text-xs leading-relaxed p-3.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 outline-none resize-y font-sans focus:border-blue-600 focus:bg-white" />
+                    <div className="mt-1.5 flex justify-between text-[11px] text-slate-400">
+                      <span>Full JD text</span>
+                      <span>{form.job_description.length} characters</span>
                     </div>
                   </div>
                 )}
@@ -1209,40 +1159,33 @@ export default function TrackerPage() {
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <SelectField label="Resume Template" value={form.template_id} onChange={v => setField("template_id", v as TemplateId)} options={RESUME_TEMPLATES.map(template => template.id)} />
-                <div className="flex items-end pb-2 text-[10px] leading-4" style={{ color: "#7a7570" }}>
-                  This template will be used when you generate a CV for this job.
+                <div className="flex items-end pb-2 text-xs text-slate-500">
+                  Used when generating or tailoring a CV for this role.
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <InputField label="Location" value={form.location} onChange={v => setField("location", v)} placeholder="Manila / Remote..." />
-                <InputField label="Salary Range" value={form.salary_range} onChange={v => setField("salary_range", v)} placeholder="₱50k–80k / $30–50/hr..." />
+                <InputField label="Location" value={form.location} onChange={v => setField("location", v)} placeholder="Bengaluru / Remote / India..." />
+                <InputField label="Salary Range" value={form.salary_range} onChange={v => setField("salary_range", v)} placeholder="₹25L–₹40L / yr..." />
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <InputField label="Date Applied" value={form.date_applied} onChange={v => setField("date_applied", v)} type="date" />
                 <InputField label="Follow-up Date" value={form.follow_up_date} onChange={v => setField("follow_up_date", v)} type="date" />
               </div>
               <div>
-                <label className="block text-[10px] tracking-[0.2em] uppercase mb-1.5" style={{ color: "#7a7570" }}>Notes</label>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Interview &amp; Pipeline Notes</label>
                 <textarea value={form.notes} onChange={e => setField("notes", e.target.value)}
-                  placeholder="Referral from..., salary discussed, interviewer name..." rows={3}
-                  className="w-full text-sm p-2.5 rounded-sm outline-none resize-none font-mono"
-                  style={{ background: "#e8e4dd", color: "#1a1814", border: "1px solid #d4cfc7" }}
-                  onFocus={e => e.target.style.borderColor = "#8ab030"}
-                  onBlur={e => e.target.style.borderColor = "#d4cfc7"} />
+                  placeholder="Referral contact, recruiter notes, discussion points..." rows={3}
+                  className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 outline-none resize-none font-sans focus:border-blue-600 focus:bg-white" />
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-end gap-3 px-4 py-3 sm:px-6 sm:py-4" style={{ borderTop: "1px solid #d4cfc7" }}>
+            <div className="flex flex-wrap items-center justify-end gap-3 px-6 py-4 bg-slate-50 border-t border-slate-100">
               <button onClick={() => setShowModal(false)}
-                className="px-4 py-2 text-xs font-bold tracking-[0.1em] uppercase rounded-sm transition-colors"
-                style={{ border: "1px solid #d4cfc7", color: "#7a7570" }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = "#b8b3aa"}
-                onMouseLeave={e => e.currentTarget.style.borderColor = "#d4cfc7"}>
+                className="px-4 py-2.5 text-xs font-bold rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer">
                 Cancel
               </button>
               <button onClick={handleSave} disabled={saveMutation.isPending || !form.company_name.trim() || !form.job_title.trim()}
-                className="px-5 py-2 text-xs font-bold tracking-[0.1em] uppercase rounded-sm transition-colors disabled:cursor-not-allowed"
-                style={{ background: saveMutation.isPending || !form.company_name || !form.job_title ? "#d4cfc7" : "#1a1814", color: saveMutation.isPending || !form.company_name || !form.job_title ? "#a8a39c" : "#f5f2ed" }}>
+                className="px-5 py-2.5 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-xs cursor-pointer disabled:opacity-50">
                 {saveMutation.isPending ? "Saving..." : editingJob ? "Save Changes" : "Add Application"}
               </button>
             </div>
