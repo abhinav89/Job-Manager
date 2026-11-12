@@ -57,6 +57,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { success: false, error: "Please enter a valid email address." };
     }
 
+    if (!passcode || passcode.trim().length < 6) {
+      return { success: false, error: "Please enter a valid password (minimum 6 characters)." };
+    }
+
+    // Master accepted passwords or user-defined saved password
+    const validMasterPasswords = new Set([
+      "dealos2026",
+      "Abhinav@2026",
+      "Dealos@2026",
+      "jobmanager2026",
+    ]);
+
+    const storedKey = `job_manager_pwd_${cleanEmail}`;
+    const storedPassword = typeof window !== "undefined" ? localStorage.getItem(storedKey) : null;
+
+    if (storedPassword) {
+      if (passcode !== storedPassword && !validMasterPasswords.has(passcode)) {
+        return { success: false, error: "Incorrect password. Please try again." };
+      }
+    } else {
+      if (!validMasterPasswords.has(passcode)) {
+        // First login: remember this password for this user
+        if (typeof window !== "undefined") {
+          localStorage.setItem(storedKey, passcode);
+        }
+      }
+    }
+
     // Determine user profile based on email
     let displayName = cleanEmail.split("@")[0];
     displayName = displayName.charAt(0).toUpperCase() + displayName.slice(1);

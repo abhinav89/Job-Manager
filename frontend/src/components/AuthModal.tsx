@@ -112,16 +112,21 @@ export function AuthModal() {
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-              Password / Passcode
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                Password
+              </label>
+              <span className="text-[10px] text-slate-400">Min 6 characters</span>
+            </div>
             <div className="relative">
               <Key className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
               <input
                 type="password"
+                required
+                minLength={6}
                 value={passcode}
                 onChange={(e) => setPasscode(e.target.value)}
-                placeholder="••••••••"
+                placeholder="Enter your password"
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-blue-600 focus:outline-none"
               />
             </div>
