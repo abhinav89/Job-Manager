@@ -1,4 +1,5 @@
 """Optional localhost HTTP adapter and static dashboard server."""
+import os
 from contextlib import asynccontextmanager
 import ipaddress
 import re
