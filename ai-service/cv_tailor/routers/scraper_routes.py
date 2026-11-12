@@ -27,6 +27,10 @@ class ImportJobRequest(BaseModel):
     match_score: Optional[int] = None
     match_analysis: Optional[Dict[str, Any]] = None
 
+class BulkImportJobRequest(BaseModel):
+    jobs: List[ImportJobRequest]
+    target_status: Optional[str] = "To Review"
+
 class ParseJobRequest(BaseModel):
     url: Optional[str] = ""
     job_text: Optional[str] = ""
@@ -224,4 +228,39 @@ async def import_scraped_job(payload: ImportJobRequest, request: Request, db: Se
         "status": "success",
         "job_id": new_job.id,
         "message": f"Job saved to tracker under '{new_job.status}'"
+    }
+
+
+@router.post("/bulk-import")
+async def bulk_import_jobs(payload: BulkImportJobRequest, request: Request, db: Session = Depends(get_db)):
+    workspace_id = get_workspace_id(request)
+    created_count = 0
+    status_to_use = payload.target_status or "To Review"
+
+    for job in payload.jobs:
+        new_job = db_models.JobApplication(
+            workspace_id=workspace_id,
+            company_name=job.company_name,
+            job_title=job.job_title,
+            job_url=job.job_url,
+            job_source=job.source or None,
+            job_description=job.job_description,
+            short_description=job.short_description or (job.job_description[:200] if job.job_description else ""),
+            location=job.location,
+            salary_range=job.salary_range or "",
+            job_type=job.job_type,
+            status=status_to_use,
+            priority=job.priority or "Medium",
+            match_score=job.match_score,
+            match_analysis=job.match_analysis
+        )
+        db.add(new_job)
+        created_count += 1
+
+    db.commit()
+
+    return {
+        "status": "success",
+        "imported_count": created_count,
+        "message": f"Successfully imported {created_count} jobs to Tracker under '{status_to_use}'"
     }

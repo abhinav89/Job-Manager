@@ -68,15 +68,10 @@ async def auto_fill_resume(file: UploadFile = File(...)):
             raise w.WorkspaceError(f"Could not read DOCX document: {exc}")
     else:
         try:
-            from pypdf import PdfReader
-            reader = PdfReader(io.BytesIO(content))
-            text = "\n".join(page.extract_text() or "" for page in reader.pages)
-            for page in reader.pages:
-                if "/Annots" in page:
-                    for a in page["/Annots"]:
-                        obj = a.get_object()
-                        if "/A" in obj and "/URI" in obj["/A"]:
-                            extra_urls.append(obj["/A"]["/URI"])
+            from cv_tailor.services.pdf_extractor import extract_text_and_urls_from_pdf
+            text, pdf_urls = extract_text_and_urls_from_pdf(content)
+            if pdf_urls:
+                extra_urls.extend(pdf_urls)
         except Exception as exc:
             raise w.WorkspaceError(f"Could not parse PDF file: {exc}")
 

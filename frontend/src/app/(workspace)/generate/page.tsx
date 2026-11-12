@@ -1625,7 +1625,7 @@ function GeneratePageContent() {
               }`}
             >
               <FileText className="w-4 h-4 text-slate-400" />
-              Original
+              Master CV & Themes
             </button>
 
             <button
@@ -1638,7 +1638,7 @@ function GeneratePageContent() {
               }`}
             >
               <Wand2 className="w-4 h-4 text-blue-600" />
-              Job Tailored Resumes
+              Tailored Resumes
               <span className="bg-blue-100 text-blue-700 text-[10px] font-extrabold px-1.5 py-0.5 rounded-md uppercase">TRY</span>
             </button>
 

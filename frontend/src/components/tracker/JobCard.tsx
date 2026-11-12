@@ -39,9 +39,19 @@ interface JobCardProps {
   onTailorAndApply?: (job: JobCardData) => void;
   onDirectApply?: (job: JobCardData) => void;
   isSaved?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (job: JobCardData) => void;
 }
 
-export function JobCard({ job, onSaveToTracker, onTailorAndApply, onDirectApply, isSaved = false }: JobCardProps) {
+export function JobCard({
+  job,
+  onSaveToTracker,
+  onTailorAndApply,
+  onDirectApply,
+  isSaved = false,
+  isSelected = false,
+  onToggleSelect,
+}: JobCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [saved, setSaved] = useState(isSaved);
   const [copiedDesc, setCopiedDesc] = useState(false);
@@ -75,10 +85,22 @@ export function JobCard({ job, onSaveToTracker, onTailorAndApply, onDirectApply,
     .toUpperCase();
 
   return (
-    <div className="bg-white border border-slate-200 hover:border-slate-300 rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden">
+    <div className={`bg-white border ${isSelected ? "border-blue-500 ring-2 ring-blue-100 bg-blue-50/10" : "border-slate-200 hover:border-slate-300"} rounded-2xl shadow-xs hover:shadow-md transition-all duration-200 overflow-hidden`}>
       <div className="p-5 sm:p-6 flex flex-col lg:flex-row items-start justify-between gap-5">
-        {/* Left: Company & Details */}
-        <div className="flex items-start gap-4 flex-1 min-w-0">
+        {/* Left: Checkbox + Company & Details */}
+        <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">
+          {onToggleSelect && (
+            <div className="pt-2 shrink-0">
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={() => onToggleSelect(job)}
+                aria-label={`Select ${job.job_title} at ${job.company_name}`}
+                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer transition-all"
+              />
+            </div>
+          )}
+
           {/* Company Monogram/Logo */}
           <div className="w-12 h-12 rounded-xl bg-slate-900 text-white font-bold flex items-center justify-center shrink-0 text-base shadow-sm">
             {companyInitials}

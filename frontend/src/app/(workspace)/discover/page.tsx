@@ -35,6 +35,11 @@ export default function DiscoverJobsPage() {
   const [selectedJobForDirectApply, setSelectedJobForDirectApply] = useState<any | null>(null);
   const [filterState, setFilterState] = useState<FilterState>(defaultFilterState);
 
+  // Multi-select bulk save state
+  const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
+  const [bulkStatus, setBulkStatus] = useState<"To Review" | "To Apply" | "Applied">("To Review");
+  const [isBulkSaving, setIsBulkSaving] = useState(false);
+
   // Manual intake state
   const [manualUrl, setManualUrl] = useState("");
   const [manualText, setManualText] = useState("");
@@ -79,6 +84,68 @@ export default function DiscoverJobsPage() {
       toast.success(`Saved "${job.job_title}" to Tracker under ${status}!`);
     } catch (err: any) {
       toast.error(err?.message || "Failed to save job to tracker.");
+    }
+  };
+
+  const getJobKey = (job: any) => String(job.id || `${job.company_name}-${job.job_title}`);
+
+  const handleToggleSelect = (job: any) => {
+    const key = getJobKey(job);
+    setSelectedJobIds(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedJobIds.length === jobs.length) {
+      setSelectedJobIds([]);
+    } else {
+      setSelectedJobIds(jobs.map(getJobKey));
+    }
+  };
+
+  const handleBulkSave = async () => {
+    if (selectedJobIds.length === 0) return;
+    const selectedJobs = jobs.filter((j: any) => selectedJobIds.includes(getJobKey(j)));
+    if (selectedJobs.length === 0) return;
+
+    setIsBulkSaving(true);
+    try {
+      const payload = {
+        jobs: selectedJobs.map((job: any) => ({
+          company_name: job.company_name,
+          job_title: job.job_title,
+          job_url: job.job_url,
+          source: job.source,
+          job_description: job.job_description,
+          location: job.location,
+          salary_range: job.salary_range,
+          job_type: job.job_type,
+          status: bulkStatus,
+          priority: "Medium",
+          match_score: job.match_score ? Math.round(job.match_score) : null,
+          match_analysis: job.match_analysis,
+        })),
+        target_status: bulkStatus,
+      };
+
+      const res = await fetch(`${API_URL}/scraper/bulk-import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        throw new Error("Bulk import failed");
+      }
+
+      queryClient.invalidateQueries({ queryKey: queryKeys.tracker });
+      toast.success(`Successfully saved ${selectedJobs.length} jobs to Tracker under "${bulkStatus}"!`);
+      setSelectedJobIds([]);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to save selected jobs.");
+    } finally {
+      setIsBulkSaving(false);
     }
   };
 
@@ -290,6 +357,39 @@ export default function DiscoverJobsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
         {/* Left 3 Columns: Job Cards Feed */}
         <div className="lg:col-span-3 space-y-4">
+          {/* Multi-Select Header Toolbar */}
+          {!isLoading && jobs.length > 0 && (
+            <div className="flex items-center justify-between bg-white border border-slate-200/90 rounded-2xl p-3 px-4 shadow-2xs">
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700 select-none">
+                  <input
+                    type="checkbox"
+                    checked={selectedJobIds.length === jobs.length && jobs.length > 0}
+                    onChange={handleSelectAll}
+                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  />
+                  <span>Select All ({jobs.length})</span>
+                </label>
+
+                {selectedJobIds.length > 0 && (
+                  <span className="text-xs bg-blue-50 text-blue-700 font-bold px-2.5 py-0.5 rounded-full border border-blue-100">
+                    {selectedJobIds.length} selected
+                  </span>
+                )}
+              </div>
+
+              {selectedJobIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedJobIds([])}
+                  className="text-xs text-slate-400 hover:text-slate-600 font-medium cursor-pointer"
+                >
+                  Clear selection
+                </button>
+              )}
+            </div>
+          )}
+
           {isLoading ? (
             <div className="p-12 text-center text-slate-400 text-sm">
               <div className="w-8 h-8 rounded-full border-2 border-blue-600 border-t-transparent animate-spin mx-auto mb-3" />
@@ -318,6 +418,8 @@ export default function DiscoverJobsPage() {
               <JobCard
                 key={job.id}
                 job={job}
+                isSelected={selectedJobIds.includes(getJobKey(job))}
+                onToggleSelect={() => handleToggleSelect(job)}
                 onSaveToTracker={handleSaveToTracker}
                 onTailorAndApply={handleTailorAndApply}
                 onDirectApply={(j) => setSelectedJobForDirectApply(j)}
@@ -455,6 +557,64 @@ export default function DiscoverJobsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Bulk Actions Floating Dock ── */}
+      {selectedJobIds.length > 0 && (
+        <div className="fixed bottom-6 inset-x-0 z-50 flex justify-center px-4 pointer-events-none animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <div className="pointer-events-auto bg-slate-900/95 backdrop-blur-md text-white border border-slate-800 rounded-3xl p-3 px-5 shadow-2xl flex flex-wrap items-center gap-4 max-w-2xl w-full justify-between">
+            <div className="flex items-center gap-2.5">
+              <span className="w-6 h-6 rounded-full bg-blue-500 text-white font-black text-xs flex items-center justify-center">
+                {selectedJobIds.length}
+              </span>
+              <span className="text-xs font-bold text-slate-200">
+                Jobs Selected
+              </span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 text-xs">
+                <span className="text-slate-400">Save as:</span>
+                <select
+                  value={bulkStatus}
+                  onChange={(e) => setBulkStatus(e.target.value as any)}
+                  className="bg-slate-800 border border-slate-700 text-white rounded-xl text-xs px-2.5 py-1.5 font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="To Review">To Review</option>
+                  <option value="To Apply">To Apply</option>
+                  <option value="Applied">Applied</option>
+                </select>
+              </div>
+
+              <button
+                type="button"
+                disabled={isBulkSaving}
+                onClick={handleBulkSave}
+                className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-1.5 rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                {isBulkSaving ? (
+                  <>
+                    <div className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Bookmark className="w-3.5 h-3.5" />
+                    Save Selected
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedJobIds([])}
+                className="text-xs text-slate-400 hover:text-white px-2 py-1 transition-colors cursor-pointer"
+              >
+                Clear
+              </button>
+            </div>
           </div>
         </div>
       )}

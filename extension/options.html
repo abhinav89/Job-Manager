@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>DealOS Extension Settings</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      max-width: 520px;
+      margin: 40px auto;
+      padding: 24px;
+      background: #f8fafc;
+      color: #0f172a;
+    }
+    .card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    h1 {
+      font-size: 18px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+    p {
+      font-size: 13px;
+      color: #64748b;
+      margin-bottom: 20px;
+    }
+    .form-group {
+      margin-bottom: 16px;
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: #334155;
+    }
+    input, select {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      font-size: 13px;
+      background: #f8fafc;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: #2563eb;
+      background: #ffffff;
+    }
+    .btn {
+      background: #2563eb;
+      color: white;
+      padding: 10px 18px;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 13px;
+      border: none;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    .btn:hover {
+      background: #1d4ed8;
+    }
+    .toast {
+      display: none;
+      margin-top: 14px;
+      padding: 10px;
+      background: #ecfdf5;
+      color: #065f46;
+      border: 1px solid #a7f3d0;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>DealOS ATS Autofill Settings</h1>
+    <p>Configure default answers for common applicant tracking questions.</p>
+
+    <div class="form-group">
+      <label for="apiUrl">DealOS API Endpoint</label>
+      <input type="text" id="apiUrl" placeholder="https://api-jobs.dealos.in">
+    </div>
+
+    <div class="form-group">
+      <label for="authorizedToWork">Work Authorization Default</label>
+      <select id="authorizedToWork">
+        <option value="Yes">Yes (Legally authorized)</option>
+        <option value="No">No</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="requiresSponsorship">Requires Visa Sponsorship?</label>
+      <select id="requiresSponsorship">
+        <option value="No">No (Does not require sponsorship)</option>
+        <option value="Yes">Yes</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="noticePeriod">Default Notice Period</label>
+      <input type="text" id="noticePeriod" placeholder="30 Days / Immediate">
+    </div>
+
+    <div class="form-group">
+      <label for="preferredSalary">Target Salary Expectation</label>
+      <input type="text" id="preferredSalary" placeholder="₹30L - ₹50L/yr or Competitive">
+    </div>
+
+    <button class="btn" id="save-btn">Save Preferences</button>
+    <div class="toast" id="toast">Preferences saved successfully!</div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DealOS Job Manager</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="brand">
+        <div class="logo">JM</div>
+        <div>
+          <h1 class="brand-title">DealOS Job Manager</h1>
+          <p class="brand-sub">ATS Autofill & Career Copilot</p>
+        </div>
+      </div>
+      <a href="options.html" target="_blank" class="icon-btn" title="Settings" id="settings-btn">⚙️</a>
+    </header>
+
+    <!-- ATS Status Banner -->
+    <div class="status-banner" id="status-banner">
+      <span class="pulse-dot"></span>
+      <span id="ats-name">Detecting application form...</span>
+    </div>
+
+    <!-- Primary Actions -->
+    <div class="actions-section">
+      <button class="btn btn-primary" id="btn-autofill">
+        <span class="btn-icon">⚡</span>
+        <span>Auto-Fill Application</span>
+      </button>
+
+      <button class="btn btn-secondary" id="btn-save-tracker">
+        <span class="btn-icon">📥</span>
+        <span>Save to DealOS Tracker</span>
+      </button>
+    </div>
+
+    <!-- Candidate Profile Card -->
+    <div class="card profile-card" id="profile-card">
+      <div class="card-header">
+        <span class="card-title">Candidate Profile</span>
+        <button class="btn-link" id="btn-sync-profile">🔄 Sync</button>
+      </div>
+
+      <div class="profile-details" id="profile-details">
+        <div class="profile-name" id="prof-name">Loading candidate facts...</div>
+        <div class="profile-meta" id="prof-headline">Founder / Senior Professional</div>
+      </div>
+
+      <!-- Quick Copy Badges -->
+      <div class="quick-copy-title">Quick Copy to Clipboard:</div>
+      <div class="copy-chips">
+        <button class="chip" id="copy-email" title="Click to copy email">✉️ Email</button>
+        <button class="chip" id="copy-phone" title="Click to copy phone">📞 Phone</button>
+        <button class="chip" id="copy-linkedin" title="Click to copy LinkedIn">🔗 LinkedIn</button>
+        <button class="chip" id="copy-github" title="Click to copy GitHub">💻 GitHub</button>
+        <button class="chip" id="copy-summary" title="Click to copy summary pitch">📝 Summary</button>
+      </div>
+    </div>
+
+    <!-- Toast Notification inside popup -->
+    <div class="popup-toast" id="popup-toast"></div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <a href="https://jobs.dealos.in" target="_blank" class="footer-link">Open DealOS Portal →</a>
+      <span class="footer-version">v1.0.0</span>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

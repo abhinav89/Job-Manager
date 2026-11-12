@@ -71,7 +71,7 @@ export default function Sidebar() {
   ];
 
   const toolItems = [
-    { label: "Job Tailor", href: "/generate?tab=tailored", icon: <Wand2 className="w-4 h-4" /> },
+    { label: "Tailor Resume", href: "/generate?tab=tailored", icon: <Wand2 className="w-4 h-4" /> },
     { label: "Cover Letter", href: "/generate?tab=cover_letter", icon: <Mail className="w-4 h-4" /> },
     { label: "Career Profile", href: "/profile", icon: <User className="w-4 h-4" /> },
     { label: "Interview Prep", href: "#", icon: <MessageSquare className="w-4 h-4" />, badge: "Upcoming", isFuture: true },
