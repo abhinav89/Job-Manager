@@ -12,6 +12,8 @@ def configure(directory=None):
         os.environ["CV_TAILOR_HOME"] = str(Path(directory).expanduser().resolve())
     from dotenv import load_dotenv
     load_dotenv(data_dir() / ".env")
+    load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+    load_dotenv(Path(__file__).resolve().parents[2] / ".env")
     os.environ.setdefault("EXECUTION_BACKEND", "local")
     os.environ.setdefault("ENVIRONMENT", "development")
 

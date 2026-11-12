@@ -8,13 +8,15 @@ import dynamic from "next/dynamic";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import { API_URL, getApiError } from "@/lib/api";
-import { queryKeys, useWorkspace, useTrackerDetails, useTrackerJobs, type JobDetails, type JobSummary } from "@/lib/queries";
+import { queryKeys, useWorkspace, useTrackerDetails, useTrackerJobs, type JobDetails, type JobSummary, type ApplicationStatus } from "@/lib/queries";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { patchJob, prependJob, removeJob, replaceJob } from "@/lib/trackerCache";
 import { setExpandedJob, setFilterStatus, setSearchQuery, setStatsOpen, type RootState } from "@/lib/store";
 import { useDispatch, useSelector } from "react-redux";
 import InlineQueryError from "@/components/InlineQueryError";
 import ApplicationDocuments from "@/components/ApplicationDocuments";
+import { KanbanBoard } from "@/components/tracker/KanbanBoard";
+import { FileSpreadsheet, Download, LayoutGrid, List, Plus, Search } from "lucide-react";
 
 const Document = dynamic(() => import("react-pdf").then(m => m.Document), { ssr: false });
 const Page = dynamic(() => import("react-pdf").then(m => m.Page), { ssr: false });
@@ -29,7 +31,7 @@ if (typeof window !== "undefined") {
 const API = API_URL;
 
 // ── Types ────────────────────────────────────────────────────────
-type Status = "Saved" | "Applied" | "Interview" | "Tech Test" | "Offer" | "Rejected" | "Ghosted";
+type Status = ApplicationStatus;
 type Priority = "High" | "Medium" | "Low";
 type TemplateId = ResumeTemplate;
 
@@ -61,9 +63,11 @@ type JobPayload = {
 };
 
 // ── Constants ────────────────────────────────────────────────────
-const STATUSES: Status[] = ["Saved", "Applied", "Interview", "Tech Test", "Offer", "Rejected", "Ghosted"];
+const STATUSES: Status[] = ["To Review", "To Apply", "Applied", "Interview", "Offer", "Rejected", "Saved", "Tech Test", "Ghosted"];
 
 const SC: Record<Status, { bg: string; text: string; border: string; dot: string }> = {
+  "To Review":  { bg: "#f0ede8", text: "#4a4540", border: "#d4cfc7", dot: "#a8a39c" },
+  "To Apply":   { bg: "#eef2ff", text: "#3730a3", border: "#c7d2fe", dot: "#4f46e5" },
   Saved:       { bg: "#f0ede8", text: "#4a4540", border: "#d4cfc7", dot: "#a8a39c" },
   Applied:     { bg: "#e8f0ff", text: "#2a4a8a", border: "#b8d0f8", dot: "#4a7acc" },
   Interview:   { bg: "#fff8e0", text: "#7a5a00", border: "#f0d880", dot: "#c8a800" },
@@ -320,6 +324,12 @@ export default function TrackerPage() {
   const [generateError, setGenerateError] = useState<{ id: number; msg: string } | null>(null);
   const [autoFilling, setAutoFilling] = useState(false);
   const [jobDescriptionOpen, setJobDescriptionOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
+
+  const handleExport = (format: "csv" | "xlsx") => {
+    window.open(`${API}/tracker/export/${format}`, "_blank");
+    toast.success(`Exporting Application Master Sheet (${format.toUpperCase()})...`);
+  };
 
   const loading = jobsQuery.isLoading;
   const stats = useMemo(() => ({
@@ -636,39 +646,79 @@ export default function TrackerPage() {
         <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
 
           {/* Header */}
-          <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
             <div>
-              <div className="text-[10px] tracking-[0.3em] uppercase mb-1" style={{ color: "#5a8a00" }}>cv_tailor</div>
-              <h1 className="text-2xl font-bold" style={{ fontFamily: "'Georgia', serif" }}>Job Tracker</h1>
-              <p className="text-xs mt-1" style={{ color: "#a8a39c" }}>
-                {stats.total} application{stats.total !== 1 ? "s" : ""} · {jobs.filter(j => j.has_pdf).length} with generated CVs
+              <div className="text-[10px] tracking-[0.2em] uppercase font-bold text-blue-600 mb-1">
+                APPLICATION PIPELINE
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight font-sans">
+                Job Tracker
+              </h1>
+              <p className="text-xs text-slate-500 mt-0.5 font-sans">
+                {stats.total} application{stats.total !== 1 ? "s" : ""} · {jobs.filter(j => j.has_pdf).length} tailored resume versions saved
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <button type="button" onClick={() => setShowArchived(value => !value)} className="rounded-sm border border-[#d4cfc7] px-3 py-2 text-xs">{showArchived ? "Show active" : "Show archived"}</button>
-              <Link href="/insights" className="flex items-center gap-2 rounded-sm border border-[#d4cfc7] px-4 py-2.5 text-xs font-bold uppercase tracking-[0.15em] text-[#3d6600] hover:bg-[#e8f5c0]">
-                Application flow
-              </Link>
-              <Link href="/discover" prefetch
-                className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold tracking-[0.15em] uppercase rounded-sm border transition-colors"
-                style={{ borderColor: "#5a8a00", color: "#5a8a00", background: "transparent" }}
-                onMouseEnter={e => e.currentTarget.style.background = "#eef3e0"}
-                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
-                  <circle cx="4.3" cy="4.3" r="3.3" stroke="currentColor" strokeWidth="1.4"/>
-                  <line x1="6.8" y1="6.8" x2="10" y2="10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-                </svg>
-                Discover Jobs
-              </Link>
-              <button onClick={openCreate} disabled={workspaceQuery.isPending || workspaceQuery.isError}
-                className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold tracking-[0.15em] uppercase rounded-sm transition-colors"
-                style={{ background: "#1a1814", color: "#f5f2ed" }}
-                onMouseEnter={e => e.currentTarget.style.background = "#2a2520"}
-                onMouseLeave={e => e.currentTarget.style.background = "#1a1814"}>
-                <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
-                  <line x1="5.5" y1="1" x2="5.5" y2="10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                  <line x1="1" y1="5.5" x2="10" y2="5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
+
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* View Switcher */}
+              <div className="flex items-center rounded-xl border border-slate-200 bg-white p-1 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("kanban")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    viewMode === "kanban" ? "bg-blue-600 text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  Kanban
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("list")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    viewMode === "list" ? "bg-blue-600 text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <List className="w-3.5 h-3.5" />
+                  List
+                </button>
+              </div>
+
+              {/* Export Master Sheet */}
+              <button
+                type="button"
+                onClick={() => handleExport("xlsx")}
+                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition-all shadow-2xs"
+                title="Download complete pipeline formatted for Excel"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                Excel
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleExport("csv")}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition-all shadow-2xs"
+                title="Download CSV"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-500" />
+                CSV
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowArchived(value => !value)}
+                className="rounded-xl border border-slate-200 bg-white hover:bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700"
+              >
+                {showArchived ? "Active" : "Archived"}
+              </button>
+
+              <button
+                onClick={openCreate}
+                disabled={workspaceQuery.isPending || workspaceQuery.isError}
+                className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-sm"
+              >
+                <Plus className="w-4 h-4" />
                 Add Application
               </button>
             </div>
@@ -761,6 +811,20 @@ export default function TrackerPage() {
                 </button>
               )}
             </div>
+          ) : viewMode === "kanban" ? (
+            <KanbanBoard
+              jobs={filtered}
+              onStatusChange={(j, st) => handleStatusChange(j, st as Status)}
+              onOpenDetails={(id) => dispatch(setExpandedJob(id))}
+              onTailor={(job) => {
+                if (job.has_pdf) {
+                  router.push(`/generate?job_id=${job.id}`);
+                } else {
+                  handleGeneratePdf(job);
+                }
+              }}
+              onDelete={handleDelete}
+            />
           ) : (
             <div className="space-y-2">
               {filtered.map(job => {

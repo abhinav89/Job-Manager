@@ -11,7 +11,16 @@ export type WorkspacePreferences = {
 };
 export type Workspace = { name: string; email: string; profile_exists: boolean; data_dir: string; preferences?: WorkspacePreferences; ai: {mode: string; generation: boolean; assistant: boolean; research: boolean; ranking: boolean} };
 
-export type ApplicationStatus = "Saved" | "Applied" | "Interview" | "Tech Test" | "Offer" | "Rejected" | "Ghosted";
+export type ApplicationStatus =
+  | "To Review"
+  | "To Apply"
+  | "Applied"
+  | "Interview"
+  | "Tech Test"
+  | "Offer"
+  | "Rejected"
+  | "Ghosted"
+  | "Saved";
 export type ApplicationPriority = "High" | "Medium" | "Low";
 export type { ResumeTemplate } from "./resumeTemplates";
 
@@ -35,12 +44,29 @@ export type Profile = {
   certifications: Certification[];
   preset_slug?: string;
   preferred_template?: ResumeTemplate;
+  target_roles?: string[];
+  target_locations?: string[];
+  target_work_modes?: string[];
+  target_salary?: string;
 };
 
 export type PresetSummary = {
   slug: string;
   display_name: string;
   recommended_template?: ResumeTemplate;
+};
+
+export type MatchAnalysis = {
+  score: number;
+  score_percent: number;
+  label: "STRONG" | "GOOD" | "FAIR" | "PARTIAL" | string;
+  summary: string;
+  pros: string[];
+  cons: string[];
+  matched_skills: string[];
+  missing_skills: string[];
+  experience_fit?: string;
+  location_fit?: string;
 };
 
 export type JobSummary = {
@@ -62,6 +88,21 @@ export type JobSummary = {
   salary_range?: string;
   priority: ApplicationPriority;
   template_id?: ResumeTemplate;
+  match_score?: number;
+  match_analysis?: MatchAnalysis;
+};
+
+export type PipelineSummary = {
+  total: number;
+  to_review_count: number;
+  to_apply_count: number;
+  applied_count: number;
+  interviewing_count: number;
+  offers_count: number;
+  rejected_count: number;
+  follow_ups_due_count: number;
+  follow_ups_due: JobSummary[];
+  recent_applications: JobSummary[];
 };
 
 export type JobDetails = JobSummary & {
@@ -105,6 +146,9 @@ export const queryKeys = {
   tracker: ["workspace-data", "tracker"] as const,
   trackerJobs: ["workspace-data", "tracker", "jobs"] as const,
   trackerStats: ["workspace-data", "tracker", "stats"] as const,
+  pipelineSummary: ["workspace-data", "tracker", "pipeline-summary"] as const,
+  repositoryJobs: (filters: Record<string, any>) => ["scraper", "jobs", filters] as const,
+  trackedCompanies: ["scraper", "companies"] as const,
   trackerDetails: (id: number) => ["workspace-data", "tracker", "details", id] as const,
   applicationDocuments: (id: number) => ["workspace-data", "tracker", "documents", id] as const,
 };
@@ -169,6 +213,49 @@ export function useTrackerDetails(id: number | null) {
     queryKey: id === null ? ["workspace-data", "tracker", "details", "none"] : queryKeys.trackerDetails(id),
     queryFn: () => readJson<JobDetails>(`/tracker/${id}/details`, "Unable to load application details."),
     enabled: id !== null,
+  });
+}
+
+export function usePipelineSummary() {
+  return useQuery<PipelineSummary>({
+    queryKey: queryKeys.pipelineSummary,
+    queryFn: () => readJson<PipelineSummary>("/tracker/pipeline-summary", "Unable to load pipeline summary."),
+    refetchInterval: 10000,
+  });
+}
+
+export function useRepositoryJobs(filters: {
+  keyword?: string;
+  location?: string;
+  work_model?: string;
+  seniority?: string;
+  company?: string;
+  source?: string;
+  min_score?: number;
+} = {}) {
+  const queryParams = new URLSearchParams();
+  if (filters.keyword) queryParams.set("keyword", filters.keyword);
+  if (filters.location) queryParams.set("location", filters.location);
+  if (filters.work_model && filters.work_model !== "all") queryParams.set("work_model", filters.work_model);
+  if (filters.seniority && filters.seniority !== "all") queryParams.set("seniority", filters.seniority);
+  if (filters.company) queryParams.set("company", filters.company);
+  if (filters.source && filters.source !== "all") queryParams.set("source", filters.source);
+  if (filters.min_score) queryParams.set("min_score", String(filters.min_score));
+
+  return useQuery<{ status: string; total: number; jobs: any[] }>({
+    queryKey: queryKeys.repositoryJobs(filters),
+    queryFn: () => readJson<{ status: string; total: number; jobs: any[] }>(
+      `/scraper/jobs?${queryParams.toString()}`,
+      "Unable to load jobs from repository."
+    ),
+  });
+}
+
+export function useTrackedCompanies() {
+  return useQuery<{ status: string; companies: any[] }>({
+    queryKey: queryKeys.trackedCompanies,
+    queryFn: () => readJson<{ status: string; companies: any[] }>("/scraper/companies", "Unable to load tracked companies."),
+    staleTime: 60 * 60_000,
   });
 }
 

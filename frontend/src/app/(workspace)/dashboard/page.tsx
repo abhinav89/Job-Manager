@@ -1,696 +1,265 @@
-"use client"
-import { useState, useEffect, useRef, useCallback } from "react"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
-import { toast } from "sonner";
+"use client";
+
+import React, { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  Briefcase,
+  CheckCircle2,
+  Clock,
+  Download,
+  ExternalLink,
+  FileSpreadsheet,
+  FileText,
+  Plus,
+  Search,
+  Sparkles,
+  ArrowRight,
+  TrendingUp,
+  AlertTriangle,
+  BookmarkCheck,
+} from "lucide-react";
+import { usePipelineSummary, useRepositoryJobs, useProfile } from "@/lib/queries";
 import { API_URL } from "@/lib/api";
-import { useQueryClient } from "@tanstack/react-query";
-import { ApiQueryError, queryKeys, useWorkspace, usePresets, useProfile } from "@/lib/queries";
-import { motion, AnimatePresence } from "framer-motion";
-import { useDropzone } from "react-dropzone";
-import { UploadCloud } from "lucide-react";
-import InlineQueryError from "@/components/InlineQueryError";
-
-const GRAIN = `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`
-
-const API = API_URL
-
-const inputClass =
-  "w-full bg-[#e8e4dd] text-[#1a1814] text-sm p-3 outline-none border border-[#d4cfc7] focus:border-[#c8f06088] rounded-sm placeholder-[#b0aba4] transition-colors duration-200"
-const labelClass =
-  "block text-[10px] tracking-[0.25em] text-[#7a7570] uppercase mb-2"
-
-type Education = {
-  school_name: string
-  course: string
-  location: string
-  description: string
-}
-type Experience = {
-  job_title: string
-  company: string
-  location: string
-  description: string
-  date_range: string
-}
-type Project = { name: string; description: string; date_range: string; link: string }
-type Certification = { name: string; issuer: string; date_issued: string }
-
-interface Profile {
-  first_name: string
-  last_name: string
-  mobile_no: string
-  email: string
-  linkedin: string
-  github: string
-  portfolio: string
-  education: Education[]
-  experience: Experience[]
-  projects: Project[]
-  skills: { skill_name: string; is_confirmed?: boolean }[]
-  certifications: Certification[]
-  preset_slug: string
-}
-
-function extractErrorMessage(err: unknown): string {
-  if (!err || typeof err !== "object" || !("detail" in err)) return "Save failed"
-  const detail = (err as { detail: unknown }).detail
-  if (typeof detail === "string") return detail
-  if (Array.isArray(detail)) {
-    return detail
-      .map((d) => (d && typeof d === "object" && "msg" in d ? String((d as { msg: unknown }).msg) : JSON.stringify(d)))
-      .join("; ")
-  }
-  return "Save failed"
-}
-
-const emptyProfile: Profile = {
-  first_name: "", last_name: "", mobile_no: "", email: "",
-  linkedin: "", github: "", portfolio: "",
-  education: [], experience: [], projects: [], skills: [], certifications: [],
-  preset_slug: "blank",
-}
-
-function DashboardSkeleton() {
-  return (
-    <main className="min-h-screen bg-[#f5f2ed] px-4 py-6 font-mono text-[#1a1814] sm:px-8 sm:py-10">
-      <div className="mx-auto max-w-5xl animate-pulse space-y-6">
-        <div className="space-y-3">
-          <div className="h-3 w-24 rounded bg-[#d4cfc7]" />
-          <div className="h-9 w-64 rounded bg-[#d4cfc7]" />
-          <div className="h-3 w-80 max-w-full rounded bg-[#e1ddd6]" />
-        </div>
-        <div className="h-14 rounded-xl border border-[#d4cfc7] bg-[#edeae4]" />
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[220px_1fr]">
-          <div className="h-72 rounded-xl border border-[#d4cfc7] bg-[#edeae4]" />
-          <div className="space-y-4 rounded-xl border border-[#d4cfc7] bg-[#fffdf9] p-5">
-            <div className="h-4 w-40 rounded bg-[#d4cfc7]" />
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="h-11 rounded bg-[#e8e4dd]" />
-              <div className="h-11 rounded bg-[#e8e4dd]" />
-              <div className="h-11 rounded bg-[#e8e4dd]" />
-              <div className="h-11 rounded bg-[#e8e4dd]" />
-            </div>
-            <div className="h-28 rounded bg-[#e8e4dd]" />
-          </div>
-        </div>
-      </div>
-    </main>
-  )
-}
+import { ResumeOnboardingModal } from "@/components/ResumeOnboardingModal";
+import { JobCard } from "@/components/tracker/JobCard";
+import { toast } from "sonner";
 
 export default function DashboardPage() {
-  const router = useRouter()
-  const dirty = useRef(false)
-  const savedRevision = useRef<number | undefined>(undefined)
-  const [profile, setProfile] = useState<Profile>(emptyProfile)
-  const [activeTab, setActiveTab] = useState<
-    "personal" | "education" | "experience" | "projects" | "skills" | "certifications"
-  >("personal")
-  const [mobileSectionsOpen, setMobileSectionsOpen] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle")
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const [profileHydrated, setProfileHydrated] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const queryClient = useQueryClient()
-  const { data: user, isError: userError, isPending: userLoading } = useWorkspace()
-  const { data: profileData, error: profileQueryError, isError: profileError, isPending: profileLoading, refetch: refetchProfile } = useProfile()
-  const { data: presets = [], error: presetsQueryError, isError: presetsError, isPending: presetsLoading, refetch: refetchPresets } = usePresets()
-  const userEmail = user?.email || ""
+  const router = useRouter();
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+  const { data: profile } = useProfile();
+  const { data: pipeline, isLoading: isPipelineLoading } = usePipelineSummary();
+  const { data: repoData, isLoading: isJobsLoading } = useRepositoryJobs();
 
-  const processFile = async (file: File) => {
-    dirty.current = true;
-    setUploading(true);
-    const formData = new FormData();
-    formData.append("file", file);
+  const userName = profile?.first_name || "Abhinav";
+  const recommendedJobs = repoData?.jobs?.slice(0, 3) || [];
 
-    try {
-      const res = await fetch(`${API}/profile/auto-fill-resume`, {
-        method: "POST",
-        credentials: "include",
-        body: formData
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || "Upload failed");
-      }
-      const data = await res.json();
-      if (data.status === "success" && data.data) {
-        const parsed = data.data;
-        setProfile((prev) => ({
-          ...prev,
-          first_name: parsed.first_name || prev.first_name,
-          last_name: parsed.last_name || prev.last_name,
-          mobile_no: parsed.mobile_no || prev.mobile_no,
-          email: parsed.email || prev.email,
-          linkedin: parsed.linkedin || prev.linkedin,
-          github: parsed.github || prev.github,
-          portfolio: parsed.portfolio || prev.portfolio,
-          education: parsed.education?.length ? parsed.education : prev.education,
-          experience: parsed.experience?.length ? parsed.experience : prev.experience,
-          projects: parsed.projects?.length ? parsed.projects : prev.projects,
-          skills: parsed.skills?.length ? parsed.skills.map((skill: { skill_name: string }) => ({ ...skill, is_confirmed: false })) : prev.skills,
-          certifications: parsed.certifications?.length ? parsed.certifications : prev.certifications,
-        }));
-        toast.success("Profile successfully auto-filled! Please review and click 'Save Profile'.");
-      }
-    } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Upload failed");
-    } finally {
-      setUploading(false);
-    }
+  const handleExport = (format: "csv" | "xlsx") => {
+    const url = `${API_URL}/tracker/export/${format}`;
+    window.open(url, "_blank");
+    toast.success(`Exporting Application Master Sheet as ${format.toUpperCase()}...`);
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    await processFile(file);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+  const handleTailorJob = (job: any) => {
+    // Save to tracker if not already saved, then navigate to tailoring
+    router.push(`/generate?title=${encodeURIComponent(job.job_title)}&company=${encodeURIComponent(job.company_name)}`);
   };
-
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    const file = acceptedFiles[0];
-    if (file) {
-      await processFile(file);
-    }
-  }, []);
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: { "application/pdf": [".pdf"] },
-    multiple: false,
-    noClick: true,
-  });
-
-  useEffect(() => {
-    if (userError) console.error("Local workspace is unavailable")
-  }, [user, userError, router])
-
-  useEffect(() => {
-    if (!profileData || dirty.current) return
-    savedRevision.current = profileData.revision
-    const data = profileData
-    setProfile({
-      first_name: data.first_name || "",
-      last_name: data.last_name || "",
-      mobile_no: data.mobile_no || "",
-      email: data.email || "",
-      linkedin: data.linkedin || "",
-      github: data.github || "",
-      portfolio: data.portfolio || "",
-      preset_slug: data.preset_slug || "blank",
-      education: (data.education || []).map((e) => ({ school_name: e.school_name, course: e.course, location: e.location, description: e.description || "" })),
-      experience: (data.experience || []).map((e) => ({ job_title: e.job_title, company: e.company, location: e.location, description: e.description || "", date_range: e.date_range || "" })),
-      projects: (data.projects || []).map((p) => ({ name: p.name, description: p.description || "", date_range: p.date_range || "", link: p.link || "" })),
-      skills: (data.skills || []).map((s) => ({ skill_name: s.skill_name, is_confirmed: s.is_confirmed === true })),
-      certifications: (data.certifications || []).map((c) => ({ name: c.name || "", issuer: c.issuer || "", date_issued: c.date_issued || "" })),
-    })
-    setProfileHydrated(true)
-  }, [profileData])
-
-  const dashboardLoading = userLoading || presetsLoading || profileLoading || (Boolean(profileData) && !profileHydrated)
-
-  if (dashboardLoading || userError || (profileLoading && !profileError)) {
-    return <DashboardSkeleton />
-  }
-
-  const profileNotFound = profileQueryError instanceof ApiQueryError && profileQueryError.status === 404;
-
-  if ((profileError && !profileData && !profileNotFound) || (presetsError && presets.length === 0)) {
-    const message = profileQueryError instanceof Error
-      ? profileQueryError.message
-      : presetsQueryError instanceof Error
-        ? presetsQueryError.message
-        : "We couldn’t load your dashboard data."
-    return (
-      <div className="mx-auto max-w-3xl p-6 sm:p-10">
-        <InlineQueryError message={message} onRetry={() => { void refetchProfile(); void refetchPresets(); }} />
-      </div>
-    )
-  }
-
-  const handleSave = async () => {
-    setSaving(true)
-    setSaveStatus("idle")
-    setSaveError(null)
-    try {
-      const res = await fetch(`${API}/profile/save`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ ...profile, revision: savedRevision.current }),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => null)
-        throw new Error(extractErrorMessage(err))
-      }
-      const saved = await res.json()
-      savedRevision.current = saved.revision
-      dirty.current = false
-      setSaveStatus("success")
-      setTimeout(() => setSaveStatus("idle"), 3000)
-      await queryClient.invalidateQueries({ queryKey: queryKeys.profile })
-    } catch (error) {
-      setSaveStatus("error")
-      setSaveError(error instanceof Error ? error.message : "Save failed")
-    } finally {
-      setSaving(false)
-    }
-  }
-
-
-  const updateField = (field: keyof Profile, value: unknown) =>
-    setProfile((p) => ({ ...p, [field]: value }))
-  const updateListItem = <T,>(field: keyof Profile, index: number, updated: T) =>
-    setProfile((p) => ({
-      ...p,
-      [field]: (p[field] as T[]).map((item, i) => i === index ? updated : item),
-    }))
-  const addListItem = <T,>(field: keyof Profile, empty: T) =>
-    setProfile((p) => ({ ...p, [field]: [...(p[field] as T[]), empty] }))
-  const removeListItem = (field: keyof Profile, index: number) =>
-    setProfile((p) => ({
-      ...p,
-      [field]: (p[field] as unknown[]).filter((_, i) => i !== index),
-    }))
-
-  const tabs = ["personal", "education", "experience", "projects", "skills", "certifications"] as const
 
   return (
-    <div onChangeCapture={() => { dirty.current = true; }} {...getRootProps()} className="relative min-h-screen">
-        <input {...getInputProps()} />
-
-        <AnimatePresence>
-          {isDragActive && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-[#f5f2ed]/90 backdrop-blur-sm m-4 rounded-xl border-4 border-dashed border-[#5a8a00] transition-all duration-300"
-            >
-              <div className="text-center p-8 bg-[#fffdf9] border border-[#d4cfc7] rounded-lg shadow-xl max-w-sm font-mono">
-                <UploadCloud className="mx-auto h-12 w-12 text-[#5a8a00] animate-pulse mb-4" />
-                <h3 className="mt-4 text-base font-bold text-[#1a1814] tracking-wider uppercase">Drop your PDF resume here</h3>
-                <p className="mt-2 text-xs text-[#7a7570] leading-relaxed">We will parse and autofill your profile details instantly.</p>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <main className="min-h-screen bg-[#f5f2ed] text-[#1a1814] font-mono">
-      <div className="pointer-events-none fixed inset-0 opacity-[0.07] z-0"
-        style={{ backgroundImage: GRAIN, backgroundRepeat: "repeat", backgroundSize: "128px" }} />
-
-      <div className="relative z-10 mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-12">
-
-        {/* Top bar */}
-        <div className="mb-8 flex flex-wrap items-start justify-between gap-5 sm:mb-12">
-          <div>
-            <div className="text-[10px] tracking-[0.3em] text-[#5a8a00] uppercase mb-1">cv_tailor</div>
-            <h1 className="text-2xl font-bold text-[#1a1814]" style={{ fontFamily: "'Georgia', serif" }}>
-              Profile Dashboard
-            </h1>
-            <div className="flex items-center gap-3 mt-2">
-              <p className="text-[#b0aba4] text-xs">{userEmail}</p>
-            </div>
+    <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-8 font-sans">
+      {/* ── Top Header & Quick Actions ── */}
+      <div className="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+        <div className="space-y-1">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold">
+            <Sparkles className="w-3.5 h-3.5" />
+            Executive Career Pipeline
           </div>
-          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:gap-3">
-            <Link href="/generate" prefetch
-                        className="flex-1 px-3 py-2 text-center bg-[#1a1814] text-[#f5f2ed] text-xs font-bold tracking-[0.15em] uppercase rounded-sm hover:bg-[#2a2520] transition-colors sm:flex-none sm:px-4">
-              Generate CV →
-            </Link>
-            <input
-              type="file"
-              accept=".pdf"
-              ref={fileInputRef}
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-            <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
-              className="flex-1 px-3 py-2 text-center bg-[#5a8a00] text-[#f5f2ed] text-xs font-bold tracking-[0.15em] uppercase rounded-sm hover:bg-[#4a7200] transition-colors disabled:opacity-50 sm:flex-none sm:px-4">
-              {uploading ? "Parsing..." : "Auto-Fill via PDF"}
-            </button>
-
-          </div>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+            Welcome back, {userName}
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500">
+            Track openings across 100+ company career pages, align resumes truthfully, and drive applications.
+          </p>
         </div>
 
-        {/* Mobile section picker */}
-        <div className="mb-4 rounded-xl border border-[#d4cfc7] bg-[#fffdf9] p-3 shadow-sm md:hidden">
+        {/* Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
             type="button"
-            onClick={() => setMobileSectionsOpen((open) => !open)}
-            className="flex w-full items-center justify-between gap-3 text-left"
+            onClick={() => setIsOnboardingOpen(true)}
+            className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs transition-all inline-flex items-center gap-2"
           >
-            <span>
-              <span className="block text-[10px] uppercase tracking-[0.2em] text-[#7a7570]">Editing section</span>
-              <span className="mt-1 block text-sm font-bold capitalize text-[#1a1814]">{activeTab}</span>
-            </span>
-            <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[#d4cfc7] text-[#5a8a00]">
-              {mobileSectionsOpen ? "−" : "+"}
-            </span>
+            <FileText className="w-4 h-4 text-slate-500" />
+            Update CV
           </button>
-          {mobileSectionsOpen && (
-            <div className="mt-3 grid grid-cols-2 gap-2 border-t border-[#eeeae4] pt-3">
-              {tabs.map((tab) => (
-                <button
-                  key={tab}
-                  type="button"
-                  onClick={() => { setActiveTab(tab); setMobileSectionsOpen(false) }}
-                  className={`rounded-lg px-3 py-2 text-left text-[10px] uppercase tracking-[0.12em] transition-colors ${
-                    activeTab === tab ? "bg-[#e4f6ad] font-bold text-[#365400]" : "bg-[#f5f2ed] text-[#7a7570]"
-                  }`}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
 
-        {/* Tabs */}
-        <div className="mb-8 hidden gap-1 overflow-x-auto overflow-y-hidden border-b border-[#d4cfc7] md:flex">
-          {tabs.map((tab) => (
-            <button key={tab} onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 text-[10px] tracking-[0.2em] uppercase transition-colors duration-200 border-b-2 -mb-px ${
-                activeTab === tab
-                  ? "border-[#5a8a00] text-[#5a8a00]"
-                  : "border-transparent text-[#b0aba4] hover:text-[#7a7570]"
-              }`}>
-              {tab}
-            </button>
-          ))}
-        </div>
-
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -15 }}
-            transition={{ duration: 0.15 }}
+          <button
+            type="button"
+            onClick={() => handleExport("xlsx")}
+            className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs transition-all inline-flex items-center gap-2"
+            title="Export complete pipeline to Excel"
           >
-            {/* Personal Tab */}
-            {activeTab === "personal" && (
-          <div className="mb-10">
-            <div className="mb-4">
-              <label className={labelClass}>Your Role / Niche</label>
-              <input
-                list="role-presets"
-                className={inputClass}
-                value={profile.preset_slug === 'blank' ? '' : profile.preset_slug}
-                onChange={(e) => updateField("preset_slug", e.target.value || "blank")}
-                placeholder="e.g. Full Stack Developer, Product Manager..."
-                maxLength={50}
-              />
-              <datalist id="role-presets">
-                {presets.map(p => (
-                  <option key={p.slug} value={p.display_name} />
-                ))}
-              </datalist>
-              <p className="mt-1 text-xs text-[#b0aba4]">
-                We&apos;ll tailor your resume toward {profile.preset_slug && profile.preset_slug !== 'blank' ? profile.preset_slug : 'your custom'} roles and suggest relevant skills.
-              </p>
-            </div>
-            <div className="grid grid-cols-1 gap-4 mb-4 sm:grid-cols-2">
-              <div>
-                <label className={labelClass}>First Name</label>
-                <input className={inputClass} value={profile.first_name} maxLength={50}
-                  onChange={(e) => updateField("first_name", e.target.value)} placeholder="John" />
-              </div>
-              <div>
-                <label className={labelClass}>Last Name</label>
-                <input className={inputClass} value={profile.last_name} maxLength={50}
-                  onChange={(e) => updateField("last_name", e.target.value)} placeholder="Doe" />
-              </div>
-            </div>
-            <div className="grid grid-cols-1 gap-4 mb-4 sm:grid-cols-2">
-              <div>
-                <label className={labelClass}>Mobile No</label>
-                <input className={inputClass} value={profile.mobile_no} maxLength={20}
-                  onChange={(e) => updateField("mobile_no", e.target.value)} placeholder="+63 912 345 6789" />
-              </div>
-              <div>
-                <label className={labelClass}>Email</label>
-                <input className={inputClass} value={profile.email} maxLength={100}
-                  onChange={(e) => updateField("email", e.target.value)} placeholder="you@email.com" />
-              </div>
-            </div>
-            <div className="mb-4">
-              <label className={labelClass}>LinkedIn</label>
-              <input className={inputClass} value={profile.linkedin} maxLength={255}
-                onChange={(e) => updateField("linkedin", e.target.value)} placeholder="https://linkedin.com/in/..." />
-            </div>
-            <div className="mb-4">
-              <label className={labelClass}>GitHub</label>
-              <input className={inputClass} value={profile.github} maxLength={255}
-                onChange={(e) => updateField("github", e.target.value)} placeholder="https://github.com/..." />
-            </div>
-            <div>
-              <label className={labelClass}>Portfolio</label>
-              <input className={inputClass} value={profile.portfolio} maxLength={255}
-                onChange={(e) => updateField("portfolio", e.target.value)} placeholder="https://yoursite.dev" />
-            </div>
-          </div>
-        )}
-
-        {/* Education Tab */}
-        {activeTab === "education" && (
-          <div className="mb-10">
-            {profile.education.map((edu, i) => (
-              <div key={i} className="mb-6 p-4 bg-[#eeebe5] border border-[#d4cfc7] rounded-sm relative">
-                <button onClick={() => removeListItem("education", i)}
-                  className="absolute top-3 right-3 text-[#b0aba4] hover:text-[#cc3333] text-xs transition-colors">✕</button>
-                <div className="mb-3">
-                  <label className={labelClass}>School Name</label>
-                  <input className={inputClass} value={edu.school_name} maxLength={150}
-                    onChange={(e) => updateListItem("education", i, { ...edu, school_name: e.target.value })}
-                    placeholder="University Name" />
-                </div>
-                <div className="grid grid-cols-1 gap-4 mb-3 sm:grid-cols-2">
-                  <div>
-                    <label className={labelClass}>Course / Degree</label>
-                    <input className={inputClass} value={edu.course} maxLength={150}
-                      onChange={(e) => updateListItem("education", i, { ...edu, course: e.target.value })}
-                      placeholder="BS Computer Engineering" />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Location</label>
-                    <input className={inputClass} value={edu.location} maxLength={100}
-                      onChange={(e) => updateListItem("education", i, { ...edu, location: e.target.value })}
-                      placeholder="City, Country" />
-                  </div>
-                </div>
-                <div>
-                  <label className={labelClass}>Description</label>
-                  <textarea className={`${inputClass} resize-none h-20`} value={edu.description}
-                    onChange={(e) => updateListItem("education", i, { ...edu, description: e.target.value })}
-                    placeholder="Awards, honors, relevant coursework, GPA..." />
-                </div>
-              </div>
-            ))}
-            <button onClick={() => addListItem("education", { school_name: "", course: "", location: "", description: "" })}
-              className="w-full py-3 border border-dashed border-[#d4cfc7] text-[#b0aba4] text-xs tracking-widest uppercase hover:border-[#5a8a0044] hover:text-[#5a8a00] transition-colors rounded-sm">
-              + Add Education
-            </button>
-          </div>
-        )}
-
-        {/* Experience Tab */}
-        {activeTab === "experience" && (
-          <div className="mb-10">
-            {profile.experience.map((exp, i) => (
-              <div key={i} className="mb-6 p-4 bg-[#eeebe5] border border-[#d4cfc7] rounded-sm relative">
-                <button onClick={() => removeListItem("experience", i)}
-                  className="absolute top-3 right-3 text-[#b0aba4] hover:text-[#cc3333] text-xs transition-colors">✕</button>
-                <div className="grid grid-cols-1 gap-4 mb-3 sm:grid-cols-2">
-                  <div>
-                    <label className={labelClass}>Job Title</label>
-                    <input className={inputClass} value={exp.job_title} maxLength={100}
-                      onChange={(e) => updateListItem("experience", i, { ...exp, job_title: e.target.value })}
-                      placeholder="Software Engineer" />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Company</label>
-                    <input className={inputClass} value={exp.company} maxLength={100}
-                      onChange={(e) => updateListItem("experience", i, { ...exp, company: e.target.value })}
-                      placeholder="Company Name" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 gap-4 mb-3 sm:grid-cols-2">
-                  <div>
-                    <label className={labelClass}>Location</label>
-                    <input className={inputClass} value={exp.location} maxLength={100}
-                      onChange={(e) => updateListItem("experience", i, { ...exp, location: e.target.value })}
-                      placeholder="Remote / City" />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Date</label>
-                    <input className={inputClass} value={exp.date_range} maxLength={50}
-                      onChange={(e) => updateListItem("experience", i, { ...exp, date_range: e.target.value })}
-                      placeholder="Jan 2024 – Present" />
-                  </div>
-                </div>
-                <div>
-                  <label className={labelClass}>Description</label>
-                  <textarea className={`${inputClass} resize-none h-24`} value={exp.description}
-                    onChange={(e) => updateListItem("experience", i, { ...exp, description: e.target.value })}
-                    placeholder="What you did and its impact..." />
-                </div>
-              </div>
-            ))}
-            <button onClick={() => addListItem("experience", { job_title: "", company: "", location: "", description: "", date_range: "" })}
-              className="w-full py-3 border border-dashed border-[#d4cfc7] text-[#b0aba4] text-xs tracking-widest uppercase hover:border-[#5a8a0044] hover:text-[#5a8a00] transition-colors rounded-sm">
-              + Add Experience
-            </button>
-          </div>
-        )}
-
-        {/* Projects Tab */}
-        {activeTab === "projects" && (
-          <div className="mb-10">
-            {profile.projects.map((proj, i) => (
-              <div key={i} className="mb-6 p-4 bg-[#eeebe5] border border-[#d4cfc7] rounded-sm relative">
-                <button onClick={() => removeListItem("projects", i)}
-                  className="absolute top-3 right-3 text-[#b0aba4] hover:text-[#cc3333] text-xs transition-colors">✕</button>
-                <div className="grid grid-cols-1 gap-4 mb-3 sm:grid-cols-2">
-                  <div>
-                    <label className={labelClass}>Project Name</label>
-                    <input className={inputClass} value={proj.name} maxLength={100}
-                      onChange={(e) => updateListItem("projects", i, { ...proj, name: e.target.value })}
-                      placeholder="Project Name" />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Date</label>
-                    <input className={inputClass} value={proj.date_range} maxLength={50}
-                      onChange={(e) => updateListItem("projects", i, { ...proj, date_range: e.target.value })}
-                      placeholder="2024" />
-                  </div>
-                </div>
-                <div className="mb-3">
-                  <label className={labelClass}>Project Link</label>
-                  <input className={inputClass} type="url" value={proj.link} maxLength={2048}
-                    onChange={(e) => updateListItem("projects", i, { ...proj, link: e.target.value })}
-                    placeholder="https://example.com/project" />
-                </div>
-                <div>
-                  <label className={labelClass}>Description</label>
-                  <textarea className={`${inputClass} resize-none h-24`} value={proj.description}
-                    onChange={(e) => updateListItem("projects", i, { ...proj, description: e.target.value })}
-                    placeholder="What you built and its impact..." />
-                </div>
-              </div>
-            ))}
-            <button onClick={() => addListItem("projects", { name: "", description: "", date_range: "", link: "" })}
-              className="w-full py-3 border border-dashed border-[#d4cfc7] text-[#b0aba4] text-xs tracking-widest uppercase hover:border-[#5a8a0044] hover:text-[#5a8a00] transition-colors rounded-sm">
-              + Add Project
-            </button>
-          </div>
-        )}
-
-        {/* Skills Tab */}
-        {activeTab === "skills" && (
-          <div className="mb-10">
-            {profile.skills.some(skill => !skill.is_confirmed) && (
-              <div className="mb-4 rounded-sm border border-[#d5c78d] bg-[#faf3d8] p-4 text-xs leading-5 text-[#5f542e]">
-                Review your skills below. Confirm only skills you have, then save your profile. Unconfirmed skills will not be used as evidence by the career assistant.
-              </div>
-            )}
-            <div className="flex flex-wrap gap-2 mb-4">
-              {profile.skills.map((skill, i) => (
-                <div key={i} className="flex items-center gap-2 px-3 py-1.5 bg-[#eeebe5] border border-[#d4cfc7] rounded-sm">
-                  <span className="text-xs text-[#1a1814]">{skill.skill_name}</span>
-                  <button type="button" onClick={() => updateListItem("skills", i, { ...skill, is_confirmed: !skill.is_confirmed })}
-                    aria-pressed={Boolean(skill.is_confirmed)}
-                    aria-label={`${skill.is_confirmed ? "Unconfirm" : "Confirm"} ${skill.skill_name}`}
-                    className={`rounded-sm border px-2 py-1 text-[10px] font-semibold ${skill.is_confirmed ? "border-[#a4bf78] text-[#436d00]" : "border-[#d5c78d] text-[#6a5622]"}`}>
-                    {skill.is_confirmed ? "Confirmed ✓" : "Confirm"}
-                  </button>
-                  <button onClick={() => removeListItem("skills", i)}
-                    aria-label={`Remove ${skill.skill_name}`} className="text-[#b0aba4] hover:text-[#cc3333] text-xs transition-colors">✕</button>
-                </div>
-              ))}
-            </div>
-            <SkillInput onAdd={(skill) => updateField("skills", [...profile.skills, { skill_name: skill, is_confirmed: true }])} />
-          </div>
-        )}
-
-        {/* Certifications Tab */}
-        {activeTab === "certifications" && (
-          <div className="mb-10">
-            {profile.certifications.map((cert, i) => (
-              <div key={i} className="mb-6 p-4 bg-[#eeebe5] border border-[#d4cfc7] rounded-sm relative">
-                <button onClick={() => removeListItem("certifications", i)}
-                  className="absolute top-3 right-3 text-[#b0aba4] hover:text-[#cc3333] text-xs transition-colors">✕</button>
-                <div className="mb-3">
-                  <label className={labelClass}>Certification Name</label>
-                  <input className={inputClass} value={cert.name} maxLength={150}
-                    onChange={(e) => updateListItem("certifications", i, { ...cert, name: e.target.value })}
-                    placeholder="AWS Certified Solutions Architect" />
-                </div>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className={labelClass}>Issuer</label>
-                    <input className={inputClass} value={cert.issuer} maxLength={150}
-                      onChange={(e) => updateListItem("certifications", i, { ...cert, issuer: e.target.value })}
-                      placeholder="Amazon Web Services" />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Date Issued</label>
-                    <input className={inputClass} value={cert.date_issued} maxLength={50}
-                      onChange={(e) => updateListItem("certifications", i, { ...cert, date_issued: e.target.value })}
-                      placeholder="March 2026" />
-                  </div>
-                </div>
-              </div>
-            ))}
-            <button onClick={() => addListItem("certifications", { name: "", issuer: "", date_issued: "" })}
-              className="w-full py-3 border border-dashed border-[#d4cfc7] text-[#b0aba4] text-xs tracking-widest uppercase hover:border-[#5a8a0044] hover:text-[#5a8a00] transition-colors rounded-sm">
-              + Add Certification
-            </button>
-          </div>
-        )}
-          </motion.div>
-        </AnimatePresence>
-
-        {/* Save button */}
-        <div className="mt-8 flex flex-wrap items-center gap-4">
-          <button onClick={handleSave} disabled={saving}
-            className="w-full px-8 py-3 text-sm tracking-[0.15em] uppercase font-bold transition-all duration-200 rounded-sm disabled:cursor-not-allowed sm:w-auto"
-            style={{ background: saving ? "#d4cfc7" : "#1a1814", color: saving ? "#b0aba4" : "#f5f2ed" }}>
-            {saving ? "Saving..." : "Save Profile"}
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            Export Master Sheet
           </button>
-          {saveStatus === "success" && <span className="text-[#5a8a00] text-xs">✓ Saved successfully</span>}
-          {saveStatus === "error" && <span className="text-[#cc3333] text-xs">✗ {saveError || "Save failed"}</span>}
+
+          <Link
+            href="/discover"
+            className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-sm hover:shadow transition-all inline-flex items-center gap-2"
+          >
+            <Search className="w-4 h-4" />
+            Find Jobs
+          </Link>
         </div>
       </div>
-    </main>
-    </div>
-  )
-}
 
-function SkillInput({ onAdd }: { onAdd: (skill: string) => void }) {
-  const [value, setValue] = useState("")
-  const handleAdd = () => {
-    if (!value.trim()) return
-    onAdd(value.trim())
-    setValue("")
-  }
-  return (
-    <div className="flex flex-col gap-2 sm:flex-row">
-      <input
-        className="flex-1 bg-[#e8e4dd] text-[#1a1814] text-sm p-3 outline-none border border-[#d4cfc7] focus:border-[#c8f06088] rounded-sm placeholder-[#b0aba4] transition-colors duration-200"
-        value={value}
-        maxLength={50}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-        placeholder="Type a skill and press Enter..."
+      {/* ── Follow-ups Due Alert (if any) ── */}
+      {pipeline && pipeline.follow_ups_due_count > 0 && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-amber-50 border border-amber-200 flex items-start gap-4 animate-in fade-in duration-200">
+          <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+            <Clock className="w-5 h-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h4 className="font-bold text-sm text-amber-900">
+              {pipeline.follow_ups_due_count} Follow-up{pipeline.follow_ups_due_count > 1 ? "s" : ""} Due Today
+            </h4>
+            <p className="text-xs text-amber-800 mt-0.5">
+              Consistent recruiter outreach increases response rates. Review your scheduled follow-ups in the application tracker.
+            </p>
+          </div>
+          <Link
+            href="/tracker"
+            className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shrink-0"
+          >
+            Review Pipeline
+          </Link>
+        </div>
+      )}
+
+      {/* ── 4 Primary Action Pipeline Cards ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* To Review */}
+        <Link
+          href="/tracker"
+          className="bg-white border border-slate-200 hover:border-slate-300 rounded-2xl p-5 shadow-xs hover:shadow transition-all space-y-3 group"
+        >
+          <div className="flex items-center justify-between text-slate-500">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-600">Jobs To Review</span>
+            <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center group-hover:bg-slate-200 transition-colors">
+              <BookmarkCheck className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-3xl font-black text-slate-900">
+            {pipeline?.to_review_count ?? 0}
+          </div>
+          <p className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
+            New jobs saved for fit review <ArrowRight className="w-3 h-3 text-slate-400" />
+          </p>
+        </Link>
+
+        {/* To Apply */}
+        <Link
+          href="/tracker"
+          className="bg-white border border-slate-200 hover:border-slate-300 rounded-2xl p-5 shadow-xs hover:shadow transition-all space-y-3 group"
+        >
+          <div className="flex items-center justify-between text-slate-500">
+            <span className="text-xs font-bold uppercase tracking-wider text-blue-700">Jobs To Apply</span>
+            <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+              <Sparkles className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-3xl font-black text-blue-700">
+            {pipeline?.to_apply_count ?? 0}
+          </div>
+          <p className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
+            High fit · Ready for tailored submission <ArrowRight className="w-3 h-3 text-slate-400" />
+          </p>
+        </Link>
+
+        {/* In Progress / Applied */}
+        <Link
+          href="/tracker"
+          className="bg-white border border-slate-200 hover:border-slate-300 rounded-2xl p-5 shadow-xs hover:shadow transition-all space-y-3 group"
+        >
+          <div className="flex items-center justify-between text-slate-500">
+            <span className="text-xs font-bold uppercase tracking-wider text-teal-700">Applications In Progress</span>
+            <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center group-hover:bg-teal-100 transition-colors">
+              <Briefcase className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-3xl font-black text-teal-800">
+            {pipeline?.applied_count ?? 0}
+          </div>
+          <p className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
+            Submitted & awaiting feedback <ArrowRight className="w-3 h-3 text-slate-400" />
+          </p>
+        </Link>
+
+        {/* Interviews & Offers */}
+        <Link
+          href="/tracker"
+          className="bg-white border border-slate-200 hover:border-slate-300 rounded-2xl p-5 shadow-xs hover:shadow transition-all space-y-3 group"
+        >
+          <div className="flex items-center justify-between text-slate-500">
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">Interviews & Offers</span>
+            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-100 transition-colors">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-3xl font-black text-emerald-700">
+            {(pipeline?.interviewing_count ?? 0) + (pipeline?.offers_count ?? 0)}
+          </div>
+          <p className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
+            {pipeline?.interviewing_count ?? 0} active stage, {pipeline?.offers_count ?? 0} offers <ArrowRight className="w-3 h-3 text-slate-400" />
+          </p>
+        </Link>
+      </div>
+
+      {/* ── Top Recommended Openings Feed (NextRaise Style) ── */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+              Top Matching Openings For You
+            </h2>
+            <p className="text-xs text-slate-500">
+              Curated from tracked company career portals & verified against your confirmed career facts.
+            </p>
+          </div>
+          <Link
+            href="/discover"
+            className="text-xs font-bold text-blue-600 hover:text-blue-800 inline-flex items-center gap-1"
+          >
+            Explore all openings <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+
+        <div className="space-y-4">
+          {recommendedJobs.map((job) => (
+            <JobCard
+              key={job.id}
+              job={job}
+              onTailorAndApply={() => handleTailorJob(job)}
+              onSaveToTracker={() => toast.success(`Saved ${job.job_title} at ${job.company_name} to Tracker!`)}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* ── Pipeline Master Sheet Callout ── */}
+      <div className="bg-slate-950 text-white rounded-3xl p-6 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm">
+        <div className="space-y-1">
+          <h3 className="text-lg font-bold">Application Master Sheet & Audit Trail</h3>
+          <p className="text-xs text-slate-400 max-w-xl">
+            Download your full tracking dataset formatted for Excel or CSV, with timestamps, follow-up dates, recruiter contacts, and links to exact tailored resume copies.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => handleExport("csv")}
+            className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold transition-all inline-flex items-center gap-2"
+          >
+            <Download className="w-4 h-4 text-slate-300" />
+            Download CSV
+          </button>
+          <button
+            type="button"
+            onClick={() => handleExport("xlsx")}
+            className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-all inline-flex items-center gap-2 shadow-sm"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            Download Excel (.xlsx)
+          </button>
+        </div>
+      </div>
+
+      {/* Onboarding Modal */}
+      <ResumeOnboardingModal
+        isOpen={isOnboardingOpen}
+        onClose={() => setIsOnboardingOpen(false)}
       />
-      <button onClick={handleAdd}
-        className="w-full px-4 py-2 bg-[#1a1814] text-[#f5f2ed] text-xs font-bold tracking-widest uppercase rounded-sm hover:bg-[#2a2520] transition-colors sm:w-auto">
-        Add
-      </button>
     </div>
-  )
+  );
 }

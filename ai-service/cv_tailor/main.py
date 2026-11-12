@@ -50,6 +50,11 @@ def health():
 
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None)
 
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    from fastapi.responses import Response
+    return Response(status_code=204)
+
 @app.middleware("http")
 async def local_access(request: Request, call_next):
     host = request.url.hostname
@@ -70,7 +75,7 @@ async def local_access(request: Request, call_next):
         category = None
         if re.search(r"/assistant/conversations/\d+/messages(?:/stream)?$", path):
             category = "assistant"
-        elif path.startswith("/interview/") or path in {"/code/hint", "/code/review", "/code/explain-error", "/code/generate", "/profile/auto-fill-resume", "/generate", "/generate/cv", "/generate/pdf", "/generate/ats-check", "/generate/cover-letter", "/generate/spot-edit", "/tracker/fetch-job-details"} or re.search(r"/tracker/\d+/generate-(pdf|cover-letter)$", path):
+        elif path.startswith("/interview/") or path in {"/code/hint", "/code/review", "/code/explain-error", "/code/generate", "/generate", "/generate/cv", "/generate/pdf", "/generate/ats-check", "/generate/cover-letter", "/generate/spot-edit", "/tracker/fetch-job-details"} or re.search(r"/tracker/\d+/generate-(pdf|cover-letter)$", path):
             category = "generation"
         if category and not capabilities()[category]:
             return JSONResponse(status_code=409, content={"detail": "Use Copy agent prompt to run this task in your CLI agent, then save its result with cv-tailor. Built-in API AI is optional.", "code": "agent_handoff_required"})

@@ -17,6 +17,7 @@ import Alert from "@/components/Alert";
 import { ButtonLink } from "@/components/Button";
 import { ApiQueryError, queryKeys, type JobDetails, type Workspace, type WorkspacePreferences, type ResumeTemplate, useWorkspace, usePresets, useProfile, useTrackerDetails } from "@/lib/queries";
 import { applyBlockText, formatEducationDetails, replaceProjectHeading, parseResumeBlocks, parseResumeDraft, replaceCommandArgument, replaceResumeItem, replaceResumeName, replaceSectionDetail, replaceSummary, resolveSelectionToBlocks, type ResumeBlock, type ResumeDraft } from "@/lib/resumeDraft";
+import { ResumeDifferenceView } from "@/components/tracker/ResumeDifferenceView";
 
 const Document = dynamic(() => import("react-pdf").then(m => m.Document), { ssr: false });
 const Page = dynamic(() => import("react-pdf").then(m => m.Page), { ssr: false });
@@ -598,6 +599,9 @@ function GeneratePageContent() {
   const jobDetailsQuery = useTrackerDetails(jobId ? Number(jobId) : null);
 
   const [jd, setJd] = useState("");
+  const queryTitle = searchParams.get("title") || jobDetailsQuery.data?.job_title || "";
+  const queryCompany = searchParams.get("company") || jobDetailsQuery.data?.company_name || "";
+  const [wizardStep, setWizardStep] = useState<"difference" | "editor">(Boolean(queryTitle || queryCompany) ? "difference" : "editor");
   const { selectedTemplate, setSelectedTemplate, editorMode, setEditorMode } = useResumeUiStore();
   const initializedTemplateScope = useRef<string | null>(null);
   const [savingDefault, setSavingDefault] = useState(false);
@@ -1324,6 +1328,26 @@ function GeneratePageContent() {
   if (startupError) return <div className="p-6 sm:p-10"><InlineQueryError message={startupError} onRetry={() => { void loadJobLatex(); void profileQuery.refetch(); void presetsQuery.refetch(); void jobDetailsQuery.refetch(); }} /></div>;
 
   if (!hasGenerated) {
+    if (wizardStep === "difference" && (queryTitle || queryCompany)) {
+      return (
+        <div className="min-h-full bg-slate-50 p-4 sm:p-8">
+          <ResumeDifferenceView
+            jobTitle={queryTitle || "Target Role"}
+            companyName={queryCompany || "Target Employer"}
+            userTitle={profileQuery.data?.experience?.[0]?.job_title || "Business Analyst - Strategy Office"}
+            userExperienceYears={profileQuery.data?.experience?.length ? Math.round(profileQuery.data.experience.length * 2.5 * 10) / 10 : 8.5}
+            matchScore={6.5}
+            onProceedToAlign={() => {
+              setWizardStep("editor");
+              if (!jd && jobDetailsQuery.data?.job_description) {
+                setJd(jobDetailsQuery.data.job_description);
+              }
+            }}
+          />
+        </div>
+      );
+    }
+
     return (
       <main className="min-h-full font-mono flex flex-col items-center justify-start md:justify-center px-6 py-8 md:py-16"
           style={{ background: C.bg, color: C.text }}>

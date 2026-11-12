@@ -40,6 +40,63 @@ def update_job(job_id: int, data: JobApplicationUpdate, request: Request):
 def delete_job(job_id: int, revision: int, request: Request):
     return w.application_delete(job_id, revision, request.headers.get("Idempotency-Key"))
 
+@router.get("/export/csv")
+def export_tracker_csv():
+    from cv_tailor.services.export_service import export_applications_to_csv
+    jobs = w.applications_list(archived=None)
+    csv_content = export_applications_to_csv(jobs)
+    return Response(
+        content=csv_content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=Job_Applications_Master_{date.today().isoformat()}.csv"}
+    )
+
+@router.get("/export/xlsx")
+def export_tracker_xlsx():
+    from cv_tailor.services.export_service import export_applications_to_excel
+    jobs = w.applications_list(archived=None)
+    xlsx_bytes = export_applications_to_excel(jobs)
+    return Response(
+        content=xlsx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=Job_Applications_Master_{date.today().isoformat()}.xlsx"}
+    )
+
+@router.get("/pipeline-summary")
+def get_pipeline_summary():
+    jobs = w.applications_list(archived=False)
+    today = date.today()
+    to_review = [j for j in jobs if j.get("status") in ["Saved", "To Review"]]
+    to_apply = [j for j in jobs if j.get("status") == "To Apply"]
+    applied = [j for j in jobs if j.get("status") == "Applied"]
+    interviewing = [j for j in jobs if j.get("status") in ["Interview", "Tech Test", "Screening"]]
+    offers = [j for j in jobs if j.get("status") == "Offer"]
+    rejected = [j for j in jobs if j.get("status") in ["Rejected", "Ghosted"]]
+
+    follow_ups_due = []
+    for j in jobs:
+        f_date = j.get("follow_up_date")
+        if f_date:
+            try:
+                parsed_date = datetime.strptime(str(f_date)[:10], "%Y-%m-%d").date()
+                if parsed_date <= today:
+                    follow_ups_due.append(j)
+            except Exception:
+                pass
+
+    return {
+        "total": len(jobs),
+        "to_review_count": len(to_review),
+        "to_apply_count": len(to_apply),
+        "applied_count": len(applied),
+        "interviewing_count": len(interviewing),
+        "offers_count": len(offers),
+        "rejected_count": len(rejected),
+        "follow_ups_due_count": len(follow_ups_due),
+        "follow_ups_due": follow_ups_due[:5],
+        "recent_applications": jobs[:6],
+    }
+
 @router.get("/stats")
 def get_stats():
     return w.application_stats()
