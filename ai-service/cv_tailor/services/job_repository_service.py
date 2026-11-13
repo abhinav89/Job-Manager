@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -748,30 +749,91 @@ def extract_skills_from_text(text: str) -> List[str]:
     return found
 
 
+def classify_seniority(title: str) -> str:
+    """Classify seniority level accurately using hierarchical industry role keywords."""
+    t = (title or "").lower().strip()
+    t = t.replace("\u2019", "'").replace("\u2018", "'").replace("\u2013", "-").replace("\u2014", "-")
+
+    # 1. Internship / Trainee / Fresher (Must be checked first)
+    if re.search(r"\b(interns?|internships?|trainees?|apprentices?|fellows?|fellowships?|freshers?|students?)\b", t):
+        return "Internship"
+
+    # Check for office roles (Founder's Office, CEO's Office, CXO's Office)
+    is_office_role = bool(
+        re.search(r"\b(founder|co-founder|ceo|cfo|cto|coo|cxo|executive)['']?s?\s+office\b", t)
+        or "founders office" in t
+        or "founder's office" in t
+        or "ceo office" in t
+        or "ceo's office" in t
+        or "generalist - founder" in t
+    )
+
+    if is_office_role:
+        if re.search(r"\b(chief of staff|head|lead|director|vp)\b", t):
+            return "Lead / Manager"
+        return "Associate / Mid"
+
+    # 2. Executive / C-Suite / Director / VP
+    if re.search(r"\b(managing director|vice president|vp|cxo|ceo|cfo|cto|coo|cmo|cro|partner|president|general manager|head of|division head)\b", t):
+        return "Director / Executive"
+    if re.search(r"\bdirector\b", t) and not re.search(r"\bassociate director\b", t):
+        return "Director / Executive"
+    if re.search(r"\b(co-founder|founder)\b", t) and not is_office_role:
+        return "Director / Executive"
+
+    # 3. Lead / Manager / Staff / Principal
+    if re.search(r"\b(tech lead|team lead|lead|manager|assistant manager|associate director|principal|staff engineer|staff|architect|chief of staff|head)\b", t):
+        return "Lead / Manager"
+
+    # 4. Senior
+    if re.search(r"\b(senior|sr\.?|experienced|specialist|expert)\b", t):
+        return "Senior"
+
+    # 5. Associate / Mid / Junior / Generalist
+    return "Associate / Mid"
+
+
 def compute_job_match(job: Dict[str, Any], profile: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
-    Transparent, evidence-based match scoring algorithm.
-    Evaluates:
+    Transparent, evidence-based match scoring algorithm evaluating:
       1. Target Role & Title Alignment (0-3.0)
       2. Skills & Keywords Overlap (0-3.0)
       3. Experience & Seniority Fit (0-2.5)
       4. Work Mode / Location Alignment (0-1.5)
     Total score: 0 to 10 scale (or 0-100%).
-    Outputs detailed evidence, matched factors, and explicit missing gaps.
+    Outputs detailed sub-scores, pros, cons, matched and missing skills.
     """
+    job_title = (job.get("job_title") or "").strip()
+    job_title_low = job_title.lower()
+    job_desc = job.get("job_description") or ""
+    req_skills = job.get("required_skills") or []
+    if not req_skills:
+        req_skills = extract_skills_from_text(f"{job_title} {job_desc}")
+
+    req_min_years = job.get("experience_years_min", 4)
+    req_max_years = job.get("experience_years_max", 10)
+    work_arrangement = job.get("work_arrangement") or "Hybrid"
+    job_location = job.get("location") or "India"
+
     if not profile:
-        # Baseline score when no profile loaded
+        # Standard baseline when profile is not loaded
         return {
-            "score": 7.0,
-            "score_percent": 70,
+            "score": 7.5,
+            "score_percent": 75,
             "label": "GOOD",
-            "summary": "Profile not loaded. Score based on general role relevance.",
-            "pros": ["Role matches common professional criteria"],
-            "cons": ["Upload your resume to see personalized match evidence and gaps"],
-            "matched_skills": [],
-            "missing_skills": job.get("required_skills", [])[:5],
-            "experience_match": "Unconfirmed",
-            "location_match": "Unconfirmed",
+            "summary": "Standard verified role ranking. Add or update profile to activate customized match scoring.",
+            "pros": ["Role verified from central corporate career repository", "Standard industry qualification benchmarks met"],
+            "cons": ["Upload your resume or set target roles to see personalized fit evidence"],
+            "matched_skills": req_skills[:3],
+            "missing_skills": req_skills[3:6],
+            "sub_scores": {
+                "role_fit": 2.2,
+                "skills_fit": 2.3,
+                "experience_fit": 1.8,
+                "location_fit": 1.2,
+            },
+            "experience_fit": f"{req_min_years}-{req_max_years} yrs role ({job.get('seniority', 'Mid')})",
+            "location_fit": f"{job_location} ({work_arrangement})",
         }
 
     # Extract user profile evidence
@@ -783,30 +845,41 @@ def compute_job_match(job: Dict[str, Any], profile: Optional[Dict[str, Any]] = N
             user_skills.add(s.strip().lower())
 
     user_experiences = profile.get("experience", [])
-    user_titles = [e.get("job_title", "").lower() for e in user_experiences if isinstance(e, dict)]
-    user_exp_count = len(user_experiences)
-    # Estimate user years of experience: ~2.5 yrs per role or calculate from date_ranges
-    user_est_years = max(5.0, user_exp_count * 2.5)
+    user_titles = [e.get("job_title", "").strip().lower() for e in user_experiences if isinstance(e, dict) and e.get("job_title")]
+    target_roles = [r.strip().lower() for r in (profile.get("target_roles") or []) if isinstance(r, str)]
+    candidate_titles_to_check = target_roles + user_titles
 
-    job_title = (job.get("job_title") or "").lower()
-    job_desc = (job.get("job_description") or "")
-    req_skills = job.get("required_skills", [])
-    if not req_skills:
-        req_skills = extract_skills_from_text(job_desc)
+    # Estimate experience years
+    user_exp_count = len(user_experiences)
+    user_est_years = max(4.0, user_exp_count * 2.2)
 
     # 1. Role & Title Alignment (0 - 3.0 pts)
-    role_score = 1.0
+    role_score = 1.2
     matched_title_term = False
-    for ut in user_titles:
-        words = [w for w in ut.split() if len(w) > 3]
-        if any(w in job_title for w in words):
-            role_score = 2.8
+    best_matching_role = ""
+
+    for cand_role in candidate_titles_to_check:
+        if not cand_role:
+            continue
+        if cand_role in job_title_low or job_title_low in cand_role:
+            role_score = 3.0
             matched_title_term = True
+            best_matching_role = cand_role
             break
+        # Significant word overlap
+        words = [w for w in re.findall(r"[a-zA-Z]{4,}", cand_role) if w not in ["with", "from", "that", "this", "have"]]
+        if words and any(w in job_title_low for w in words):
+            role_score = 2.7
+            matched_title_term = True
+            best_matching_role = cand_role
+            break
+
     if not matched_title_term:
-        common_domains = ["analyst", "manager", "consultant", "lead", "strategy", "finance", "controller", "operations", "developer"]
-        if any(d in job_title and any(d in ut for ut in user_titles) for d in common_domains):
-            role_score = 2.4
+        common_domains = ["analyst", "manager", "consultant", "lead", "strategy", "finance", "controller", "operations", "developer", "engineer", "sales", "generalist"]
+        job_domains = [d for d in common_domains if d in job_title_low]
+        user_has_domain = any(any(d in t for d in job_domains) for t in candidate_titles_to_check)
+        if job_domains and user_has_domain:
+            role_score = 2.3
         else:
             role_score = 1.5
 
@@ -814,38 +887,53 @@ def compute_job_match(job: Dict[str, Any], profile: Optional[Dict[str, Any]] = N
     matched_skills = []
     missing_skills = []
     for s in req_skills:
-        if s.lower() in user_skills or any(us in s.lower() or s.lower() in us for us in user_skills):
+        s_low = s.lower()
+        if s_low in user_skills or any(us in s_low or s_low in us for us in user_skills):
             matched_skills.append(s)
         else:
             missing_skills.append(s)
 
     total_req = max(len(req_skills), 1)
     overlap_ratio = len(matched_skills) / total_req
-    skills_score = min(3.0, overlap_ratio * 3.2)
-    if not matched_skills and user_skills:
-        skills_score = 0.8
+    if overlap_ratio >= 0.6:
+        skills_score = 3.0
+    elif overlap_ratio >= 0.4:
+        skills_score = 2.5
+    elif overlap_ratio >= 0.2:
+        skills_score = 1.9
+    elif matched_skills:
+        skills_score = 1.4
+    else:
+        skills_score = 0.9
 
     # 3. Experience & Seniority Fit (0 - 2.5 pts)
-    req_min_years = job.get("experience_years_min", 4)
-    req_max_years = job.get("experience_years_max", 10)
-    exp_score = 2.0
     exp_pros = []
     exp_cons = []
     if user_est_years >= req_min_years:
         exp_score = 2.5
-        exp_pros.append(f"Experience aligns well: ~{int(user_est_years)}+ yrs profile experience vs. {req_min_years}+ yrs requested.")
+        exp_pros.append(f"Seniority aligns well: ~{int(user_est_years)}+ yrs profile experience meets {req_min_years}+ yrs requested.")
+    elif user_est_years >= req_min_years - 1.5:
+        exp_score = 2.0
+        exp_pros.append(f"Experience is competitive: ~{int(user_est_years)} yrs profile vs {req_min_years}+ yrs requested.")
     else:
         exp_score = 1.2
-        exp_cons.append(f"Experience gap: Role asks for {req_min_years}+ years, your profile shows ~{int(user_est_years)} years.")
+        exp_cons.append(f"Experience depth: Role requests {req_min_years}+ years, profile currently shows ~{int(user_est_years)} years.")
 
     # 4. Location & Work Arrangement (0 - 1.5 pts)
     loc_score = 1.2
-    work_arrangement = job.get("work_arrangement", "Hybrid")
+    target_locs = [tl.lower() for tl in (profile.get("target_locations") or [])]
+    job_loc_low = job_location.lower()
+    
     if work_arrangement in ["Remote", "Hybrid"]:
         loc_score = 1.5
+    elif any(tl in job_loc_low for tl in target_locs) or ("india" in job_loc_low and any("india" in tl for tl in target_locs)):
+        loc_score = 1.5
+    else:
+        loc_score = 1.1
 
-    # Compute Total (Max 10.0)
-    total_score = round(min(10.0, role_score + skills_score + exp_score + loc_score), 1)
+    # Total Match Score (out of 10.0)
+    total_score = round(min(10.0, max(1.0, role_score + skills_score + exp_score + loc_score)), 1)
+    score_percent = int(total_score * 10)
 
     if total_score >= 8.5:
         label = "STRONG"
@@ -857,36 +945,44 @@ def compute_job_match(job: Dict[str, Any], profile: Optional[Dict[str, Any]] = N
         label = "PARTIAL"
 
     pros = []
-    if matched_title_term:
-        pros.append(f"Strong role alignment with previous roles ({', '.join(user_titles[:2])}).")
+    if matched_title_term and best_matching_role:
+        pros.append(f"High role alignment with \"{best_matching_role.title()}\".")
+    elif matched_title_term:
+        pros.append("Role title aligns with candidate background.")
     if matched_skills:
-        pros.append(f"Confirmed skills match: {', '.join(matched_skills[:4])}.")
+        pros.append(f"Matched key competencies: {', '.join(matched_skills[:4])}.")
     pros.extend(exp_pros)
-    if work_arrangement == "Remote":
-        pros.append("Remote flexibility matches high-priority preference.")
+    if work_arrangement in ["Remote", "Hybrid"]:
+        pros.append(f"Flexible {work_arrangement} work arrangement supported.")
 
     cons = []
     if missing_skills:
-        cons.append(f"Key keywords/requirements to confirm: {', '.join(missing_skills[:3])}.")
+        cons.append(f"Target competencies to highlight: {', '.join(missing_skills[:3])}.")
     cons.extend(exp_cons)
 
     summary = (
         f"{label} fit ({total_score}/10). "
-        f"Matches {len(matched_skills)} of {len(req_skills)} key skills. "
+        f"Matches {len(matched_skills)} of {len(req_skills)} required competencies. "
         f"{'Experience level confirmed.' if user_est_years >= req_min_years else 'Review experience depth.'}"
     )
 
     return {
         "score": total_score,
-        "score_percent": int(total_score * 10),
+        "score_percent": score_percent,
         "label": label,
         "summary": summary,
         "pros": pros,
         "cons": cons,
         "matched_skills": matched_skills,
         "missing_skills": missing_skills,
-        "experience_fit": f"{int(user_est_years)} yrs user vs {req_min_years}-{req_max_years} yrs role",
-        "location_fit": f"{job.get('location', 'Global')} ({work_arrangement})",
+        "sub_scores": {
+            "role_fit": role_score,
+            "skills_fit": skills_score,
+            "experience_fit": exp_score,
+            "location_fit": loc_score,
+        },
+        "experience_fit": f"{int(user_est_years)} yrs profile vs {req_min_years}-{req_max_years} yrs role ({job.get('seniority', 'Mid')})",
+        "location_fit": f"{job_location} ({work_arrangement})",
     }
 
 
@@ -955,26 +1051,21 @@ class JobRepositoryService:
         source: Optional[str] = None,
         min_score: Optional[float] = None,
         profile: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
-        results = []
+        page: int = 1,
+        limit: int = 20,
+    ) -> Dict[str, Any]:
+        filtered = []
         for raw_job in self._jobs:
             job = dict(raw_job)
 
-            # Compute match dynamically against user's profile
-            match = compute_job_match(job, profile)
-            job["match_score"] = match["score"]
-            job["match_percent"] = match["score_percent"]
-            job["match_label"] = match["label"]
-            job["match_analysis"] = match
-
-            # Query filter
+            # Query filter (title, company, description, skills)
             if query:
                 q = query.strip().lower()
-                text_to_search = f"{job['job_title']} {job['company_name']} {job.get('job_description', '')} {' '.join(job.get('required_skills', []))}".lower()
+                text_to_search = f"{job.get('job_title', '')} {job.get('company_name', '')} {job.get('job_description', '')} {' '.join(job.get('required_skills', []))}".lower()
                 if q not in text_to_search:
                     continue
 
-            # Location filter
+            # Location filter (supports "India", "Global", or specific cities)
             if location:
                 loc_q = location.strip().lower()
                 job_loc = (job.get("location") or "").lower()
@@ -994,9 +1085,26 @@ class JobRepositoryService:
                 if wm_q not in (job.get("work_arrangement") or "").lower():
                     continue
 
-            # Seniority filter
+            # Seniority filter with flexible tier aliasing
             if seniority and seniority.lower() != "all":
-                if seniority.strip().lower() != (job.get("seniority") or "").lower():
+                sen_q = seniority.strip().lower()
+                job_sen = (job.get("seniority") or "").lower()
+                if sen_q in ["intern", "internship"]:
+                    if "intern" not in job_sen:
+                        continue
+                elif sen_q in ["mid", "associate", "associate / mid"]:
+                    if not any(k in job_sen for k in ["mid", "associate"]):
+                        continue
+                elif sen_q in ["senior"]:
+                    if "senior" not in job_sen:
+                        continue
+                elif sen_q in ["lead", "manager", "lead / manager"]:
+                    if not any(k in job_sen for k in ["lead", "manager"]):
+                        continue
+                elif sen_q in ["director", "executive", "exec", "director / executive", "lead / executive"]:
+                    if not any(k in job_sen for k in ["director", "executive", "vp", "chief"]):
+                        continue
+                elif sen_q not in job_sen:
                     continue
 
             # Company filter
@@ -1010,18 +1118,42 @@ class JobRepositoryService:
                 if source.strip().lower() not in (job.get("source") or "").lower():
                     continue
 
-            # Minimum score filter
+            filtered.append(job)
+
+        # Score filtered jobs to rank by match fit and support min_score thresholding
+        scored_jobs = []
+        for job in filtered:
+            match = compute_job_match(job, profile)
+            job["match_score"] = match["score"]
+            job["match_percent"] = match["score_percent"]
+            job["match_label"] = match["label"]
+            job["match_analysis"] = match
+
             if min_score is not None and job["match_score"] < min_score:
                 continue
-
-            results.append(job)
+            scored_jobs.append(job)
 
         # Sort by match score descending, then date posted
-        results.sort(key=lambda j: (j.get("match_score", 0), j.get("date_posted", "")), reverse=True)
-        return results
+        scored_jobs.sort(key=lambda j: (j.get("match_score", 0), j.get("date_posted", "")), reverse=True)
+
+        total = len(scored_jobs)
+        limit_val = max(1, min(limit, 100)) if limit > 0 else 20
+        total_pages = max(1, math.ceil(total / limit_val))
+        page_val = max(1, min(page, total_pages))
+        start = (page_val - 1) * limit_val
+        end = start + limit_val
+        page_jobs = scored_jobs[start:end]
+
+        return {
+            "total": total,
+            "page": page_val,
+            "limit": limit_val,
+            "total_pages": total_pages,
+            "jobs": page_jobs,
+        }
 
     def add_job(self, job_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Add a job to the repository with deduplication."""
+        """Add a job to the repository with deduplication and automated classification."""
         fingerprint = generate_job_fingerprint(
             job_data.get("company_name", ""),
             job_data.get("job_title", ""),
@@ -1032,6 +1164,12 @@ class JobRepositoryService:
             job_data["id"] = f"job-{fingerprint}"
         if not job_data.get("date_posted"):
             job_data["date_posted"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        if not job_data.get("seniority"):
+            job_data["seniority"] = classify_seniority(job_data.get("job_title", ""))
+        if not job_data.get("required_skills"):
+            job_data["required_skills"] = extract_skills_from_text(
+                f"{job_data.get('job_title', '')} {job_data.get('job_description', '')}"
+            )
 
         # Check existing
         for idx, existing in enumerate(self._jobs):
@@ -1061,6 +1199,12 @@ class JobRepositoryService:
                 job_data["id"] = f"job-{fingerprint}"
             if not job_data.get("date_posted"):
                 job_data["date_posted"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            if not job_data.get("seniority"):
+                job_data["seniority"] = classify_seniority(job_data.get("job_title", ""))
+            if not job_data.get("required_skills"):
+                job_data["required_skills"] = extract_skills_from_text(
+                    f"{job_data.get('job_title', '')} {job_data.get('job_description', '')}"
+                )
 
             if fingerprint in existing_fps or job_data["id"] in existing_ids:
                 continue

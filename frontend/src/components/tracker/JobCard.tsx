@@ -21,12 +21,19 @@ export interface JobCardData {
   match_label?: string;
   match_analysis?: {
     score: number;
+    score_percent?: number;
     label: string;
     summary: string;
     pros: string[];
     cons: string[];
     matched_skills: string[];
     missing_skills: string[];
+    sub_scores?: {
+      role_fit?: number;
+      skills_fit?: number;
+      experience_fit?: number;
+      location_fit?: number;
+    };
     experience_fit?: string;
     location_fit?: string;
   };
@@ -55,6 +62,10 @@ export function JobCard({
   const [expanded, setExpanded] = useState(false);
   const [saved, setSaved] = useState(isSaved);
   const [copiedDesc, setCopiedDesc] = useState(false);
+
+  React.useEffect(() => {
+    setSaved(isSaved);
+  }, [isSaved]);
 
   const score = job.match_score ?? 7.5;
   const label = job.match_label || (score >= 8.5 ? "STRONG" : score >= 7.0 ? "GOOD" : score >= 5.5 ? "FAIR" : "PARTIAL");
@@ -107,13 +118,22 @@ export function JobCard({
           </div>
 
           <div className="space-y-2 flex-1 min-w-0">
-            {/* Title & Posted Badge */}
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-lg font-bold text-slate-900 tracking-tight leading-snug truncate">
+            {/* Title & Status Badges */}
+            <div className="flex flex-wrap items-center gap-2" title={job.job_title}>
+              <h3
+                className="text-base sm:text-lg font-bold text-slate-900 tracking-tight leading-snug line-clamp-2 break-words"
+                title={job.job_title}
+              >
                 {job.job_title}
               </h3>
+              {saved && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full shrink-0">
+                  <Check className="w-3 h-3 text-emerald-600" />
+                  Saved in Tracker
+                </span>
+              )}
               {job.is_early_applicant && (
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full">
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full shrink-0">
                   ⚡ Early applicant
                 </span>
               )}
@@ -241,11 +261,74 @@ export function JobCard({
         <div className="border-t border-slate-100 bg-slate-50/80 p-5 sm:p-6 space-y-5 text-xs animate-in fade-in duration-150">
           {/* Fit Summary */}
           {job.match_analysis && (
-            <div className="space-y-3 bg-white p-4 rounded-xl border border-slate-200/80">
-              <p className="font-medium text-slate-800">
-                <span className="font-bold text-slate-900">Match Summary: </span>
-                {job.match_analysis.summary}
-              </p>
+            <div className="space-y-4 bg-white p-4 sm:p-5 rounded-xl border border-slate-200/80">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                <p className="font-medium text-slate-800">
+                  <span className="font-bold text-slate-900">Match Summary: </span>
+                  {job.match_analysis.summary}
+                </p>
+                <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 shrink-0">
+                  Overall Score: {score.toFixed(1)} / 10 ({label})
+                </span>
+              </div>
+
+              {/* 4-Parameter Transparent Scoring Grid */}
+              {job.match_analysis.sub_scores && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-[11px]">
+                  <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider block text-[9px]">1. Role Fit</span>
+                    <span className="font-extrabold text-slate-900 text-xs">
+                      {job.match_analysis.sub_scores.role_fit?.toFixed(1) ?? "2.5"} <span className="text-slate-400 font-normal">/ 3.0 pts</span>
+                    </span>
+                  </div>
+                  <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider block text-[9px]">2. Skills Overlap</span>
+                    <span className="font-extrabold text-slate-900 text-xs">
+                      {job.match_analysis.sub_scores.skills_fit?.toFixed(1) ?? "2.5"} <span className="text-slate-400 font-normal">/ 3.0 pts</span>
+                    </span>
+                  </div>
+                  <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider block text-[9px]">3. Seniority Depth</span>
+                    <span className="font-extrabold text-slate-900 text-xs">
+                      {job.match_analysis.sub_scores.experience_fit?.toFixed(1) ?? "2.0"} <span className="text-slate-400 font-normal">/ 2.5 pts</span>
+                    </span>
+                  </div>
+                  <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider block text-[9px]">4. Work Mode / Loc</span>
+                    <span className="font-extrabold text-slate-900 text-xs">
+                      {job.match_analysis.sub_scores.location_fit?.toFixed(1) ?? "1.5"} <span className="text-slate-400 font-normal">/ 1.5 pts</span>
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Matched vs Missing Skills Chips */}
+              <div className="space-y-2 pt-1">
+                {job.match_analysis.matched_skills && job.match_analysis.matched_skills.length > 0 && (
+                  <div>
+                    <span className="text-[11px] font-bold text-emerald-800 block mb-1.5">Matched Competencies:</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {job.match_analysis.matched_skills.map((s, idx) => (
+                        <span key={idx} className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-medium">
+                          ✓ {s}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {job.match_analysis.missing_skills && job.match_analysis.missing_skills.length > 0 && (
+                  <div className="pt-1">
+                    <span className="text-[11px] font-bold text-slate-500 block mb-1.5">Skills to Highlight in Application:</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {job.match_analysis.missing_skills.map((s, idx) => (
+                        <span key={idx} className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200 text-[11px]">
+                          + {s}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Supported Points */}
               {job.match_analysis.pros && job.match_analysis.pros.length > 0 && (

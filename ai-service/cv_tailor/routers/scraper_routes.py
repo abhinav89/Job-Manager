@@ -56,10 +56,12 @@ def get_repository_jobs(
     company: Optional[str] = None,
     source: Optional[str] = None,
     min_score: Optional[float] = None,
+    page: int = 1,
+    limit: int = 20,
     request: Request = None,
 ):
     """
-    Search and filter jobs from the central repository.
+    Search and filter jobs from the central repository with pagination.
     Calculates transparent match scores and evidence against the current user profile.
     """
     profile = None
@@ -68,7 +70,7 @@ def get_repository_jobs(
     except Exception:
         pass
 
-    jobs = job_repo_service.list_jobs(
+    result = job_repo_service.list_jobs(
         query=keyword,
         location=location,
         work_model=work_model,
@@ -77,12 +79,17 @@ def get_repository_jobs(
         source=source,
         min_score=min_score,
         profile=profile,
+        page=page,
+        limit=limit,
     )
 
     return {
         "status": "success",
-        "total": len(jobs),
-        "jobs": jobs,
+        "total": result["total"],
+        "page": result["page"],
+        "limit": result["limit"],
+        "total_pages": result["total_pages"],
+        "jobs": result["jobs"],
         "filters_applied": {
             "keyword": keyword,
             "location": location,
@@ -91,6 +98,8 @@ def get_repository_jobs(
             "company": company,
             "source": source,
             "min_score": min_score,
+            "page": result["page"],
+            "limit": result["limit"],
         }
     }
 

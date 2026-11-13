@@ -217,18 +217,25 @@ export function FilterDrawer({
                     Experience Level / Seniority
                   </label>
                   <div className="grid grid-cols-2 gap-2 text-xs">
-                    {["all", "Entry", "Mid", "Senior", "Lead / Executive"].map((lvl) => (
+                    {[
+                      { id: "all", label: "All Levels" },
+                      { id: "Internship", label: "Internship" },
+                      { id: "Associate / Mid", label: "Associate / Mid" },
+                      { id: "Senior", label: "Senior" },
+                      { id: "Lead / Manager", label: "Lead / Manager" },
+                      { id: "Director / Executive", label: "Director / Executive" },
+                    ].map((lvl) => (
                       <button
-                        key={lvl}
+                        key={lvl.id}
                         type="button"
-                        onClick={() => setDraft({ ...draft, seniority: lvl })}
+                        onClick={() => setDraft({ ...draft, seniority: lvl.id })}
                         className={`p-3 rounded-xl border text-left font-medium transition-all ${
-                          draft.seniority === lvl
+                          draft.seniority === lvl.id
                             ? "border-blue-600 bg-blue-50 text-blue-700 font-semibold"
                             : "border-slate-200 hover:bg-slate-50 text-slate-700"
                         }`}
                       >
-                        {lvl === "all" ? "All Levels" : lvl}
+                        {lvl.label}
                       </button>
                     ))}
                   </div>

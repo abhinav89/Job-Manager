@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search,
@@ -13,13 +13,16 @@ import {
   Bookmark,
   Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Building2,
   X,
   FileText,
+  Kanban,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { queryKeys, useRepositoryJobs, useProfile } from "@/lib/queries";
+import { queryKeys, useRepositoryJobs, useProfile, useTrackerJobs } from "@/lib/queries";
 import { API_URL } from "@/lib/api";
 import { JobCard } from "@/components/tracker/JobCard";
 import { FilterDrawer, FilterState, defaultFilterState } from "@/components/tracker/FilterDrawer";
@@ -30,10 +33,20 @@ export default function DiscoverJobsPage() {
   const queryClient = useQueryClient();
   const { data: profile } = useProfile();
   const [keyword, setKeyword] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [jumpPageInput, setJumpPageInput] = useState("");
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
   const [isAddJobModalOpen, setIsAddJobModalOpen] = useState(false);
   const [selectedJobForDirectApply, setSelectedJobForDirectApply] = useState<any | null>(null);
   const [filterState, setFilterState] = useState<FilterState>(defaultFilterState);
+
+  // Tracker jobs integration to mark saved items and display pipeline overview
+  const { data: trackerJobs = [] } = useTrackerJobs();
+  const savedJobKeySet = useMemo(() => {
+    return new Set(
+      trackerJobs.map((tj: any) => `${(tj.company_name || "").toLowerCase()}|${(tj.job_title || "").toLowerCase()}`)
+    );
+  }, [trackerJobs]);
 
   // Multi-select bulk save state
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
@@ -45,16 +58,51 @@ export default function DiscoverJobsPage() {
   const [manualText, setManualText] = useState("");
   const [isParsingUrl, setIsParsingUrl] = useState(false);
 
-  // Query jobs from central repository
+  // Query jobs from central repository with backend pagination (20 per page)
   const { data: repoData, isLoading, refetch } = useRepositoryJobs({
     keyword: keyword || undefined,
     location: filterState.city !== "All Cities" ? filterState.city : filterState.country !== "Global / Anywhere" ? filterState.country : undefined,
     work_model: filterState.workModel !== "all" ? filterState.workModel : undefined,
     seniority: filterState.seniority !== "all" ? filterState.seniority : undefined,
     company: filterState.companyInclude || undefined,
+    page: currentPage,
+    limit: 20,
   });
 
   const jobs = repoData?.jobs || [];
+  const totalJobs = repoData?.total || 0;
+  const totalPages = repoData?.total_pages || Math.max(1, Math.ceil(totalJobs / 20));
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > totalPages) return;
+    setCurrentPage(newPage);
+    setSelectedJobIds([]);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleDirectPageJump = (e: React.FormEvent) => {
+    e.preventDefault();
+    const p = parseInt(jumpPageInput, 10);
+    if (!isNaN(p) && p >= 1 && p <= totalPages) {
+      handlePageChange(p);
+      setJumpPageInput("");
+    } else {
+      toast.error(`Please enter a valid page number between 1 and ${totalPages}`);
+    }
+  };
+
+  const getPageNumbers = (current: number, total: number) => {
+    if (total <= 7) {
+      return Array.from({ length: total }, (_, i) => i + 1);
+    }
+    if (current <= 4) {
+      return [1, 2, 3, 4, 5, "...", total];
+    }
+    if (current >= total - 3) {
+      return [1, "...", total - 4, total - 3, total - 2, total - 1, total];
+    }
+    return [1, "...", current - 1, current, current + 1, "...", total];
+  };
 
   const handleSaveToTracker = async (job: any, status: "To Review" | "To Apply" = "To Review") => {
     try {
@@ -215,7 +263,7 @@ export default function DiscoverJobsPage() {
 
   return (
     <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-6 font-sans">
-      {/* ── Top Bar with Search & Add Job ── */}
+      {/* ── Top Bar with Search & Action Controls ── */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
         {/* Search Input */}
         <div className="relative flex-1">
@@ -223,21 +271,39 @@ export default function DiscoverJobsPage() {
           <input
             type="text"
             value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
+            onChange={(e) => {
+              setKeyword(e.target.value);
+              setCurrentPage(1);
+            }}
             placeholder="Search by role, company, skill (e.g. Finance Manager, Deloitte, FP&A)..."
             className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs sm:text-sm focus:outline-none focus:border-blue-600 shadow-xs transition-all"
           />
         </div>
 
-        {/* Add Job by URL or Text Button */}
-        <button
-          type="button"
-          onClick={() => setIsAddJobModalOpen(true)}
-          className="px-4 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-semibold text-xs shadow-xs transition-all inline-flex items-center justify-center gap-2 shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          Add Job by URL / Paste JD
-        </button>
+        {/* Action Buttons: View Saved Tracker + Add Job */}
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => router.push("/tracker")}
+            className="px-4 py-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-800 rounded-2xl font-bold text-xs shadow-2xs transition-all inline-flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+            title="Open your private Kanban application tracker to view all saved jobs"
+          >
+            <Bookmark className="w-4 h-4 text-blue-600 fill-blue-50" />
+            <span>Saved in Tracker</span>
+            <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[11px] font-black border border-blue-100">
+              {trackerJobs.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsAddJobModalOpen(true)}
+            className="px-4 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-semibold text-xs shadow-xs transition-all inline-flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            Add Job by URL / Paste JD
+          </button>
+        </div>
       </div>
 
       {/* ── Benchmark Filter Chips Bar ── */}
@@ -245,7 +311,10 @@ export default function DiscoverJobsPage() {
         {/* Country Quick Dropdown */}
         <select
           value={filterState.country}
-          onChange={(e) => setFilterState({ ...filterState, country: e.target.value })}
+          onChange={(e) => {
+            setFilterState({ ...filterState, country: e.target.value });
+            setCurrentPage(1);
+          }}
           className="px-3 py-2 bg-white border border-slate-200 rounded-xl font-medium text-slate-700 hover:border-slate-300 focus:outline-none cursor-pointer"
         >
           <option value="Global / Anywhere">🌐 All Locations / Remote</option>
@@ -256,7 +325,10 @@ export default function DiscoverJobsPage() {
         {/* City Quick Dropdown */}
         <select
           value={filterState.city}
-          onChange={(e) => setFilterState({ ...filterState, city: e.target.value })}
+          onChange={(e) => {
+            setFilterState({ ...filterState, city: e.target.value });
+            setCurrentPage(1);
+          }}
           className="px-3 py-2 bg-white border border-slate-200 rounded-xl font-medium text-slate-700 hover:border-slate-300 focus:outline-none cursor-pointer"
         >
           <option value="All Cities">City: All</option>
@@ -270,7 +342,10 @@ export default function DiscoverJobsPage() {
         {/* Work Model Quick Selector */}
         <select
           value={filterState.workModel}
-          onChange={(e) => setFilterState({ ...filterState, workModel: e.target.value })}
+          onChange={(e) => {
+            setFilterState({ ...filterState, workModel: e.target.value });
+            setCurrentPage(1);
+          }}
           className="px-3 py-2 bg-white border border-slate-200 rounded-xl font-medium text-slate-700 hover:border-slate-300 focus:outline-none cursor-pointer"
         >
           <option value="all">Work model: Any</option>
@@ -282,20 +357,25 @@ export default function DiscoverJobsPage() {
         {/* Seniority Selector */}
         <select
           value={filterState.seniority}
-          onChange={(e) => setFilterState({ ...filterState, seniority: e.target.value })}
+          onChange={(e) => {
+            setFilterState({ ...filterState, seniority: e.target.value });
+            setCurrentPage(1);
+          }}
           className="px-3 py-2 bg-white border border-slate-200 rounded-xl font-medium text-slate-700 hover:border-slate-300 focus:outline-none cursor-pointer"
         >
           <option value="all">Level: All</option>
+          <option value="Internship">Internship</option>
+          <option value="Associate / Mid">Associate / Mid</option>
           <option value="Senior">Senior</option>
-          <option value="Mid">Mid Level</option>
-          <option value="Lead / Executive">Lead / Exec</option>
+          <option value="Lead / Manager">Lead / Manager</option>
+          <option value="Director / Executive">Director / Exec</option>
         </select>
 
         {/* All Filters Button */}
         <button
           type="button"
           onClick={() => setIsFilterDrawerOpen(true)}
-          className="px-3.5 py-2 bg-blue-50 border border-blue-200 text-blue-700 rounded-xl font-semibold hover:bg-blue-100 transition-colors inline-flex items-center gap-1.5"
+          className="px-3.5 py-2 bg-blue-50 border border-blue-200 text-blue-700 rounded-xl font-semibold hover:bg-blue-100 transition-colors inline-flex items-center gap-1.5 cursor-pointer"
         >
           <SlidersHorizontal className="w-3.5 h-3.5" />
           All filters
@@ -305,15 +385,19 @@ export default function DiscoverJobsPage() {
         {(filterState.country !== "Global / Anywhere" || filterState.city !== "All Cities" || filterState.workModel !== "all" || filterState.seniority !== "all") && (
           <button
             type="button"
-            onClick={() => setFilterState(defaultFilterState)}
-            className="text-xs text-slate-500 hover:text-slate-800 underline ml-1"
+            onClick={() => {
+              setFilterState(defaultFilterState);
+              setCurrentPage(1);
+            }}
+            className="text-xs text-slate-500 hover:text-slate-800 underline ml-1 cursor-pointer"
           >
             Clear all
           </button>
         )}
 
         <div className="ml-auto text-xs font-semibold text-slate-500">
-          Showing {jobs.length} verified openings
+          Showing {totalJobs > 0 ? (currentPage - 1) * 20 + 1 : 0}–{Math.min(currentPage * 20, totalJobs)} of {totalJobs} openings
+          {totalPages > 1 && ` (Page ${currentPage} of ${totalPages})`}
         </div>
       </div>
 
@@ -340,7 +424,10 @@ export default function DiscoverJobsPage() {
             <button
               key={t.label}
               type="button"
-              onClick={() => setKeyword(t.value)}
+              onClick={() => {
+                setKeyword(t.value);
+                setCurrentPage(1);
+              }}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                 isActive
                   ? "bg-blue-600 text-white shadow-2xs"
@@ -368,7 +455,7 @@ export default function DiscoverJobsPage() {
                     onChange={handleSelectAll}
                     className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                   />
-                  <span>Select All ({jobs.length})</span>
+                  <span>Select Current Page ({jobs.length})</span>
                 </label>
 
                 {selectedJobIds.length > 0 && (
@@ -391,9 +478,10 @@ export default function DiscoverJobsPage() {
           )}
 
           {isLoading ? (
-            <div className="p-12 text-center text-slate-400 text-sm">
-              <div className="w-8 h-8 rounded-full border-2 border-blue-600 border-t-transparent animate-spin mx-auto mb-3" />
-              Scanning company career pages and calculating match scores...
+            <div className="p-12 text-center text-slate-500 text-sm bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-2">
+              <div className="w-8 h-8 rounded-full border-2 border-blue-600 border-t-transparent animate-spin mx-auto mb-2" />
+              <p className="font-bold text-slate-800">Loading verified openings...</p>
+              <p className="text-xs text-slate-400">Ranking 1,700+ curated opportunities against your profile</p>
             </div>
           ) : jobs.length === 0 ? (
             <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center space-y-3">
@@ -407,6 +495,7 @@ export default function DiscoverJobsPage() {
                 onClick={() => {
                   setKeyword("");
                   setFilterState(defaultFilterState);
+                  setCurrentPage(1);
                 }}
                 className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold cursor-pointer"
               >
@@ -414,22 +503,149 @@ export default function DiscoverJobsPage() {
               </button>
             </div>
           ) : (
-            jobs.map((job) => (
-              <JobCard
-                key={job.id}
-                job={job}
-                isSelected={selectedJobIds.includes(getJobKey(job))}
-                onToggleSelect={() => handleToggleSelect(job)}
-                onSaveToTracker={handleSaveToTracker}
-                onTailorAndApply={handleTailorAndApply}
-                onDirectApply={(j) => setSelectedJobForDirectApply(j)}
-              />
-            ))
+            <>
+              {jobs.map((job) => (
+                <JobCard
+                  key={job.id}
+                  job={job}
+                  isSaved={savedJobKeySet.has(`${(job.company_name || "").toLowerCase()}|${(job.job_title || "").toLowerCase()}`)}
+                  isSelected={selectedJobIds.includes(getJobKey(job))}
+                  onToggleSelect={() => handleToggleSelect(job)}
+                  onSaveToTracker={handleSaveToTracker}
+                  onTailorAndApply={handleTailorAndApply}
+                  onDirectApply={(j) => setSelectedJobForDirectApply(j)}
+                />
+              ))}
+
+              {/* ── Bottom Pagination Bar with Direct Page Jump ── */}
+              {totalJobs > 0 && (
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-4 text-xs mt-6">
+                  {/* Left: Showing range */}
+                  <div className="text-slate-600 font-medium">
+                    Showing <span className="font-bold text-slate-900">{(currentPage - 1) * 20 + 1}</span> –{" "}
+                    <span className="font-bold text-slate-900">{Math.min(currentPage * 20, totalJobs)}</span> of{" "}
+                    <span className="font-bold text-slate-900">{totalJobs}</span> verified openings
+                  </div>
+
+                  {/* Middle: Prev, Page Pills, Next */}
+                  <div className="flex items-center gap-1 flex-wrap justify-center">
+                    <button
+                      type="button"
+                      disabled={currentPage <= 1}
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      className="px-3 py-1.5 rounded-xl border border-slate-200 font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                    >
+                      Previous
+                    </button>
+
+                    {getPageNumbers(currentPage, totalPages).map((p, idx) =>
+                      p === "..." ? (
+                        <span key={`ellipsis-${idx}`} className="px-2 py-1 text-slate-400 font-bold">
+                          ...
+                        </span>
+                      ) : (
+                        <button
+                          key={`page-${p}`}
+                          type="button"
+                          onClick={() => handlePageChange(Number(p))}
+                          className={`w-8 h-8 rounded-xl font-bold transition-all text-xs cursor-pointer ${
+                            currentPage === p
+                              ? "bg-blue-600 text-white shadow-2xs"
+                              : "border border-slate-200 text-slate-700 hover:bg-slate-50"
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      )
+                    )}
+
+                    <button
+                      type="button"
+                      disabled={currentPage >= totalPages}
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      className="px-3 py-1.5 rounded-xl border border-slate-200 font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                    >
+                      Next
+                    </button>
+                  </div>
+
+                  {/* Right: Direct Page Jump Input */}
+                  <form onSubmit={handleDirectPageJump} className="flex items-center gap-2">
+                    <span className="text-slate-500 text-xs whitespace-nowrap">Go to page:</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={totalPages}
+                      value={jumpPageInput}
+                      onChange={(e) => setJumpPageInput(e.target.value)}
+                      placeholder={String(currentPage)}
+                      className="w-14 px-2 py-1.5 text-center bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-blue-600"
+                    />
+                    <button
+                      type="submit"
+                      className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs shadow-2xs transition-all cursor-pointer"
+                    >
+                      Go
+                    </button>
+                  </form>
+                </div>
+              )}
+            </>
           )}
         </div>
 
-        {/* Right 1 Column: Benchmark Info Rail (Primary Resume, ATS Check, Tracked Sources) */}
+        {/* Right 1 Column: Benchmark Info Rail (Saved Tracker, Primary Resume, ATS Check, Tracked Sources) */}
         <div className="space-y-5 lg:sticky lg:top-6">
+          {/* Your Tracker Pipeline Summary Card */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-extrabold uppercase tracking-wider text-[10px] text-slate-400">
+                APPLICATION TRACKER
+              </span>
+              <button
+                type="button"
+                onClick={() => router.push("/tracker")}
+                className="text-blue-600 font-bold hover:underline inline-flex items-center gap-1 cursor-pointer"
+              >
+                Open Kanban →
+              </button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5">
+                <span className="text-slate-400 font-bold uppercase text-[9px] block">To Review</span>
+                <span className="text-base font-black text-slate-800">
+                  {trackerJobs.filter((j: any) => j.status === "To Review").length}
+                </span>
+              </div>
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-2.5">
+                <span className="text-blue-600 font-bold uppercase text-[9px] block">To Apply</span>
+                <span className="text-base font-black text-blue-800">
+                  {trackerJobs.filter((j: any) => j.status === "To Apply").length}
+                </span>
+              </div>
+              <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-2.5">
+                <span className="text-emerald-600 font-bold uppercase text-[9px] block">Applied</span>
+                <span className="text-base font-black text-emerald-800">
+                  {trackerJobs.filter((j: any) => j.status === "Applied").length}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              Saved openings automatically sync to your private Kanban tracker where you can track interview stages, notes, and tailored resumes.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => router.push("/tracker")}
+              className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-colors text-center inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+            >
+              <Kanban className="w-3.5 h-3.5" />
+              View All Saved in Tracker ({trackerJobs.length})
+            </button>
+          </div>
+
           {/* Primary Resume Card */}
           <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4 text-xs">
             <div className="flex items-center justify-between">

@@ -263,6 +263,8 @@ export function useRepositoryJobs(filters: {
   company?: string;
   source?: string;
   min_score?: number;
+  page?: number;
+  limit?: number;
 } = {}) {
   const queryParams = new URLSearchParams();
   if (filters.keyword) queryParams.set("keyword", filters.keyword);
@@ -272,10 +274,12 @@ export function useRepositoryJobs(filters: {
   if (filters.company) queryParams.set("company", filters.company);
   if (filters.source && filters.source !== "all") queryParams.set("source", filters.source);
   if (filters.min_score) queryParams.set("min_score", String(filters.min_score));
+  if (filters.page) queryParams.set("page", String(filters.page));
+  if (filters.limit) queryParams.set("limit", String(filters.limit));
 
-  return useQuery<{ status: string; total: number; jobs: any[] }>({
+  return useQuery<{ status: string; total: number; page: number; limit: number; total_pages: number; jobs: any[] }>({
     queryKey: queryKeys.repositoryJobs(filters),
-    queryFn: () => readJson<{ status: string; total: number; jobs: any[] }>(
+    queryFn: () => readJson<{ status: string; total: number; page: number; limit: number; total_pages: number; jobs: any[] }>(
       `/scraper/jobs?${queryParams.toString()}`,
       "Unable to load jobs from repository."
     ),
