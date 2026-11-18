@@ -123,9 +123,47 @@ export async function initiateRazorpayPayment(options: CheckoutOptions): Promise
       prefill: {
         name: user?.name || "Executive Candidate",
         email: user?.email || "candidate@dealos.in",
+        contact: "9876543210",
       },
       theme: {
         color: "#2563eb", // DealOS Blue
+      },
+      // Display blocks for Standard Checkout v1 & v2 to force UPI collect (manual VPA entry)
+      display: {
+        blocks: {
+          upi_block: {
+            name: "Pay using UPI / QR / UPI ID",
+            instruments: [
+              {
+                method: "upi",
+                flows: ["collect", "qr"], // Explicitly enables the manual "Enter UPI ID" text field
+              },
+            ],
+          },
+        },
+        sequence: ["block.upi_block"],
+        preferences: {
+          show_default_blocks: true,
+        },
+      },
+      config: {
+        display: {
+          blocks: {
+            upi_block: {
+              name: "Pay using UPI / QR / UPI ID",
+              instruments: [
+                {
+                  method: "upi",
+                  flows: ["collect", "qr"], // Explicitly enables the manual "Enter UPI ID" text field
+                },
+              ],
+            },
+          },
+          sequence: ["block.upi_block"],
+          preferences: {
+            show_default_blocks: true,
+          },
+        },
       },
       // On Success: Receive razorpay_payment_id, razorpay_order_id, razorpay_signature
       handler: async function (response: {
