@@ -182,6 +182,7 @@ export const queryKeys = {
   applicationDocuments: (id: number) => ["workspace-data", "tracker", "documents", id] as const,
   resumes: ["workspace-data", "resumes"] as const,
   themes: ["workspace-data", "themes"] as const,
+  adminAnalytics: ["admin", "analytics"] as const,
 };
 
 export const workspaceQueryOptions = () => queryOptions({
@@ -312,6 +313,14 @@ export function useThemes() {
   return useQuery<{ status: string; themes: CareerTheme[] }>({
     queryKey: queryKeys.themes,
     queryFn: () => readJson<{ status: string; themes: CareerTheme[] }>("/resumes/themes", "Unable to load career themes."),
+  });
+}
+
+export function useAdminAnalytics() {
+  return useQuery<any>({
+    queryKey: queryKeys.adminAnalytics,
+    queryFn: () => readJson<any>("/admin/analytics", "Unable to load superadmin analytics."),
+    refetchInterval: 15_000,
   });
 }
 
