@@ -86,10 +86,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Determine user profile based on email
-    let displayName = cleanEmail.split("@")[0];
-    displayName = displayName.charAt(0).toUpperCase() + displayName.slice(1);
+    let displayName = cleanEmail.split("@")[0].replace(/[^a-zA-Z0-9]/g, " ").trim();
+    displayName = displayName.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") || "User";
 
-    if (cleanEmail === "abhinava2015@email.iimcal.ac.in" || cleanEmail.startsWith("abhinav")) {
+    if (cleanEmail === "abhinava2015@email.iimcal.ac.in") {
       displayName = "Abhinav Agrawal";
     }
 
@@ -97,7 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       id: btoa(cleanEmail).substring(0, 16),
       name: displayName,
       email: cleanEmail,
-      role: "owner",
+      role: cleanEmail === "abhinava2015@email.iimcal.ac.in" ? "owner" : "candidate",
     };
 
     try {
@@ -114,24 +114,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const loginWithGoogle = async () => {
-    // Standard mock/direct Google OAuth sign-in flow
-    // In production, this can redirect to Supabase Google OAuth endpoint
-    const defaultGoogleUser: AuthUser = {
-      id: "google-user-1",
-      name: "Abhinav Agrawal",
-      email: "abhinava2015@email.iimcal.ac.in",
-      role: "owner",
-    };
-
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultGoogleUser));
-      setUser(defaultGoogleUser);
-      setIsAuthModalOpen(false);
-      toast.success("Signed in with Google successfully!");
-      void queryClient.invalidateQueries({ queryKey: ["workspace-data"] });
-    } catch (err) {
-      toast.error("Google sign-in failed. Please try email login.");
-    }
+    // Prevent unauthenticated 1-click bypass into private admin profile
+    toast.info("Google OAuth is being configured. Please sign in with your registered email and password.");
   };
 
   const logout = () => {

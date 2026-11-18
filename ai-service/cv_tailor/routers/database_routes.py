@@ -6,30 +6,36 @@ from cv_tailor.services.profile_service import PROFILE_LOAD_OPTIONS, serialize_p
 router = APIRouter(prefix="/profile", tags=["profile"])
 
 @router.get("/me")
-def load_current_profile():
-    try:
-        return w.profile_get()
-    except w.WorkspaceError as e:
-        if getattr(e, "code", None) == "not_found" or e.status == 404:
-            return {
-                "id": None,
-                "revision": 1,
-                "first_name": "",
-                "last_name": "",
-                "mobile_no": "",
-                "email": "",
-                "linkedin": "",
-                "github": "",
-                "portfolio": "",
-                "preset_slug": "blank",
-                "preferred_template": "classic",
-                "education": [],
-                "experience": [],
-                "projects": [],
-                "skills": [],
-                "certifications": [],
-            }
-        raise
+def load_current_profile(request: Request):
+    user_email = request.headers.get("X-User-Email", "").strip().lower()
+    # Privacy safeguard: Only return workspace profile if user is authenticated as the workspace owner
+    if user_email == "abhinava2015@email.iimcal.ac.in":
+        try:
+            return w.profile_get()
+        except w.WorkspaceError as e:
+            if getattr(e, "code", None) == "not_found" or e.status == 404:
+                pass
+            else:
+                raise
+    # For all guest visits or unauthenticated users, return a private clean blank profile
+    return {
+        "id": None,
+        "revision": 1,
+        "first_name": "",
+        "last_name": "",
+        "mobile_no": "",
+        "email": user_email if user_email else "",
+        "linkedin": "",
+        "github": "",
+        "portfolio": "",
+        "preset_slug": "blank",
+        "preferred_template": "classic",
+        "education": [],
+        "experience": [],
+        "projects": [],
+        "skills": [],
+        "certifications": [],
+    }
 
 @router.post("/save")
 def save_profile(data: UserProfile):

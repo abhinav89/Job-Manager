@@ -7,13 +7,22 @@ router = APIRouter()
 
 
 @router.get("/workspace")
-def workspace_status():
-    try:
-        profile = w.profile_get()
-    except w.WorkspaceError:
-        profile = None
-    return {"name": "Local workspace", "email": (profile or {}).get("email", ""),
-            "data_dir": str(data_dir()), "profile_exists": profile is not None, "preferences": w.preferences_get(), "ai": capabilities()}
+def workspace_status(request: Request):
+    user_email = request.headers.get("X-User-Email", "").strip().lower()
+    profile = None
+    if user_email == "abhinava2015@email.iimcal.ac.in":
+        try:
+            profile = w.profile_get()
+        except w.WorkspaceError:
+            profile = None
+    return {
+        "name": "DealOS Jobs Workspace",
+        "email": user_email if user_email else "",
+        "data_dir": str(data_dir()),
+        "profile_exists": profile is not None,
+        "preferences": w.preferences_get(),
+        "ai": capabilities(),
+    }
 
 
 @router.get("/preferences")

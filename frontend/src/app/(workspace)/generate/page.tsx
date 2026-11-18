@@ -1274,7 +1274,7 @@ function GeneratePageContent() {
 
   const handleGenerateWithJd = async (jobDesc?: string) => {
     const textToUse = jobDesc ?? jd;
-    const effectiveEmail = userEmail || user?.email || profileQuery.data?.email || "abhinava2015@email.iimcal.ac.in";
+    const effectiveEmail = userEmail || user?.email || profileQuery.data?.email || "candidate@dealos.in";
     if (!textToUse.trim()) {
       setIsTailorInputModalOpen(true);
       return;

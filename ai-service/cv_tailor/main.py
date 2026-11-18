@@ -86,9 +86,9 @@ def favicon():
     return Response(status_code=204)
 
 @app.get("/workspace")
-def root_workspace():
+def root_workspace(request: Request):
     from cv_tailor.routers.workspace_routes import workspace_status
-    return workspace_status()
+    return workspace_status(request)
 
 @app.get("/preferences")
 def root_preferences():

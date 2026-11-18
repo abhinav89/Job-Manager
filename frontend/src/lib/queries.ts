@@ -162,7 +162,22 @@ export class ApiQueryError extends Error {
 }
 
 export async function readJson<T>(path: string, fallback: string): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, { credentials: "include" });
+  const headers: Record<string, string> = {};
+  if (typeof window !== "undefined") {
+    try {
+      const stored = localStorage.getItem("job_manager_auth_session");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.email) {
+          headers["X-User-Email"] = parsed.email;
+        }
+      }
+    } catch {}
+  }
+  const response = await fetch(`${API_URL}${path}`, {
+    credentials: "include",
+    headers,
+  });
   if (!response.ok) throw new ApiQueryError(await getApiError(response, fallback), response.status);
   return response.json() as Promise<T>;
 }

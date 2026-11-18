@@ -86,7 +86,7 @@ export default function SettingsPage() {
       </div>
 
       {/* ── Navigation Tabs ── */}
-      <div className="flex border-b border-slate-200 gap-2 overflow-x-auto text-xs font-bold">
+      <div className="flex border-b border-slate-200 gap-1 sm:gap-2 overflow-x-auto scrollbar-none [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] text-xs font-bold pb-px">
         {[
           { id: "account", label: "My Account & Profile", icon: <User className="w-4 h-4" /> },
           { id: "preferences", label: "Resume & Theme Preferences", icon: <FileText className="w-4 h-4" /> },
@@ -97,7 +97,7 @@ export default function SettingsPage() {
             key={tab.id}
             type="button"
             onClick={() => setActiveTab(tab.id as any)}
-            className={`pb-3 px-4 flex items-center gap-2 border-b-2 transition-all whitespace-nowrap cursor-pointer ${
+            className={`pb-3 px-3 sm:px-4 flex items-center gap-2 border-b-2 transition-all whitespace-nowrap cursor-pointer shrink-0 ${
               activeTab === tab.id
                 ? "border-blue-600 text-blue-600 font-black"
                 : "border-transparent text-slate-500 hover:text-slate-800"

@@ -43,12 +43,8 @@ export default function Sidebar() {
   const { data: profile } = useProfile();
   const { data: trackerJobs = [] } = useTrackerJobs(false);
 
-  const userName = isAuthenticated
-    ? (user?.name || (profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}`.trim() : "User"))
-    : "Guest";
-  const userEmail = isAuthenticated
-    ? (user?.email || profile?.email || workspace?.email || "")
-    : "Sign in to access";
+  const userName = isAuthenticated ? (user?.name || "Candidate") : "Guest";
+  const userEmail = isAuthenticated ? (user?.email || "") : "Sign in to access";
   const avatarLetter = isAuthenticated && userName ? userName[0].toUpperCase() : "G";
 
   const closeMobile = () => setMobileOpen(false);

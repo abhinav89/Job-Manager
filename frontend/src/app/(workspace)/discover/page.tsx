@@ -667,7 +667,7 @@ export default function DiscoverJobsPage() {
               </div>
               <div className="min-w-0">
                 <h5 className="font-bold text-slate-900 truncate">
-                  {profile?.first_name ? `${profile.first_name}_${profile.last_name || ""}_CV` : "Abhinav_Agrawal_CV"}
+                  {profile?.first_name ? `${profile.first_name}_${profile.last_name || ""}_CV` : "Master_Resume_CV"}
                 </h5>
                 <p className="text-[11px] text-slate-500">
                   ATS Score: 78 out of 100

@@ -362,7 +362,7 @@ export default function ProfilePage() {
                   value={formData.first_name || ""}
                   onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
                   className="w-full p-3 rounded-xl border border-slate-300 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-slate-900 text-xs font-medium"
-                  placeholder="e.g. Abhinav"
+                  placeholder="e.g. Priya"
                 />
               </div>
 
@@ -373,7 +373,7 @@ export default function ProfilePage() {
                   value={formData.last_name || ""}
                   onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
                   className="w-full p-3 rounded-xl border border-slate-300 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-slate-900 text-xs font-medium"
-                  placeholder="e.g. Agrawal"
+                  placeholder="e.g. Sharma"
                 />
               </div>
 
@@ -384,7 +384,7 @@ export default function ProfilePage() {
                   value={formData.email || ""}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="w-full p-3 rounded-xl border border-slate-300 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-slate-900 text-xs font-medium"
-                  placeholder="e.g. abhinav@example.com"
+                  placeholder="e.g. candidate@dealos.in"
                 />
               </div>
 
