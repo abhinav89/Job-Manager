@@ -742,6 +742,18 @@ function GeneratePageContent() {
       if (storedCompany) setTargetCompanyName((prev) => prev || storedCompany);
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    const handleTabChange = (e: Event) => {
+      const customEvent = e as CustomEvent<string>;
+      const tab = customEvent.detail;
+      if (tab === "original" || tab === "tailored" || tab === "cover_letter" || tab === "templates") {
+        setMainTab(tab);
+      }
+    };
+    window.addEventListener("dealos-tab-change", handleTabChange);
+    return () => window.removeEventListener("dealos-tab-change", handleTabChange);
+  }, []);
   const [trackerSubTab, setTrackerSubTab] = useState<"tracker" | "search">("tracker");
   const [linkInput, setLinkInput] = useState("");
   const [repoSearchKeyword, setRepoSearchKeyword] = useState("");

@@ -53,6 +53,26 @@ export default function Sidebar() {
 
   const closeMobile = () => setMobileOpen(false);
 
+  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string, isFuture?: boolean, label?: string) => {
+    if (isFuture) {
+      e.preventDefault();
+      toast.info(`${label} is scheduled for future release.`);
+      return;
+    }
+    closeMobile();
+
+    // If switching tabs on /generate (e.g. My Resumes vs Tailor Resume vs Cover Letter)
+    if (href.startsWith("/generate") && pathname === "/generate") {
+      e.preventDefault();
+      const tabMatch = href.match(/tab=([^&]+)/);
+      if (tabMatch && tabMatch[1]) {
+        window.history.pushState({}, "", href);
+        window.dispatchEvent(new CustomEvent("dealos-tab-change", { detail: tabMatch[1] }));
+      }
+      return;
+    }
+  };
+
   const isActive = (href: string) => {
     if (href.includes("?")) {
       const [path] = href.split("?");
@@ -190,8 +210,8 @@ export default function Sidebar() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  prefetch
-                  onClick={closeMobile}
+                  prefetch={false}
+                  onClick={(e) => handleNavClick(e, item.href)}
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all group ${
                     active
                       ? "bg-blue-50 text-blue-700 font-bold shadow-2xs"
@@ -233,15 +253,8 @@ export default function Sidebar() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  prefetch
-                  onClick={(e) => {
-                    if (item.isFuture) {
-                      e.preventDefault();
-                      toast.info(`${item.label} is scheduled for future release.`);
-                      return;
-                    }
-                    closeMobile();
-                  }}
+                  prefetch={false}
+                  onClick={(e) => handleNavClick(e, item.href, item.isFuture, item.label)}
                   className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all group ${
                     active
                       ? "bg-blue-50 text-blue-700 font-bold"

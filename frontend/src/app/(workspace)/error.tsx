@@ -10,13 +10,15 @@ export default function AuthenticatedError({ error, unstable_retry }: { error: E
   }, [error]);
 
   return (
-    <div className="flex min-h-full items-center justify-center bg-[#f5f2ed] p-6 font-mono">
-      <Alert className="w-full max-w-md">
-        <h2 className="font-bold">We couldn’t load this page.</h2>
-        <p className="mt-2 text-sm">Check that your local workspace is available, then try again.</p>
+    <div className="flex min-h-full items-center justify-center bg-slate-50 p-6 font-sans">
+      <Alert className="w-full max-w-md bg-white border border-slate-200 shadow-sm rounded-2xl p-6">
+        <h2 className="font-bold text-slate-900 text-lg">Unable to load this section</h2>
+        <p className="mt-2 text-xs text-slate-500 leading-relaxed">
+          An unexpected error occurred while loading this view. You can retry or return to your DealOS Jobs Dashboard.
+        </p>
         <div className="mt-5 flex flex-wrap gap-3">
           <Button variant="primary" size="md" onClick={unstable_retry}>Try again</Button>
-          <ButtonLink variant="outline" size="md" href="/dashboard/">Open workspace</ButtonLink>
+          <ButtonLink variant="outline" size="md" href="/dashboard">Return to Dashboard</ButtonLink>
         </div>
       </Alert>
     </div>
