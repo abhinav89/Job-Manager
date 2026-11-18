@@ -116,7 +116,7 @@ export default function Sidebar() {
     { label: "Career Agent", href: "#", icon: <Bot className="w-4 h-4" />, badge: "Upcoming", isFuture: true },
     { label: "Pricing & Plans", href: "/pricing", icon: <CreditCard className="w-4 h-4" /> },
     { label: "Settings", href: "/settings", icon: <Settings className="w-4 h-4" /> },
-    ...(isAuthenticated ? [{ label: "Superadmin", href: "/admin", icon: <ShieldCheck className="w-4 h-4" />, badge: "Admin" }] : []),
+    ...(user?.role === "owner" ? [{ label: "Superadmin", href: "/admin", icon: <ShieldCheck className="w-4 h-4" />, badge: "Admin" }] : []),
   ];
 
   return (

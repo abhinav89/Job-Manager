@@ -48,8 +48,10 @@ export default function SuperadminPage() {
     );
   }
 
-  // Strictly gate access for unauthenticated visitors so no internal metrics or database records leak
-  if (!isAuthenticated) {
+  // Strictly gate access for non-admin visitors so no internal metrics or database records leak
+  const isOwner = isAuthenticated && user?.role === "owner";
+
+  if (!isAuthenticated || !isOwner) {
     return (
       <div className="min-h-[75vh] flex items-center justify-center p-6 font-sans">
         <div className="max-w-md w-full bg-white rounded-3xl border border-slate-200/80 p-8 shadow-sm text-center space-y-6">
@@ -64,7 +66,9 @@ export default function SuperadminPage() {
             </div>
             <h2 className="text-2xl font-black text-slate-900 tracking-tight">Superadmin Locked</h2>
             <p className="text-xs text-slate-500 leading-relaxed">
-              Internal system telemetry, database records, and scraper pipeline controls are strictly restricted to authenticated platform operators.
+              {isAuthenticated
+                ? `You are currently signed in as candidate (${user?.email}). Internal platform telemetry, database records, and scraper pipeline controls are strictly restricted to the Superadmin account (abhinava2015@email.iimcal.ac.in).`
+                : "Internal system telemetry, database records, and scraper pipeline controls are strictly restricted to authenticated platform operators."}
             </p>
           </div>
 
@@ -87,7 +91,7 @@ export default function SuperadminPage() {
               className="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <LogIn className="w-4 h-4" />
-              Sign In to View Admin Telemetry
+              {isAuthenticated ? "Switch to Superadmin Account" : "Sign In to View Admin Telemetry"}
             </button>
             <Link
               href="/discover"
