@@ -67,11 +67,13 @@ export function JobCard({
     setSaved(isSaved);
   }, [isSaved]);
 
-  const score = job.match_score ?? 7.5;
-  const label = job.match_label || (score >= 8.5 ? "STRONG" : score >= 7.0 ? "GOOD" : score >= 5.5 ? "FAIR" : "PARTIAL");
+  const hasScore = typeof job.match_score === "number" && !isNaN(job.match_score);
+  const score = hasScore ? job.match_score! : 0;
+  const label = job.match_label || (hasScore ? (score >= 8.5 ? "STRONG" : score >= 7.0 ? "GOOD" : score >= 5.5 ? "FAIR" : "PARTIAL") : "UNRANKED");
 
   // Determine score color
   const getScoreColor = () => {
+    if (!hasScore) return { ring: "border-slate-700", text: "text-slate-400", badge: "bg-slate-900 text-slate-400 border-slate-700" };
     if (score >= 8.5) return { ring: "border-emerald-500", text: "text-emerald-400", badge: "bg-emerald-950 text-emerald-300 border-emerald-800" };
     if (score >= 7.0) return { ring: "border-teal-500", text: "text-teal-400", badge: "bg-teal-950 text-teal-300 border-teal-800" };
     if (score >= 5.5) return { ring: "border-amber-500", text: "text-amber-400", badge: "bg-amber-950 text-amber-300 border-amber-800" };
@@ -200,10 +202,10 @@ export function JobCard({
               PROFILE FIT
             </span>
             <div className={`w-11 h-11 rounded-full border-2 ${scoreStyle.ring} flex items-center justify-center font-extrabold text-base ${scoreStyle.text}`}>
-              {score.toFixed(1)}
+              {hasScore ? score.toFixed(1) : "—"}
             </div>
             <span className="text-[10px] font-bold tracking-wide uppercase text-slate-300 mt-1">
-              {label}
+              {hasScore ? label : "UNRANKED"}
             </span>
           </div>
 

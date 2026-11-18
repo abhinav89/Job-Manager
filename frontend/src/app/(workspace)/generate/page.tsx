@@ -699,6 +699,76 @@ function getCompanyColor(name: string) {
   return BRAND_COLORS[Math.abs(hash) % BRAND_COLORS.length];
 }
 
+function calculateCandidateTenure(experiences?: Array<{ date_range?: string }>): number {
+  if (!experiences || experiences.length === 0) return 0;
+  const intervals: Array<[number, number]> = [];
+  const now = new Date();
+  const currentYearDecimal = now.getFullYear() + (now.getMonth() + 1) / 12;
+
+  const monthMap: Record<string, number> = {
+    jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3, apr: 4, april: 4,
+    may: 5, jun: 6, june: 6, jul: 7, july: 7, aug: 8, august: 8, sep: 9, september: 9,
+    oct: 10, october: 10, nov: 11, november: 11, dec: 12, december: 12,
+  };
+
+  const parseToken = (t: string, isEnd: boolean): number | null => {
+    const clean = t.trim().toLowerCase();
+    if (!clean) return null;
+    if (clean.includes("present") || clean.includes("current") || clean.includes("now")) {
+      return currentYearDecimal;
+    }
+    const slashMatch = clean.match(/(\d{1,2})[/-](\d{4})/);
+    if (slashMatch) {
+      const m = Math.max(1, Math.min(12, parseInt(slashMatch[1], 10)));
+      const y = parseInt(slashMatch[2], 10);
+      return y + (m - 0.5) / 12;
+    }
+    const nameMatch = clean.match(/([a-z]+)\.?\s+(\d{4})/);
+    if (nameMatch && monthMap[nameMatch[1]]) {
+      return parseInt(nameMatch[2], 10) + (monthMap[nameMatch[1]] - 0.5) / 12;
+    }
+    const yearMatch = clean.match(/\b(19\d{2}|20\d{2})\b/);
+    if (yearMatch) {
+      return parseInt(yearMatch[1], 10) + (isEnd ? 0.99 : 0.0);
+    }
+    return null;
+  };
+
+  for (const exp of experiences) {
+    if (!exp.date_range) continue;
+    const parts = exp.date_range.split(/\s*(?:-|–|—|\bto\b)\s*/i);
+    if (parts.length >= 2) {
+      const s = parseToken(parts[0], false);
+      const e = parseToken(parts[1], true);
+      if (s !== null && e !== null && e >= s) {
+        intervals.push([s, e]);
+      }
+    } else if (parts.length === 1) {
+      const s = parseToken(parts[0], false);
+      if (s !== null) intervals.push([s, s + 1.0]);
+    }
+  }
+
+  if (intervals.length === 0) {
+    return Math.round(experiences.length * 1.5 * 10) / 10;
+  }
+
+  intervals.sort((a, b) => a[0] - b[0]);
+  const merged: Array<[number, number]> = [intervals[0]];
+  for (let i = 1; i < intervals.length; i++) {
+    const prev = merged[merged.length - 1];
+    const curr = intervals[i];
+    if (curr[0] <= prev[1]) {
+      prev[1] = Math.max(prev[1], curr[1]);
+    } else {
+      merged.push(curr);
+    }
+  }
+
+  const total = merged.reduce((acc, [start, end]) => acc + (end - start), 0);
+  return Math.round(Math.max(total, 0.5) * 10) / 10;
+}
+
 function GeneratePageContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -1550,24 +1620,35 @@ function GeneratePageContent() {
 
   if (!hasGenerated) {
     if (wizardStep === "difference" && (targetJobTitle || targetCompanyName || queryTitle || queryCompany)) {
+      const candidateExperiences = profileQuery.data?.experience || [];
+      const computedTenure = calculateCandidateTenure(candidateExperiences);
+      const userSkillsList = (profileQuery.data?.skills || []).map((s: any) => typeof s === "string" ? s : s.skill_name).filter(Boolean);
+      const currentJd = jd.trim() || jobDetailsQuery.data?.job_description || "";
+
       return (
         <div className="min-h-full bg-slate-50 p-4 sm:p-8">
           <ResumeDifferenceView
             jobTitle={targetJobTitle || queryTitle || "Target Role"}
             companyName={targetCompanyName || queryCompany || "Target Employer"}
-            userTitle={profileQuery.data?.experience?.[0]?.job_title || "Senior Professional"}
-            userExperienceYears={profileQuery.data?.experience?.length ? Math.round(profileQuery.data.experience.length * 2.5 * 10) / 10 : 8.5}
-            matchScore={7.5}
+            userTitle={candidateExperiences[0]?.job_title || "Senior Professional"}
+            userExperienceYears={computedTenure}
+            actualJd={currentJd}
+            onUpdateJd={(newJd) => setJd(newJd)}
+            userSkills={userSkillsList}
             onBack={() => {
               setWizardStep("main");
               setTargetJobTitle("");
               setTargetCompanyName("");
             }}
             onProceedToAlign={() => {
-              const currentJd = jd.trim() || jobDetailsQuery.data?.job_description || `Role: ${targetJobTitle || queryTitle} at ${targetCompanyName || queryCompany}. Seeking proven professional with track record in execution, cross-functional collaboration, and strategic growth.`;
-              setJd(currentJd);
+              const finalJd = jd.trim() || jobDetailsQuery.data?.job_description || "";
+              if (!finalJd || finalJd.length < 50) {
+                toast.error("Please provide the full Job Description before generating a tailored resume.");
+                return;
+              }
+              setJd(finalJd);
               setWizardStep("editor");
-              void handleGenerateWithJd(currentJd);
+              void handleGenerateWithJd(finalJd);
             }}
           />
         </div>

@@ -8,15 +8,10 @@ router = APIRouter(prefix="/profile", tags=["profile"])
 @router.get("/me")
 def load_current_profile(request: Request):
     user_email = request.headers.get("X-User-Email", "").strip().lower()
-    # Privacy safeguard: Only return workspace profile if user is authenticated as the workspace owner
-    if user_email == "abhinava2015@email.iimcal.ac.in":
-        try:
-            return w.profile_get()
-        except w.WorkspaceError as e:
-            if getattr(e, "code", None) == "not_found" or e.status == 404:
-                pass
-            else:
-                raise
+    if user_email:
+        p = w.profile_get(user_email=user_email)
+        if p:
+            return p
     # For all guest visits or unauthenticated users, return a private clean blank profile
     return {
         "id": None,
@@ -38,8 +33,9 @@ def load_current_profile(request: Request):
     }
 
 @router.post("/save")
-def save_profile(data: UserProfile):
-    return w.profile_save(data.model_dump(), data.revision)
+def save_profile(data: UserProfile, request: Request):
+    user_email = request.headers.get("X-User-Email", "").strip().lower()
+    return w.profile_save(data.model_dump(), data.revision, user_email=user_email)
 
 @router.post("/reset")
 def reset_profile():

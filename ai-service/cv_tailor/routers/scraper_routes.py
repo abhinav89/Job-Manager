@@ -66,7 +66,9 @@ def get_repository_jobs(
     """
     profile = None
     try:
-        profile = w.profile_get()
+        user_email = (request.headers.get("X-User-Email") or "").strip().lower() if request else ""
+        if user_email:
+            profile = w.profile_get(user_email=user_email)
     except Exception:
         pass
 
@@ -142,7 +144,9 @@ def parse_job_url_or_text(payload: ParseJobRequest, request: Request):
 
     profile = None
     try:
-        profile = w.profile_get()
+        user_email = (request.headers.get("X-User-Email") or "").strip().lower() if request else ""
+        if user_email:
+            profile = w.profile_get(user_email=user_email)
     except Exception:
         pass
 

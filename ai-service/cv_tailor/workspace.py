@@ -14,6 +14,7 @@ from pydantic import ValidationError
 
 from sqlalchemy import select, func, delete
 from cv_tailor.database import SessionLocal
+from cv_tailor.config import data_dir
 from cv_tailor.models import database_models as m
 from cv_tailor.models.schemas import UserProfile, JobApplicationCreate, JobApplicationUpdate, PreferencesUpdate
 from cv_tailor.services.profile_service import PROFILE_LOAD_OPTIONS, serialize_profile, save_profile_data
@@ -116,15 +117,60 @@ def preferences_update(payload, revision=None):
     return mutation("preferences.update", [values, revision], save)
 
 
-def profile_get():
+def _candidate_profile_path(clean_email: str) -> Path:
+    p_dir = data_dir() / "candidate_profiles"
+    p_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = re.sub(r"[^a-zA-Z0-9_\-\.]", "_", clean_email.lower())
+    return p_dir / f"{safe_name}.json"
+
+
+def profile_get(workspace_id: int = 1, user_email: str | None = None):
+    """
+    Resolves the profile for the authenticated workspace or candidate email.
+    Candidate profiles are resolved from their isolated profile store,
+    while Superadmin (abhinava2015@email.iimcal.ac.in) accesses Workspace 1.
+    Unauthenticated guests (user_email == "") return None.
+    """
+    if user_email is not None:
+        clean_email = user_email.strip().lower()
+        if not clean_email:
+            return None
+        if clean_email != "abhinava2015@email.iimcal.ac.in":
+            cand_path = _candidate_profile_path(clean_email)
+            if cand_path.is_file():
+                try:
+                    with open(cand_path, "r", encoding="utf-8") as f:
+                        return json.load(f)
+                except Exception:
+                    pass
+            return None
+
+    # Workspace 1 / Superadmin profile
     with SessionLocal() as db:
-        row = db.scalar(select(m.Profile).options(*PROFILE_LOAD_OPTIONS).where(m.Profile.workspace_id == 1))
-        return serialize_profile(require(row, "Profile"))
+        row = db.scalar(select(m.Profile).options(*PROFILE_LOAD_OPTIONS).where(m.Profile.workspace_id == workspace_id))
+        if row:
+            return serialize_profile(row)
+        return None
 
 
-def profile_save(payload, revision=None):
+def profile_save(payload, revision=None, user_email: str | None = None):
+    """
+    Saves candidate or superadmin profile in its isolated workspace store.
+    Candidates never overwrite Workspace 1 master profile.
+    """
     data = UserProfile.model_validate(payload)
     revision = revision if revision is not None else getattr(data, "revision", None)
+    clean_email = (user_email or "").strip().lower()
+
+    if clean_email and clean_email != "abhinava2015@email.iimcal.ac.in":
+        cand_path = _candidate_profile_path(clean_email)
+        profile_dict = data.model_dump()
+        profile_dict["email"] = clean_email
+        profile_dict["revision"] = (revision or 1) + 1
+        with open(cand_path, "w", encoding="utf-8") as f:
+            json.dump(profile_dict, f, indent=2, default=str)
+        return profile_dict
+
     def save(db):
         current = db.scalar(select(m.Profile).where(m.Profile.workspace_id == 1))
         if current:

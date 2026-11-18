@@ -793,6 +793,89 @@ def classify_seniority(title: str) -> str:
     return "Associate / Mid"
 
 
+MONTH_MAP = {
+    "jan": 1, "january": 1, "feb": 2, "february": 2, "mar": 3, "march": 3,
+    "apr": 4, "april": 4, "may": 5, "jun": 6, "june": 6, "jul": 7, "july": 7,
+    "aug": 8, "august": 8, "sep": 9, "september": 9, "sept": 9, "oct": 10,
+    "october": 10, "nov": 11, "november": 11, "dec": 12, "december": 12,
+}
+
+def parse_date_point(token: str, is_end: bool = False) -> Optional[float]:
+    """Parses a date token into a decimal year representation."""
+    token = token.strip().lower()
+    if not token:
+        return None
+    if any(p in token for p in ["present", "current", "now", "ongoing"]):
+        now = datetime.now()
+        return now.year + (now.month / 12.0)
+
+    # Match MM/YYYY or MM-YYYY
+    m_slash = re.search(r"(\d{1,2})[/-](\d{4})", token)
+    if m_slash:
+        month = min(max(int(m_slash.group(1)), 1), 12)
+        year = int(m_slash.group(2))
+        return year + (month - 0.5) / 12.0
+
+    # Match Month Year (e.g. 'Jan 2018' or 'January 2018')
+    m_name = re.search(r"([a-z]+)\.?\s+(\d{4})", token)
+    if m_name and m_name.group(1) in MONTH_MAP:
+        month = MONTH_MAP[m_name.group(1)]
+        year = int(m_name.group(2))
+        return year + (month - 0.5) / 12.0
+
+    # Match 4-digit Year alone (e.g. '2018')
+    m_year = re.search(r"\b(19\d{2}|20\d{2})\b", token)
+    if m_year:
+        year = int(m_year.group(1))
+        return year + (0.99 if is_end else 0.0)
+
+    return None
+
+def calculate_tenure_from_experiences(experiences: List[Dict[str, Any]]) -> float:
+    """
+    Calculates tenure from dated roles and merges overlapping employment intervals.
+    A single 8-year role (e.g. 2016-2024) computes to ~8.5-9.0 years, not capped to 4.
+    """
+    intervals = []
+    has_dates = False
+
+    for exp in experiences:
+        if not isinstance(exp, dict):
+            continue
+        date_str = (exp.get("date_range") or "").strip()
+        if not date_str:
+            continue
+        parts = re.split(r"\s*(?:-|–|—|\bto\b)\s*", date_str, flags=re.IGNORECASE)
+        if len(parts) >= 2:
+            start_val = parse_date_point(parts[0], is_end=False)
+            end_val = parse_date_point(parts[1], is_end=True)
+            if start_val and end_val and end_val >= start_val:
+                intervals.append((start_val, end_val))
+                has_dates = True
+        elif len(parts) == 1:
+            start_val = parse_date_point(parts[0], is_end=False)
+            if start_val:
+                intervals.append((start_val, start_val + 1.0))
+                has_dates = True
+
+    if not intervals or not has_dates:
+        return round(len(experiences) * 1.5, 1) if experiences else 0.0
+
+    # Merge overlapping intervals
+    intervals.sort(key=lambda x: x[0])
+    merged = [intervals[0]]
+    for current in intervals[1:]:
+        prev_start, prev_end = merged[-1]
+        curr_start, curr_end = current
+        if curr_start <= prev_end:
+            merged[-1] = (prev_start, max(prev_end, curr_end))
+        else:
+            merged.append(current)
+
+    total_years = sum(end - start for start, end in merged)
+    return round(max(total_years, 0.5), 1)
+
+
 def compute_job_match(job: Dict[str, Any], profile: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
     Transparent, evidence-based match scoring algorithm evaluating:
@@ -812,28 +895,38 @@ def compute_job_match(job: Dict[str, Any], profile: Optional[Dict[str, Any]] = N
 
     req_min_years = job.get("experience_years_min", 4)
     req_max_years = job.get("experience_years_max", 10)
-    work_arrangement = job.get("work_arrangement") or "Hybrid"
+    # Preserve unknown work arrangement as None/Unknown rather than defaulting to Hybrid
+    work_arrangement = job.get("work_arrangement")
     job_location = job.get("location") or "India"
 
-    if not profile:
-        # Standard baseline when profile is not loaded
+    # If no profile or empty profile: return unpersonalized, unranked feed
+    has_profile_content = bool(
+        profile and (
+            profile.get("experience") or
+            profile.get("skills") or
+            profile.get("target_roles") or
+            profile.get("first_name")
+        )
+    )
+
+    if not has_profile_content:
         return {
-            "score": 7.5,
-            "score_percent": 75,
-            "label": "GOOD",
-            "summary": "Standard verified role ranking. Add or update profile to activate customized match scoring.",
-            "pros": ["Role verified from central corporate career repository", "Standard industry qualification benchmarks met"],
-            "cons": ["Upload your resume or set target roles to see personalized fit evidence"],
-            "matched_skills": req_skills[:3],
-            "missing_skills": req_skills[3:6],
+            "score": None,
+            "score_percent": None,
+            "label": "UNRANKED",
+            "summary": "Verified role. Connect or upload your profile to activate personalized match scoring and skill gap analysis.",
+            "pros": ["Direct verified opening from company career portal", "Standard industry qualification benchmarks apply"],
+            "cons": ["Profile not connected yet — add experience & skills for personalized match ranking"],
+            "matched_skills": [],
+            "missing_skills": req_skills[:6],
             "sub_scores": {
-                "role_fit": 2.2,
-                "skills_fit": 2.3,
-                "experience_fit": 1.8,
-                "location_fit": 1.2,
+                "role_fit": None,
+                "skills_fit": None,
+                "experience_fit": None,
+                "location_fit": None,
             },
             "experience_fit": f"{req_min_years}-{req_max_years} yrs role ({job.get('seniority', 'Mid')})",
-            "location_fit": f"{job_location} ({work_arrangement})",
+            "location_fit": f"{job_location} ({work_arrangement or 'Not specified'})",
         }
 
     # Extract user profile evidence
@@ -849,9 +942,8 @@ def compute_job_match(job: Dict[str, Any], profile: Optional[Dict[str, Any]] = N
     target_roles = [r.strip().lower() for r in (profile.get("target_roles") or []) if isinstance(r, str)]
     candidate_titles_to_check = target_roles + user_titles
 
-    # Estimate experience years
-    user_exp_count = len(user_experiences)
-    user_est_years = max(4.0, user_exp_count * 2.2)
+    # Calculate actual tenure from dated roles with interval merging
+    user_est_years = calculate_tenure_from_experiences(user_experiences)
 
     # 1. Role & Title Alignment (0 - 3.0 pts)
     role_score = 1.2
@@ -1129,12 +1221,17 @@ class JobRepositoryService:
             job["match_label"] = match["label"]
             job["match_analysis"] = match
 
-            if min_score is not None and job["match_score"] < min_score:
-                continue
+            if min_score is not None:
+                if job["match_score"] is None or job["match_score"] < min_score:
+                    continue
             scored_jobs.append(job)
 
-        # Sort by match score descending, then date posted
-        scored_jobs.sort(key=lambda j: (j.get("match_score", 0), j.get("date_posted", "")), reverse=True)
+        # Sort: personalized by match score when profile is active; otherwise chronological by date_posted
+        has_personalized_scores = any(j.get("match_score") is not None for j in scored_jobs)
+        if has_personalized_scores:
+            scored_jobs.sort(key=lambda j: (j.get("match_score") or 0.0, j.get("date_posted") or ""), reverse=True)
+        else:
+            scored_jobs.sort(key=lambda j: (j.get("date_posted") or "", j.get("is_early_applicant", False)), reverse=True)
 
         total = len(scored_jobs)
         limit_val = max(1, min(limit, 100)) if limit > 0 else 20
