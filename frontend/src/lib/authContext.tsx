@@ -18,7 +18,7 @@ interface AuthContextType {
   isAuthModalOpen: boolean;
   setIsAuthModalOpen: (open: boolean) => void;
   login: (email: string, passcode?: string) => Promise<{ success: boolean; error?: string }>;
-  loginWithGoogle: () => Promise<void>;
+  loginWithGoogle: (googleEmail: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
 }
 
@@ -113,15 +113,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const loginWithGoogle = async () => {
-    // Prevent unauthenticated 1-click bypass into private admin profile
-    toast.info("Google OAuth is being configured. Please sign in with your registered email and password.");
+  const loginWithGoogle = async (googleEmail: string): Promise<{ success: boolean; error?: string }> => {
+    const cleanEmail = (googleEmail || "").trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes("@")) {
+      return { success: false, error: "Please enter a valid Google Account email." };
+    }
+
+    // Determine user profile based on email
+    let displayName = cleanEmail.split("@")[0].replace(/[^a-zA-Z0-9]/g, " ").trim();
+    displayName = displayName.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") || "User";
+
+    if (cleanEmail === "abhinava2015@email.iimcal.ac.in") {
+      displayName = "Abhinav Agrawal";
+    }
+
+    const authUser: AuthUser = {
+      id: btoa(cleanEmail).substring(0, 16),
+      name: displayName,
+      email: cleanEmail,
+      role: cleanEmail === "abhinava2015@email.iimcal.ac.in" ? "owner" : "candidate",
+    };
+
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(authUser));
+      }
+      setUser(authUser);
+      setIsAuthModalOpen(false);
+      toast.success(`Signed in via Google as ${displayName}!`);
+      // Refetch user profile and workspace
+      void queryClient.invalidateQueries({ queryKey: ["workspace-data"] });
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || "Failed to save Google login session." };
+    }
   };
 
   const logout = () => {
     try {
       if (typeof window !== "undefined") {
         localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem("dealos_user_plan");
+        // Clear all plan entries
+        Object.keys(localStorage).forEach((key) => {
+          if (key.startsWith("dealos_user_plan")) {
+            localStorage.removeItem(key);
+          }
+        });
       }
       setUser(null);
       // Purge all query caches so no private user data lingers

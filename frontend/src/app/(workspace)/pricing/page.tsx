@@ -24,17 +24,26 @@ export default function PricingPage() {
   const [activePlan, setActivePlan] = useState<string>("free_starter");
   const [processingPlan, setProcessingPlan] = useState<string | null>(null);
 
-  // Sync active plan from client storage
+  // Sync active plan from client storage strictly scoped to authenticated user
   useEffect(() => {
     try {
-      const stored = localStorage.getItem("dealos_user_plan");
+      if (!isAuthenticated || !user?.email) {
+        setActivePlan("free_starter");
+        // Clear any orphaned unauthenticated plan keys
+        localStorage.removeItem("dealos_user_plan");
+        return;
+      }
+      const userKey = `dealos_user_plan_${user.email.toLowerCase().trim()}`;
+      const stored = localStorage.getItem(userKey);
       if (stored) {
         setActivePlan(stored);
+      } else {
+        setActivePlan("free_starter");
       }
     } catch {
       // ignore storage access errors
     }
-  }, []);
+  }, [isAuthenticated, user?.email]);
 
   const handleSubscribe = async (planId: string, planName: string, amount: number) => {
     if (!isAuthenticated) {
@@ -53,7 +62,9 @@ export default function PricingPage() {
         onSuccess: (pId) => {
           setActivePlan(pId);
           try {
-            localStorage.setItem("dealos_user_plan", pId);
+            if (user?.email) {
+              localStorage.setItem(`dealos_user_plan_${user.email.toLowerCase().trim()}`, pId);
+            }
           } catch {
             // ignore
           }
@@ -83,10 +94,12 @@ export default function PricingPage() {
         </p>
 
         {/* Current Active Plan Pill */}
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold mt-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold mt-2">
+          <span className={`w-2 h-2 rounded-full ${isAuthenticated && activePlan !== "free_starter" ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
           <span>
-            Active Plan: {activePlan === "pro_sprint" ? "Pro Career Sprint" : activePlan === "executive_advisory" ? "Executive Advisory" : "Free Community Membership"} ({user?.email || "Guest"})
+            {isAuthenticated
+              ? `Active Plan: ${activePlan === "pro_sprint" ? "Pro Career Sprint" : activePlan === "executive_advisory" ? "Executive Advisory" : "Free Community Membership"} (${user?.email})`
+              : "Active Plan: Free Guest Explorer (Not Signed In)"}
           </span>
         </div>
       </div>
@@ -144,30 +157,33 @@ export default function PricingPage() {
           <div className="pt-8">
             <button
               type="button"
-              disabled={activePlan === "free_starter"}
+              disabled={activePlan === "free_starter" && isAuthenticated}
               onClick={() => {
+                if (user?.email) {
+                  localStorage.setItem(`dealos_user_plan_${user.email.toLowerCase().trim()}`, "free_starter");
+                }
+                localStorage.removeItem("dealos_user_plan");
                 setActivePlan("free_starter");
-                localStorage.setItem("dealos_user_plan", "free_starter");
                 toast.success("Active plan set to Free Community Membership.");
               }}
               className={`w-full py-3 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                activePlan === "free_starter"
+                activePlan === "free_starter" && isAuthenticated
                   ? "bg-emerald-50 text-emerald-800 border border-emerald-200 cursor-default"
                   : "bg-slate-100 hover:bg-slate-200 text-slate-800 cursor-pointer"
               }`}
             >
               <Check className="w-4 h-4" />
-              {activePlan === "free_starter" ? "Your Current Plan" : "Switch to Free Starter"}
+              {isAuthenticated ? (activePlan === "free_starter" ? "Your Current Plan" : "Switch to Free Starter") : "Current Plan (Free Guest)"}
             </button>
           </div>
         </div>
 
         {/* Tier 2: Pro Career Sprint */}
         <div className={`bg-white rounded-3xl p-6 sm:p-8 shadow-sm flex flex-col justify-between relative overflow-hidden transition-all ${
-          activePlan === "pro_sprint" ? "border-2 border-blue-600 shadow-md ring-2 ring-blue-100" : "border border-slate-200 hover:border-blue-400"
+          activePlan === "pro_sprint" && isAuthenticated ? "border-2 border-blue-600 shadow-md ring-2 ring-blue-100" : "border border-slate-200 hover:border-blue-400"
         }`}>
           <div className="absolute top-4 right-4">
-            {activePlan === "pro_sprint" ? (
+            {activePlan === "pro_sprint" && isAuthenticated ? (
               <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 text-[10px] font-black uppercase tracking-wider">
                 ACTIVE PLAN
               </span>
@@ -186,11 +202,9 @@ export default function PricingPage() {
             </div>
 
             <div className="pt-2 pb-4 border-b border-slate-100 flex items-baseline gap-2">
-              <span className="text-4xl font-black text-slate-900">₹1</span>
-              <span className="text-xs text-amber-700 font-bold bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
-                Test Price (Temp ₹1)
-              </span>
-              <span className="text-xs text-slate-400 line-through">₹1,499</span>
+              <span className="text-4xl font-black text-slate-900">₹1,499</span>
+              <span className="text-xs text-slate-500 font-medium">/ 30 days</span>
+              <span className="text-xs text-slate-400 line-through">₹2,999</span>
             </div>
 
             <ul className="space-y-3 text-xs text-slate-600">
@@ -216,10 +230,10 @@ export default function PricingPage() {
           <div className="pt-8 space-y-2">
             <button
               type="button"
-              disabled={activePlan === "pro_sprint" || processingPlan === "pro_sprint"}
-              onClick={() => handleSubscribe("pro_sprint", "Pro Career Sprint", 1)}
+              disabled={(activePlan === "pro_sprint" && isAuthenticated) || processingPlan === "pro_sprint"}
+              onClick={() => handleSubscribe("pro_sprint", "Pro Career Sprint", 1499)}
               className={`w-full py-3 rounded-2xl text-xs font-bold shadow-md transition-all flex items-center justify-center gap-2 ${
-                activePlan === "pro_sprint"
+                activePlan === "pro_sprint" && isAuthenticated
                   ? "bg-blue-50 text-blue-800 border border-blue-200 cursor-default"
                   : "bg-blue-600 hover:bg-blue-700 text-white cursor-pointer hover:shadow-lg"
               }`}
@@ -229,7 +243,7 @@ export default function PricingPage() {
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Connecting Razorpay...
                 </>
-              ) : activePlan === "pro_sprint" ? (
+              ) : activePlan === "pro_sprint" && isAuthenticated ? (
                 <>
                   <Check className="w-4 h-4 text-blue-700" />
                   Your Active Plan
@@ -237,7 +251,7 @@ export default function PricingPage() {
               ) : (
                 <>
                   <Zap className="w-4 h-4" />
-                  Subscribe with Razorpay (₹1 Test)
+                  {isAuthenticated ? "Subscribe with Razorpay (₹1,499)" : "Sign In to Subscribe (₹1,499)"}
                 </>
               )}
             </button>
@@ -249,10 +263,10 @@ export default function PricingPage() {
 
         {/* Tier 3: Executive Advisory */}
         <div className={`bg-white rounded-3xl p-6 sm:p-8 shadow-sm flex flex-col justify-between relative overflow-hidden transition-all ${
-          activePlan === "executive_advisory" ? "border-2 border-amber-500 shadow-md" : "border border-slate-200 hover:border-amber-400"
+          activePlan === "executive_advisory" && isAuthenticated ? "border-2 border-amber-500 shadow-md" : "border border-slate-200 hover:border-amber-400"
         }`}>
           <div className="absolute top-4 right-4">
-            {activePlan === "executive_advisory" ? (
+            {activePlan === "executive_advisory" && isAuthenticated ? (
               <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 text-[10px] font-black uppercase tracking-wider">
                 ACTIVE PLAN
               </span>
@@ -298,10 +312,10 @@ export default function PricingPage() {
           <div className="pt-8 space-y-2">
             <button
               type="button"
-              disabled={activePlan === "executive_advisory" || processingPlan === "executive_advisory"}
+              disabled={(activePlan === "executive_advisory" && isAuthenticated) || processingPlan === "executive_advisory"}
               onClick={() => handleSubscribe("executive_advisory", "Executive Advisory", 7999)}
               className={`w-full py-3 rounded-2xl text-xs font-bold shadow-md transition-all flex items-center justify-center gap-2 ${
-                activePlan === "executive_advisory"
+                activePlan === "executive_advisory" && isAuthenticated
                   ? "bg-amber-50 text-amber-800 border border-amber-200 cursor-default"
                   : "bg-amber-600 hover:bg-amber-700 text-white cursor-pointer hover:shadow-lg"
               }`}
@@ -311,7 +325,7 @@ export default function PricingPage() {
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Connecting Razorpay...
                 </>
-              ) : activePlan === "executive_advisory" ? (
+              ) : activePlan === "executive_advisory" && isAuthenticated ? (
                 <>
                   <Check className="w-4 h-4 text-amber-700" />
                   Your Active Plan
@@ -319,7 +333,7 @@ export default function PricingPage() {
               ) : (
                 <>
                   <Crown className="w-4 h-4" />
-                  Retain Advisory (₹7,999)
+                  {isAuthenticated ? "Retain Advisory (₹7,999)" : "Sign In to Retain Advisory (₹7,999)"}
                 </>
               )}
             </button>
