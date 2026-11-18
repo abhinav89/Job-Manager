@@ -3,8 +3,8 @@ import "./globals.css";
 import Providers from "@/components/Providers";
 
 export const metadata: Metadata = {
-  title: "DealOS Job Manager — Intelligent Career Copilot & ATS Tracker",
-  description: "Search 1,700+ verified opportunities, customize resumes with zero hallucinations, track applications, and accelerate your career.",
+  title: "DealOS Jobs — Executive Career Platform & ATS Tracker",
+  description: "Access 1,700+ verified executive & engineering openings, customize ATS-proof resumes with zero hallucinations, and track applications on DealOS Jobs.",
   robots: { index: false, follow: false },
 };
 

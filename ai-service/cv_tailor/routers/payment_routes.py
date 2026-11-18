@@ -1,186 +1,229 @@
 """
-Razorpay Payment Gateway Router for DealOS Job-Manager.
-Handles order initialization, signature verification, and plan provisioning
-for Indian domestic payments (UPI, Cards, NetBanking, Wallets).
+Razorpay Standard Web Checkout Router for DealOS Jobs.
+Implements:
+1. POST /create-order (and /payments/razorpay/create-order)
+2. POST /verify-payment (and /payments/razorpay/verify)
+3. GET /payments/razorpay/status
+
+Supports official 'razorpay' Python SDK with HMAC-SHA256 signature verification.
 """
 import os
 import time
-import json
 import hmac
 import hashlib
-import base64
 import logging
 from typing import Optional, Dict, Any
-import urllib.request
-import urllib.error
 
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
+try:
+    import razorpay
+    from razorpay.errors import BadRequestError, SignatureVerificationError
+    HAS_RAZORPAY_SDK = True
+except ImportError:
+    HAS_RAZORPAY_SDK = False
+
 logger = logging.getLogger("cv_tailor.payments")
-router = APIRouter(prefix="/payments/razorpay", tags=["payments"])
 
-class CreateOrderRequest(BaseModel):
-    plan_id: str = Field(..., description="ID of the subscription plan, e.g. pro_sprint, executive_advisory")
-    plan_name: str = Field(..., description="Display title of the plan")
-    amount: int = Field(..., description="Price in INR, e.g. 1499")
-    currency: str = Field("INR", description="Currency ISO code")
-    user_email: Optional[str] = None
-    user_name: Optional[str] = None
+# Router mounted at both root api (/api) and /api/payments/razorpay
+router = APIRouter(tags=["payments"])
 
-class VerifyPaymentRequest(BaseModel):
-    razorpay_order_id: str
-    razorpay_payment_id: str
-    razorpay_signature: str
-    plan_id: str
-    user_email: Optional[str] = None
-
-@router.get("/status")
-def get_payment_status() -> Dict[str, Any]:
-    """
-    Returns public gateway connectivity status and whether live/test keys are present.
-    """
+def get_razorpay_credentials():
     key_id = os.getenv("RAZORPAY_KEY_ID", "").strip()
     key_secret = os.getenv("RAZORPAY_KEY_SECRET", "").strip()
-    is_configured = bool(key_id and key_secret)
+    return key_id, key_secret
 
-    mode = "sandbox_simulation"
-    if is_configured:
-        mode = "test" if key_id.startswith("rzp_test") else "live"
+def get_razorpay_client():
+    key_id, key_secret = get_razorpay_credentials()
+    if not key_id or not key_secret:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Razorpay API credentials not configured in environment."
+        )
+    if not HAS_RAZORPAY_SDK:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Razorpay Python SDK not installed."
+        )
+    return razorpay.Client(auth=(key_id, key_secret))
+
+# Request Models
+class StandardCreateOrderRequest(BaseModel):
+    amount: int = Field(..., description="Amount in paise (minimum 100 paise = ₹1.00) or INR depending on context")
+    currency: str = Field("INR", description="Currency code (e.g. INR)")
+    receipt: Optional[str] = Field(None, description="Unique receipt identifier")
+    notes: Optional[Dict[str, Any]] = None
+    plan_id: Optional[str] = None
+    plan_name: Optional[str] = None
+    user_email: Optional[str] = None
+
+class StandardVerifyPaymentRequest(BaseModel):
+    razorpay_order_id: str = Field(..., description="Order ID returned by Razorpay")
+    razorpay_payment_id: str = Field(..., description="Payment ID returned by Razorpay Checkout")
+    razorpay_signature: str = Field(..., description="Cryptographic signature returned by Razorpay Checkout")
+    plan_id: Optional[str] = None
+    user_email: Optional[str] = None
+
+# ─────────────────────────────────────────────────────────────────
+# STEP 1: CREATE ORDER ENDPOINTS
+# ─────────────────────────────────────────────────────────────────
+
+def execute_create_order(payload: StandardCreateOrderRequest) -> Dict[str, Any]:
+    key_id, key_secret = get_razorpay_credentials()
+    
+    # Standard check: if amount is given in Rupees (e.g. 1499), convert to paise (149900).
+    # If already in paise (>= 10000 for ₹100), handle appropriately.
+    # The requirement specifies: "Minimum amount: 100 paise".
+    amount_in_paise = payload.amount
+    # If amount was passed as INR (e.g. 1499 or 7999), scale to paise:
+    if amount_in_paise < 100:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Minimum amount is 100 paise (₹1.00)."
+        )
+    # If the user passed 1499 (INR) rather than 149900 (paise):
+    # Pro Sprint is ₹1,499. If amount is exactly 1499 or 7999, convert to paise.
+    if payload.plan_id in ["pro_sprint", "pro"] and amount_in_paise == 1499:
+        amount_in_paise = 1499 * 100
+    elif payload.plan_id in ["executive_advisory", "executive"] and amount_in_paise == 7999:
+        amount_in_paise = 7999 * 100
+
+    receipt_id = payload.receipt or f"rcpt_{int(time.time())}_{payload.plan_id or 'std'}"
+
+    notes_dict = payload.notes or {}
+    if payload.plan_id:
+        notes_dict["plan_id"] = payload.plan_id
+    if payload.plan_name:
+        notes_dict["plan_name"] = payload.plan_name
+    if payload.user_email:
+        notes_dict["user_email"] = payload.user_email
+    notes_dict["platform"] = "DealOS Jobs"
+
+    client = get_razorpay_client()
+    try:
+        order_data = {
+            "amount": amount_in_paise,
+            "currency": payload.currency.upper(),
+            "receipt": receipt_id,
+            "notes": notes_dict,
+        }
+        order = client.order.create(data=order_data)
+
+        logger.info("Created Razorpay Order %s for amount %s paise", order["id"], amount_in_paise)
+        return {
+            "status": "success",
+            "order_id": order["id"],
+            "amount": order["amount"],
+            "currency": order["currency"],
+            "key_id": key_id,
+            "plan_id": payload.plan_id,
+            "plan_name": payload.plan_name,
+        }
+    except BadRequestError as e:
+        logger.error("Razorpay BadRequestError: %s", str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.error("Razorpay API error creating order: %s", str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create Razorpay order: {str(e)}"
+        )
+
+@router.post("/create-order")
+def create_order_standard(payload: StandardCreateOrderRequest):
+    """
+    Standard Razorpay endpoint: POST /api/create-order
+    """
+    return execute_create_order(payload)
+
+@router.post("/payments/razorpay/create-order")
+def create_order_namespaced(payload: StandardCreateOrderRequest):
+    """
+    Namespaced compatibility endpoint: POST /api/payments/razorpay/create-order
+    """
+    return execute_create_order(payload)
+
+# ─────────────────────────────────────────────────────────────────
+# STEP 2 & 3: VERIFY PAYMENT SIGNATURE ENDPOINTS
+# ─────────────────────────────────────────────────────────────────
+
+def execute_verify_payment(payload: StandardVerifyPaymentRequest) -> Dict[str, Any]:
+    key_id, key_secret = get_razorpay_credentials()
+
+    # Validate required fields
+    if not payload.razorpay_order_id or not payload.razorpay_payment_id or not payload.razorpay_signature:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing required fields: razorpay_order_id, razorpay_payment_id, and razorpay_signature are all mandatory."
+        )
+
+    # Cryptographic HMAC-SHA256 Verification:
+    # Algorithm: HMAC-SHA256(order_id + "|" + payment_id, KEY_SECRET)
+    message = f"{payload.razorpay_order_id}|{payload.razorpay_payment_id}".encode("utf-8")
+    generated_signature = hmac.new(
+        key_secret.encode("utf-8"),
+        message,
+        hashlib.sha256
+    ).hexdigest()
+
+    # Safe constant-time comparison
+    if not hmac.compare_digest(generated_signature, payload.razorpay_signature):
+        logger.warning(
+            "Razorpay signature mismatch for order: %s, payment: %s",
+            payload.razorpay_order_id,
+            payload.razorpay_payment_id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Signature verification failed. Untrusted payment response."
+        )
+
+    logger.info("Payment signature verified successfully for order: %s", payload.razorpay_order_id)
+    return {
+        "status": "success",
+        "verified": True,
+        "order_id": payload.razorpay_order_id,
+        "payment_id": payload.razorpay_payment_id,
+        "plan_id": payload.plan_id,
+        "message": "Payment verified successfully. Subscription activated."
+    }
+
+@router.post("/verify-payment")
+def verify_payment_standard(payload: StandardVerifyPaymentRequest):
+    """
+    Standard Razorpay endpoint: POST /api/verify-payment
+    """
+    return execute_verify_payment(payload)
+
+@router.post("/payments/razorpay/verify")
+def verify_payment_namespaced(payload: StandardVerifyPaymentRequest):
+    """
+    Namespaced compatibility endpoint: POST /api/payments/razorpay/verify
+    """
+    return execute_verify_payment(payload)
+
+# ─────────────────────────────────────────────────────────────────
+# GATEWAY STATUS & CONFIGURATION
+# ─────────────────────────────────────────────────────────────────
+
+@router.get("/payments/razorpay/status")
+def get_payment_status() -> Dict[str, Any]:
+    key_id, key_secret = get_razorpay_credentials()
+    is_configured = bool(key_id and key_secret)
+    mode = "test" if key_id.startswith("rzp_test") else ("live" if key_id else "unconfigured")
 
     return {
         "provider": "Razorpay",
         "is_configured": is_configured,
-        "key_id": key_id if is_configured else "rzp_test_placeholder",
+        "key_id": key_id,
         "mode": mode,
         "currency": "INR",
+        "sdk_installed": HAS_RAZORPAY_SDK,
         "supported_methods": [
             "UPI (Google Pay, PhonePe, Paytm, BHIM)",
             "RuPay & Visa / Mastercard Debit & Credit Cards",
             "NetBanking (50+ Indian banks)",
-            "Wallets (Mobikwik, Freecharge, etc.)"
-        ],
-        "setup_fee": "₹0 Free",
-        "amc_fee": "₹0 Free",
-        "notes": "Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in .env for direct live payment processing."
+            "Wallets (Mobikwik, Freecharge)"
+        ]
     }
-
-@router.post("/create-order")
-def create_razorpay_order(payload: CreateOrderRequest) -> Dict[str, Any]:
-    """
-    Creates a Razorpay order in INR. If live/test API keys are configured,
-    calls api.razorpay.com/v1/orders. Otherwise falls back to simulated
-    sandbox order generation for instant developer preview.
-    """
-    key_id = os.getenv("RAZORPAY_KEY_ID", "").strip()
-    key_secret = os.getenv("RAZORPAY_KEY_SECRET", "").strip()
-    amount_in_paise = int(payload.amount * 100)
-
-    # 1. Real Razorpay API Order Generation
-    if key_id and key_secret and not key_id.startswith("rzp_test_placeholder"):
-        try:
-            auth_bytes = f"{key_id}:{key_secret}".encode("utf-8")
-            auth_header = f"Basic {base64.b64encode(auth_bytes).decode('utf-8')}"
-            
-            req_data = json.dumps({
-                "amount": amount_in_paise,
-                "currency": payload.currency.upper(),
-                "receipt": f"rcpt_{int(time.time())}_{payload.plan_id}",
-                "notes": {
-                    "plan_id": payload.plan_id,
-                    "plan_name": payload.plan_name,
-                    "email": payload.user_email or "guest",
-                    "platform": "DealOS Job-Manager"
-                }
-            }).encode("utf-8")
-
-            req = urllib.request.Request(
-                "https://api.razorpay.com/v1/orders",
-                data=req_data,
-                headers={
-                    "Authorization": auth_header,
-                    "Content-Type": "application/json"
-                },
-                method="POST"
-            )
-
-            with urllib.request.urlopen(req, timeout=10) as response:
-                res_body = json.loads(response.read().decode("utf-8"))
-                return {
-                    "status": "success",
-                    "order_id": res_body["id"],
-                    "amount": res_body["amount"],
-                    "currency": res_body["currency"],
-                    "key_id": key_id,
-                    "plan_id": payload.plan_id,
-                    "plan_name": payload.plan_name,
-                    "is_sandbox": False,
-                    "mode": "test" if key_id.startswith("rzp_test") else "live"
-                }
-        except urllib.error.HTTPError as e:
-            err_msg = e.read().decode("utf-8")
-            logger.error("Razorpay order creation HTTP error: %s", err_msg)
-            # Fall back to simulated order with warning if keys are invalid
-        except Exception as e:
-            logger.error("Razorpay network error: %s", str(e))
-
-    # 2. Simulated Sandbox Order (Zero-Friction Default before API Keys)
-    sim_order_id = f"order_sim_{int(time.time())}_{payload.plan_id}"
-    return {
-        "status": "success",
-        "order_id": sim_order_id,
-        "amount": amount_in_paise,
-        "currency": "INR",
-        "key_id": key_id or "rzp_test_placeholder",
-        "plan_id": payload.plan_id,
-        "plan_name": payload.plan_name,
-        "is_sandbox": True,
-        "mode": "sandbox_simulation",
-        "message": "Razorpay sandbox simulation mode active. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in .env for live gateway processing."
-    }
-
-@router.post("/verify")
-def verify_razorpay_payment(payload: VerifyPaymentRequest) -> Dict[str, Any]:
-    """
-    Validates Razorpay payment signature using HMAC SHA256.
-    If sandbox simulated order, validates transaction automatically.
-    """
-    key_secret = os.getenv("RAZORPAY_KEY_SECRET", "").strip()
-
-    # 1. Handle Sandbox Simulation Orders
-    if payload.razorpay_order_id.startswith("order_sim_") or not key_secret:
-        logger.info("Sandbox simulated payment verified for plan %s, user: %s", payload.plan_id, payload.user_email)
-        return {
-            "status": "success",
-            "verified": True,
-            "mode": "sandbox_simulation",
-            "plan_id": payload.plan_id,
-            "payment_id": payload.razorpay_payment_id,
-            "message": f"Sandbox simulation successful! Plan '{payload.plan_id}' activated."
-        }
-
-    # 2. Cryptographic HMAC SHA256 Signature Verification
-    try:
-        msg = f"{payload.razorpay_order_id}|{payload.razorpay_payment_id}".encode("utf-8")
-        expected_sig = hmac.new(key_secret.encode("utf-8"), msg, hashlib.sha256).hexdigest()
-
-        if not hmac.compare_digest(expected_sig, payload.razorpay_signature):
-            raise HTTPException(
-                status_code=400,
-                detail="Payment signature verification failed. Untrusted transaction response."
-            )
-
-        logger.info("Live payment verified for order %s, payment %s", payload.razorpay_order_id, payload.razorpay_payment_id)
-        return {
-            "status": "success",
-            "verified": True,
-            "mode": "live",
-            "plan_id": payload.plan_id,
-            "payment_id": payload.razorpay_payment_id,
-            "message": f"Payment verified successfully! Welcome to {payload.plan_id} membership."
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Verification processing failure: %s", str(e))
-        raise HTTPException(status_code=500, detail="Failed to verify payment signature.")

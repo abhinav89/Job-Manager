@@ -93,10 +93,15 @@ export default function Sidebar() {
           >
             {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
-          <div className="w-7 h-7 rounded-xl bg-blue-600 text-white font-black flex items-center justify-center text-xs shadow-xs">
-            JM
+          <div className="w-7 h-7 rounded-xl bg-slate-900 text-white font-black flex items-center justify-center text-xs shadow-xs tracking-tight">
+            <span>D</span><span className="text-blue-400 text-xs leading-none -ml-0.5">•</span>
           </div>
-          <span className="font-extrabold text-sm text-slate-900 tracking-tight">Job-Manager</span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-extrabold text-sm text-slate-900 tracking-tight">DealOS</span>
+            <span className="text-[9px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.2 rounded-full uppercase tracking-wider">
+              Jobs
+            </span>
+          </div>
         </div>
 
         {isAuthenticated ? (
@@ -138,21 +143,26 @@ export default function Sidebar() {
         <div className="flex items-center justify-between px-4 h-16 border-b border-slate-100 shrink-0">
           {!collapsed && (
             <Link href="/dashboard" prefetch onClick={closeMobile} className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-xl bg-blue-600 text-white font-black flex items-center justify-center text-sm shadow-xs shrink-0">
-                JM
+              <div className="w-8 h-8 rounded-xl bg-slate-900 text-white font-black flex items-center justify-center text-xs shadow-xs shrink-0 tracking-tight">
+                <span>D</span><span className="text-blue-400 text-sm leading-none -ml-0.5">•</span>
               </div>
               <div className="min-w-0">
-                <span className="font-extrabold text-sm text-slate-900 tracking-tight block truncate">
-                  Job-Manager
-                </span>
-                <span className="text-[10px] text-slate-400 font-medium block">Executive Search</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-black text-sm text-slate-900 tracking-tight block truncate">
+                    DealOS
+                  </span>
+                  <span className="text-[9px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.2 rounded-full uppercase tracking-wider">
+                    Jobs
+                  </span>
+                </div>
+                <span className="text-[10px] text-slate-400 font-medium block truncate">Career Operating System</span>
               </div>
             </Link>
           )}
 
           {collapsed && (
-            <div className="w-8 h-8 rounded-xl bg-blue-600 text-white font-black flex items-center justify-center text-sm shadow-xs mx-auto">
-              JM
+            <div className="w-8 h-8 rounded-xl bg-slate-900 text-white font-black flex items-center justify-center text-xs shadow-xs mx-auto tracking-tight">
+              <span>D</span><span className="text-blue-400 text-sm leading-none -ml-0.5">•</span>
             </div>
           )}
 
