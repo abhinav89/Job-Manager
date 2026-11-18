@@ -4,8 +4,9 @@ from contextlib import asynccontextmanager
 import ipaddress
 import re
 from urllib.parse import urlsplit
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import JSONResponse, FileResponse, Response
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 from sqlalchemy.exc import OperationalError
@@ -24,6 +25,20 @@ async def lifespan(app):
 
 api = FastAPI(title="CV Tailor local API")
 api.state.limiter = limiter
+
+api.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://jobs.dealos.in",
+        "http://jobs.dealos.in",
+        "https://dealos.in",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @api.exception_handler(WorkspaceError)
 async def workspace_error(request, exc):
@@ -50,6 +65,20 @@ def health():
     return {"status": "ok"}
 
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://jobs.dealos.in",
+        "http://jobs.dealos.in",
+        "https://dealos.in",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.include_router(payment_routes.router)
 
 @app.get("/favicon.ico", include_in_schema=False)
 def favicon():
@@ -119,15 +148,14 @@ async def local_access(request: Request, call_next):
     if origin and not origin_allowed and not is_cloud:
         return JSONResponse(status_code=403, content={"detail": "Cross-origin access is disabled."})
 
-    cors_origin = origin if (origin_allowed or is_cloud) else (origin if origin in allowed_origins else None)
+    cors_origin = origin if (origin_allowed or is_cloud) else (origin if origin in allowed_origins else "https://jobs.dealos.in")
 
     if request.method == "OPTIONS":
         opt_res = Response(status_code=204)
-        if cors_origin:
-            opt_res.headers["Access-Control-Allow-Origin"] = cors_origin
-            opt_res.headers["Access-Control-Allow-Credentials"] = "true"
-            opt_res.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-            opt_res.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, X-Auto-Fit-Fallback"
+        opt_res.headers["Access-Control-Allow-Origin"] = origin or "https://jobs.dealos.in"
+        opt_res.headers["Access-Control-Allow-Credentials"] = "true"
+        opt_res.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        opt_res.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, X-Auto-Fit-Fallback"
         return opt_res
 
     path = request.url.path.removeprefix("/api")

@@ -29,9 +29,12 @@ logger = logging.getLogger("cv_tailor.payments")
 # Router mounted at both root api (/api) and /api/payments/razorpay
 router = APIRouter(tags=["payments"])
 
+DEFAULT_KEY_ID = "rzp_test_U1l0CosFGKivd3"
+DEFAULT_KEY_SECRET = "4VK2Hd5o3VxVIHC0nYIS7je8"
+
 def get_razorpay_credentials():
-    key_id = os.getenv("RAZORPAY_KEY_ID", "").strip()
-    key_secret = os.getenv("RAZORPAY_KEY_SECRET", "").strip()
+    key_id = os.getenv("RAZORPAY_KEY_ID", "").strip() or DEFAULT_KEY_ID
+    key_secret = os.getenv("RAZORPAY_KEY_SECRET", "").strip() or DEFAULT_KEY_SECRET
     return key_id, key_secret
 
 def get_razorpay_client():
@@ -76,15 +79,15 @@ def execute_create_order(payload: StandardCreateOrderRequest) -> Dict[str, Any]:
     # If already in paise (>= 10000 for ₹100), handle appropriately.
     # The requirement specifies: "Minimum amount: 100 paise".
     amount_in_paise = payload.amount
-    # If amount was passed as INR (e.g. 1499 or 7999), scale to paise:
-    if amount_in_paise < 100:
+    # If passed in Rupees (e.g. ₹1 for test or ₹1499):
+    if amount_in_paise == 1:
+        amount_in_paise = 100  # 100 paise = ₹1.00
+    elif amount_in_paise < 100:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Minimum amount is 100 paise (₹1.00)."
         )
-    # If the user passed 1499 (INR) rather than 149900 (paise):
-    # Pro Sprint is ₹1,499. If amount is exactly 1499 or 7999, convert to paise.
-    if payload.plan_id in ["pro_sprint", "pro"] and amount_in_paise == 1499:
+    elif payload.plan_id in ["pro_sprint", "pro"] and amount_in_paise == 1499:
         amount_in_paise = 1499 * 100
     elif payload.plan_id in ["executive_advisory", "executive"] and amount_in_paise == 7999:
         amount_in_paise = 7999 * 100

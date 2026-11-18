@@ -22,7 +22,7 @@ export interface CreateOrderResponse {
 export interface CheckoutOptions {
   planId: string;
   planName: string;
-  amount: number; // in INR (e.g. 1499)
+  amount: number; // in INR (e.g. 1 for ₹1 or 1499 for ₹1,499)
   user?: {
     name?: string;
     email?: string;
@@ -63,19 +63,34 @@ export async function initiateRazorpayPayment(options: CheckoutOptions): Promise
   try {
     toast.loading("Creating secure Razorpay order...", { id: "razorpay-init" });
 
-    // STEP 1: BACKEND - Call Create Order Endpoint
-    const orderRes = await fetch(`${API_URL}/create-order`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        amount: amount * 100, // Pass amount in paise (min 100 paise)
-        currency: "INR",
-        receipt: `rcpt_${Date.now()}_${planId}`,
-        plan_id: planId,
-        plan_name: planName,
-        user_email: user?.email || "candidate@dealos.in",
-      }),
+    // Calculate amount in paise: 1 INR = 100 paise (Razorpay minimum is 100 paise)
+    const amountInPaise = Math.max(100, Math.round(amount * 100));
+
+    // STEP 1: BACKEND - Call Create Order Endpoint with fallback routing
+    let orderRes: Response;
+    const orderPayload = JSON.stringify({
+      amount: amountInPaise,
+      currency: "INR",
+      receipt: `rcpt_${Date.now()}_${planId}`,
+      plan_id: planId,
+      plan_name: planName,
+      user_email: user?.email || "candidate@dealos.in",
     });
+
+    try {
+      orderRes = await fetch(`${API_URL}/create-order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: orderPayload,
+      });
+    } catch {
+      // Fallback to namespaced endpoint if direct route had network hiccup
+      orderRes = await fetch(`${API_URL}/payments/razorpay/create-order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: orderPayload,
+      });
+    }
 
     if (!orderRes.ok) {
       const errData = await orderRes.json().catch(() => null);
@@ -91,8 +106,11 @@ export async function initiateRazorpayPayment(options: CheckoutOptions): Promise
       throw new Error("Unable to load Razorpay Checkout SDK. Please verify network connectivity.");
     }
 
-    // Resolve key: Prefer frontend env variable, fallback to order key_id
-    const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || orderData.key_id || "rzp_test_U1l0CosFGKivd3";
+    // Resolve key: Prefer frontend env variable, fallback to order key_id, fallback to active test key
+    const keyId =
+      process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ||
+      orderData.key_id ||
+      "rzp_test_U1l0CosFGKivd3";
 
     const razorpayOptions = {
       key: keyId,
@@ -118,18 +136,29 @@ export async function initiateRazorpayPayment(options: CheckoutOptions): Promise
         try {
           toast.loading("Verifying transaction authenticity with Razorpay...", { id: "verify-tx" });
 
-          // STEP 3: BACKEND - Call Verify Signature Endpoint
-          const verifyRes = await fetch(`${API_URL}/verify-payment`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-              plan_id: planId,
-              user_email: user?.email,
-            }),
+          // STEP 3: BACKEND - Call Verify Signature Endpoint with fallback
+          const verifyPayload = JSON.stringify({
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+            plan_id: planId,
+            user_email: user?.email,
           });
+
+          let verifyRes: Response;
+          try {
+            verifyRes = await fetch(`${API_URL}/verify-payment`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: verifyPayload,
+            });
+          } catch {
+            verifyRes = await fetch(`${API_URL}/payments/razorpay/verify`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: verifyPayload,
+            });
+          }
 
           toast.dismiss("verify-tx");
 

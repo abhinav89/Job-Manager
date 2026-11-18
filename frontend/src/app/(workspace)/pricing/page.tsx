@@ -185,9 +185,12 @@ export default function PricingPage() {
               <p className="text-xs text-slate-500 mt-1">Automated AI customizer for aggressive application runs.</p>
             </div>
 
-            <div className="pt-2 pb-4 border-b border-slate-100">
-              <span className="text-4xl font-black text-slate-900">₹1,499</span>
-              <span className="text-xs text-slate-400 font-medium"> / month</span>
+            <div className="pt-2 pb-4 border-b border-slate-100 flex items-baseline gap-2">
+              <span className="text-4xl font-black text-slate-900">₹1</span>
+              <span className="text-xs text-amber-700 font-bold bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                Test Price (Temp ₹1)
+              </span>
+              <span className="text-xs text-slate-400 line-through">₹1,499</span>
             </div>
 
             <ul className="space-y-3 text-xs text-slate-600">
@@ -214,7 +217,7 @@ export default function PricingPage() {
             <button
               type="button"
               disabled={activePlan === "pro_sprint" || processingPlan === "pro_sprint"}
-              onClick={() => handleSubscribe("pro_sprint", "Pro Career Sprint", 1499)}
+              onClick={() => handleSubscribe("pro_sprint", "Pro Career Sprint", 1)}
               className={`w-full py-3 rounded-2xl text-xs font-bold shadow-md transition-all flex items-center justify-center gap-2 ${
                 activePlan === "pro_sprint"
                   ? "bg-blue-50 text-blue-800 border border-blue-200 cursor-default"
@@ -234,7 +237,7 @@ export default function PricingPage() {
               ) : (
                 <>
                   <Zap className="w-4 h-4" />
-                  Subscribe with Razorpay (₹1,499)
+                  Subscribe with Razorpay (₹1 Test)
                 </>
               )}
             </button>
