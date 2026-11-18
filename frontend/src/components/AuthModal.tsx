@@ -41,14 +41,19 @@ export function AuthModal() {
 
         {/* Modal Header */}
         <div className="space-y-2 text-center">
-          <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white font-black flex items-center justify-center text-lg mx-auto shadow-md">
-            JM
+          <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white font-black flex items-center justify-center text-base mx-auto shadow-md tracking-tight">
+            <span>D</span><span className="text-blue-400 text-sm leading-none -ml-0.5">•</span>
           </div>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-            Sign In to Job-Manager
-          </h2>
+          <div className="flex items-center justify-center gap-2">
+            <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+              Sign In to DealOS
+            </h2>
+            <span className="text-[10px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full uppercase tracking-wider">
+              Jobs
+            </span>
+          </div>
           <p className="text-xs text-slate-500 max-w-xs mx-auto leading-relaxed">
-            Secure, private career workspace. Only authorized users can access your profile, resumes, and tracker applications.
+            Executive Career Platform &amp; ATS Tracker. Sign in to access your private profile, tailored resumes, and application pipeline.
           </p>
         </div>
 

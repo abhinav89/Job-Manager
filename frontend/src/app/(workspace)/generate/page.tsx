@@ -1521,13 +1521,20 @@ function GeneratePageContent() {
   }
 
   const profileNotFound = profileQuery.error instanceof ApiQueryError && profileQuery.error.status === 404;
-  const startupLoading = userQuery.isPending || profileQuery.isPending || presetsQuery.isPending || jobLatexLoading || (Boolean(jobId) && jobDetailsQuery.isPending);
-  const startupError = jobLatexError
-    || (!profileNotFound && profileQuery.error instanceof Error ? profileQuery.error.message : "")
-    || (presetsQuery.error instanceof Error ? presetsQuery.error.message : "")
-    || (jobDetailsQuery.error instanceof Error ? jobDetailsQuery.error.message : "");
+  const isTailorTab = mainTab === "tailored" || Boolean(jobId);
+  const startupLoading = isTailorTab
+    ? (userQuery.isPending || profileQuery.isPending || presetsQuery.isPending || jobLatexLoading || (Boolean(jobId) && jobDetailsQuery.isPending))
+    : (profileQuery.isPending && !profileQuery.data && !profileQuery.error);
+
+  const startupError = isTailorTab
+    ? (jobLatexError
+      || (!profileNotFound && profileQuery.error instanceof Error ? profileQuery.error.message : "")
+      || (presetsQuery.error instanceof Error ? presetsQuery.error.message : "")
+      || (jobDetailsQuery.error instanceof Error ? jobDetailsQuery.error.message : ""))
+    : "";
+
   if (startupLoading) return <RouteLoading />;
-  if (profileNotFound) {
+  if (profileNotFound && isTailorTab) {
     return (
       <div className="p-6 sm:p-10">
         <Alert>

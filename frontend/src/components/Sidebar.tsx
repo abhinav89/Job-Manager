@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useDispatch } from "react-redux";
 import {
@@ -69,11 +69,33 @@ export default function Sidebar() {
     }
   };
 
+  const searchParams = useSearchParams();
+  const currentTab = searchParams.get("tab") || "original";
+  const [activeTabOverride, setActiveTabOverride] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleTabChange = (e: Event) => {
+      const customEvent = e as CustomEvent<string>;
+      if (customEvent.detail) {
+        setActiveTabOverride(customEvent.detail);
+      }
+    };
+    window.addEventListener("dealos-tab-change", handleTabChange);
+    return () => window.removeEventListener("dealos-tab-change", handleTabChange);
+  }, []);
+
+  // Reset override whenever route pathname changes
+  useEffect(() => {
+    setActiveTabOverride(null);
+  }, [pathname]);
+
   const isActive = (href: string) => {
-    if (href.includes("?")) {
-      const [path] = href.split("?");
+    if (href.includes("?tab=")) {
+      const [path, queryString] = href.split("?");
       if (pathname !== path) return false;
-      return true;
+      const targetTab = new URLSearchParams(queryString).get("tab");
+      const effectiveTab = activeTabOverride || currentTab;
+      return targetTab === effectiveTab;
     }
     if (href === "/dashboard") return pathname === "/dashboard";
     return pathname === href || pathname.startsWith(href + "/");

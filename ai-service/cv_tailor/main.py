@@ -155,7 +155,7 @@ async def local_access(request: Request, call_next):
         opt_res.headers["Access-Control-Allow-Origin"] = origin or "https://jobs.dealos.in"
         opt_res.headers["Access-Control-Allow-Credentials"] = "true"
         opt_res.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-        opt_res.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, X-Auto-Fit-Fallback"
+        opt_res.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, X-Auto-Fit-Fallback, X-User-Email, Accept, Origin, *"
         return opt_res
 
     path = request.url.path.removeprefix("/api")
@@ -182,7 +182,7 @@ async def local_access(request: Request, call_next):
         response.headers["Access-Control-Allow-Origin"] = cors_origin
         response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, X-Auto-Fit-Fallback"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, X-Auto-Fit-Fallback, X-User-Email, Accept, Origin, *"
     return response
 
 app.mount("/api", api)
