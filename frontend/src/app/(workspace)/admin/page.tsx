@@ -21,16 +21,85 @@ import {
   Sparkles,
   Search,
   ExternalLink,
+  Lock,
+  LogIn,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminAnalytics } from "@/lib/queries";
+import { useAuth } from "@/lib/authContext";
 import { API_URL } from "@/lib/api";
 import Link from "next/link";
 
 export default function SuperadminPage() {
-  const { data: analytics, isLoading, refetch } = useAdminAnalytics();
+  const { user, isAuthenticated, isLoading: authLoading, setIsAuthModalOpen } = useAuth();
+  const { data: analytics, isLoading: analyticsLoading, refetch } = useAdminAnalytics(isAuthenticated);
   const [isTriggeringFeeder, setIsTriggeringFeeder] = useState(false);
   const [isReloadingCache, setIsReloadingCache] = useState(false);
+
+  // If session is resolving, show clean loading skeleton
+  if (authLoading) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center p-6">
+        <div className="flex items-center gap-3 text-slate-500 font-semibold text-sm">
+          <RefreshCw className="w-5 h-5 animate-spin text-blue-600" />
+          <span>Verifying administrator credentials...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Strictly gate access for unauthenticated visitors so no internal metrics or database records leak
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-[75vh] flex items-center justify-center p-6 font-sans">
+        <div className="max-w-md w-full bg-white rounded-3xl border border-slate-200/80 p-8 shadow-sm text-center space-y-6">
+          <div className="w-16 h-16 rounded-2xl bg-slate-900 text-blue-400 flex items-center justify-center mx-auto shadow-sm">
+            <Lock className="w-8 h-8" />
+          </div>
+
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold">
+              <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
+              Restricted Operator Access
+            </div>
+            <h2 className="text-2xl font-black text-slate-900 tracking-tight">Superadmin Locked</h2>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Internal system telemetry, database records, and scraper pipeline controls are strictly restricted to authenticated platform operators.
+            </p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 text-left space-y-2 text-xs text-slate-600">
+            <div className="flex items-center gap-2 font-bold text-slate-800">
+              <Activity className="w-3.5 h-3.5 text-blue-600" />
+              <span>Protected Datapoints:</span>
+            </div>
+            <ul className="list-disc pl-5 space-y-1 text-[11px] text-slate-500">
+              <li>Candidate database &amp; application funnel stats</li>
+              <li>Scraper sync status &amp; pipeline execution triggers</li>
+              <li>ATS parser telemetry &amp; cache controls</li>
+            </ul>
+          </div>
+
+          <div className="space-y-2.5 pt-2">
+            <button
+              type="button"
+              onClick={() => setIsAuthModalOpen(true)}
+              className="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <LogIn className="w-4 h-4" />
+              Sign In to View Admin Telemetry
+            </button>
+            <Link
+              href="/discover"
+              className="w-full py-2.5 rounded-2xl border border-slate-200 hover:bg-slate-50 text-slate-600 font-semibold text-xs transition-all flex items-center justify-center"
+            >
+              Return to Job Search
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const kpis = analytics?.kpis || {
     total_openings: 1717,
@@ -105,9 +174,17 @@ export default function SuperadminPage() {
       {/* ── Top Header & Actions ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
         <div className="space-y-1">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 text-white text-xs font-bold shadow-xs">
-            <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
-            Superadmin Operations Center
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 text-white text-xs font-bold shadow-xs">
+              <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
+              Superadmin Operations Center
+            </div>
+            {user?.email && (
+              <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full inline-flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Operator: {user.email}
+              </span>
+            )}
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
             Platform Analytics &amp; Feeder Telemetry

@@ -316,11 +316,12 @@ export function useThemes() {
   });
 }
 
-export function useAdminAnalytics() {
+export function useAdminAnalytics(enabled = true) {
   return useQuery<any>({
     queryKey: queryKeys.adminAnalytics,
     queryFn: () => readJson<any>("/admin/analytics", "Unable to load superadmin analytics."),
-    refetchInterval: 15_000,
+    enabled,
+    refetchInterval: enabled ? 15_000 : false,
   });
 }
 

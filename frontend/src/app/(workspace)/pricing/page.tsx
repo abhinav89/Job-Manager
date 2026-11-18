@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Check,
   Sparkles,
@@ -12,16 +12,59 @@ import {
   Clock,
   Briefcase,
   HelpCircle,
+  Loader2,
+  Lock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/authContext";
+import { initiateRazorpayPayment } from "@/lib/razorpay";
 
 export default function PricingPage() {
-  const { user } = useAuth();
-  const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">("annual");
+  const { user, isAuthenticated, setIsAuthModalOpen } = useAuth();
+  const [activePlan, setActivePlan] = useState<string>("free_starter");
+  const [processingPlan, setProcessingPlan] = useState<string | null>(null);
 
-  const handleWaitlist = (planName: string) => {
-    toast.success(`You are added to the VIP waitlist for ${planName}! We'll notify you when it launches.`);
+  // Sync active plan from client storage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("dealos_user_plan");
+      if (stored) {
+        setActivePlan(stored);
+      }
+    } catch {
+      // ignore storage access errors
+    }
+  }, []);
+
+  const handleSubscribe = async (planId: string, planName: string, amount: number) => {
+    if (!isAuthenticated) {
+      toast.info("Please sign in first to subscribe to a membership plan.");
+      setIsAuthModalOpen(true);
+      return;
+    }
+
+    setProcessingPlan(planId);
+    try {
+      await initiateRazorpayPayment({
+        planId,
+        planName,
+        amount,
+        user,
+        onSuccess: (pId) => {
+          setActivePlan(pId);
+          try {
+            localStorage.setItem("dealos_user_plan", pId);
+          } catch {
+            // ignore
+          }
+        },
+        onError: (err) => {
+          console.error("Payment failure:", err);
+        },
+      });
+    } finally {
+      setProcessingPlan(null);
+    }
   };
 
   return (
@@ -36,25 +79,31 @@ export default function PricingPage() {
           Supercharge Your Career Search
         </h1>
         <p className="text-sm text-slate-500 leading-relaxed">
-          Access over 1,700+ verified executive and engineering opportunities. All current core tools are included in your complimentary Free plan.
+          Access over 1,700+ verified executive and engineering opportunities across India. Core search tools are 100% free; accelerate with AI automation.
         </p>
 
         {/* Current Active Plan Pill */}
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold mt-2">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span>Active Plan: Free Community Membership ({user?.email || "Signed In"})</span>
+          <span>
+            Active Plan: {activePlan === "pro_sprint" ? "Pro Career Sprint" : activePlan === "executive_advisory" ? "Executive Advisory" : "Free Community Membership"} ({user?.email || "Guest"})
+          </span>
         </div>
       </div>
 
       {/* ── Pricing Cards Grid ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
         {/* Tier 1: Free Starter */}
-        <div className="bg-white border-2 border-emerald-500 rounded-3xl p-6 sm:p-8 shadow-sm flex flex-col justify-between relative overflow-hidden">
-          <div className="absolute top-4 right-4">
-            <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wider">
-              ACTIVE PLAN
-            </span>
-          </div>
+        <div className={`bg-white rounded-3xl p-6 sm:p-8 shadow-sm flex flex-col justify-between relative overflow-hidden transition-all ${
+          activePlan === "free_starter" ? "border-2 border-emerald-500" : "border border-slate-200"
+        }`}>
+          {activePlan === "free_starter" && (
+            <div className="absolute top-4 right-4">
+              <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wider">
+                ACTIVE PLAN
+              </span>
+            </div>
+          )}
 
           <div className="space-y-4">
             <div>
@@ -95,21 +144,38 @@ export default function PricingPage() {
           <div className="pt-8">
             <button
               type="button"
-              disabled
-              className="w-full py-3 rounded-2xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold cursor-default flex items-center justify-center gap-1.5"
+              disabled={activePlan === "free_starter"}
+              onClick={() => {
+                setActivePlan("free_starter");
+                localStorage.setItem("dealos_user_plan", "free_starter");
+                toast.success("Active plan set to Free Community Membership.");
+              }}
+              className={`w-full py-3 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                activePlan === "free_starter"
+                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200 cursor-default"
+                  : "bg-slate-100 hover:bg-slate-200 text-slate-800 cursor-pointer"
+              }`}
             >
               <Check className="w-4 h-4" />
-              Your Current Plan
+              {activePlan === "free_starter" ? "Your Current Plan" : "Switch to Free Starter"}
             </button>
           </div>
         </div>
 
         {/* Tier 2: Pro Career Sprint */}
-        <div className="bg-white border border-slate-200 hover:border-blue-400 rounded-3xl p-6 sm:p-8 shadow-sm flex flex-col justify-between relative overflow-hidden transition-all">
+        <div className={`bg-white rounded-3xl p-6 sm:p-8 shadow-sm flex flex-col justify-between relative overflow-hidden transition-all ${
+          activePlan === "pro_sprint" ? "border-2 border-blue-600 shadow-md ring-2 ring-blue-100" : "border border-slate-200 hover:border-blue-400"
+        }`}>
           <div className="absolute top-4 right-4">
-            <span className="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-black uppercase tracking-wider">
-              UPCOMING
-            </span>
+            {activePlan === "pro_sprint" ? (
+              <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 text-[10px] font-black uppercase tracking-wider">
+                ACTIVE PLAN
+              </span>
+            ) : (
+              <span className="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-black uppercase tracking-wider">
+                POPULAR
+              </span>
+            )}
           </div>
 
           <div className="space-y-4">
@@ -127,7 +193,7 @@ export default function PricingPage() {
             <ul className="space-y-3 text-xs text-slate-600">
               <li className="flex items-start gap-2.5">
                 <Sparkles className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                <span><strong>Unlimited AI Resume Tailoring</strong> with strict zero-hallucination guarantee</span>
+                <span><strong>Unlimited AI Resume Tailoring</strong> with zero-hallucination guarantee</span>
               </li>
               <li className="flex items-start gap-2.5">
                 <Sparkles className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
@@ -144,24 +210,54 @@ export default function PricingPage() {
             </ul>
           </div>
 
-          <div className="pt-8">
+          <div className="pt-8 space-y-2">
             <button
               type="button"
-              onClick={() => handleWaitlist("Pro Career Sprint")}
-              className="w-full py-3 rounded-2xl bg-slate-900 hover:bg-blue-600 text-white text-xs font-bold shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5"
+              disabled={activePlan === "pro_sprint" || processingPlan === "pro_sprint"}
+              onClick={() => handleSubscribe("pro_sprint", "Pro Career Sprint", 1499)}
+              className={`w-full py-3 rounded-2xl text-xs font-bold shadow-md transition-all flex items-center justify-center gap-2 ${
+                activePlan === "pro_sprint"
+                  ? "bg-blue-50 text-blue-800 border border-blue-200 cursor-default"
+                  : "bg-blue-600 hover:bg-blue-700 text-white cursor-pointer hover:shadow-lg"
+              }`}
             >
-              <Zap className="w-4 h-4" />
-              Join Pro Waitlist
+              {processingPlan === "pro_sprint" ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Connecting Razorpay...
+                </>
+              ) : activePlan === "pro_sprint" ? (
+                <>
+                  <Check className="w-4 h-4 text-blue-700" />
+                  Your Active Plan
+                </>
+              ) : (
+                <>
+                  <Zap className="w-4 h-4" />
+                  Subscribe with Razorpay (₹1,499)
+                </>
+              )}
             </button>
+            <p className="text-[10px] text-center text-slate-400">
+              Instant UPI, GPay, PhonePe, Cards &amp; NetBanking
+            </p>
           </div>
         </div>
 
-        {/* Tier 3: Executive Concierge */}
-        <div className="bg-white border border-slate-200 hover:border-amber-400 rounded-3xl p-6 sm:p-8 shadow-sm flex flex-col justify-between relative overflow-hidden transition-all">
+        {/* Tier 3: Executive Advisory */}
+        <div className={`bg-white rounded-3xl p-6 sm:p-8 shadow-sm flex flex-col justify-between relative overflow-hidden transition-all ${
+          activePlan === "executive_advisory" ? "border-2 border-amber-500 shadow-md" : "border border-slate-200 hover:border-amber-400"
+        }`}>
           <div className="absolute top-4 right-4">
-            <span className="px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-black uppercase tracking-wider">
-              UPCOMING
-            </span>
+            {activePlan === "executive_advisory" ? (
+              <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 text-[10px] font-black uppercase tracking-wider">
+                ACTIVE PLAN
+              </span>
+            ) : (
+              <span className="px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-black uppercase tracking-wider">
+                HIGH-TOUCH
+              </span>
+            )}
           </div>
 
           <div className="space-y-4">
@@ -183,7 +279,7 @@ export default function PricingPage() {
               </li>
               <li className="flex items-start gap-2.5">
                 <Crown className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <span><strong>Confidential Search Representation</strong> via DealOS partner fund network</span>
+                <span><strong>Confidential Search Representation</strong> via partner fund network</span>
               </li>
               <li className="flex items-start gap-2.5">
                 <Crown className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
@@ -196,16 +292,66 @@ export default function PricingPage() {
             </ul>
           </div>
 
-          <div className="pt-8">
+          <div className="pt-8 space-y-2">
             <button
               type="button"
-              onClick={() => handleWaitlist("Executive Advisory")}
-              className="w-full py-3 rounded-2xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5"
+              disabled={activePlan === "executive_advisory" || processingPlan === "executive_advisory"}
+              onClick={() => handleSubscribe("executive_advisory", "Executive Advisory", 7999)}
+              className={`w-full py-3 rounded-2xl text-xs font-bold shadow-md transition-all flex items-center justify-center gap-2 ${
+                activePlan === "executive_advisory"
+                  ? "bg-amber-50 text-amber-800 border border-amber-200 cursor-default"
+                  : "bg-amber-600 hover:bg-amber-700 text-white cursor-pointer hover:shadow-lg"
+              }`}
             >
-              <Crown className="w-4 h-4" />
-              Join Executive Waitlist
+              {processingPlan === "executive_advisory" ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Connecting Razorpay...
+                </>
+              ) : activePlan === "executive_advisory" ? (
+                <>
+                  <Check className="w-4 h-4 text-amber-700" />
+                  Your Active Plan
+                </>
+              ) : (
+                <>
+                  <Crown className="w-4 h-4" />
+                  Retain Advisory (₹7,999)
+                </>
+              )}
             </button>
+            <p className="text-[10px] text-center text-slate-400">
+              Includes 1-on-1 advisor matching &amp; strategy review
+            </p>
           </div>
+        </div>
+      </div>
+
+      {/* ── Razorpay India Gateway Trust Banner ── */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-blue-50/60 border border-blue-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+            <ShieldCheck className="w-5 h-5" />
+          </div>
+          <div className="space-y-0.5">
+            <h4 className="text-xs font-black text-slate-900 flex items-center gap-2">
+              <span>Razorpay Verified Indian Payment Gateway</span>
+              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                ₹0 Platform Fee
+              </span>
+            </h4>
+            <p className="text-[11px] text-slate-500">
+              Zero platform setup fee. Supports UPI (Google Pay, PhonePe, Paytm), RuPay, Visa, Mastercard, and 50+ NetBanking options with 256-bit encryption.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0 text-slate-600 font-bold text-[11px]">
+          <span className="px-2.5 py-1 rounded-lg bg-white border border-blue-200 shadow-2xs">
+            UPI Autopay Ready
+          </span>
+          <span className="px-2.5 py-1 rounded-lg bg-white border border-blue-200 shadow-2xs">
+            Sandbox Simulated
+          </span>
         </div>
       </div>
 
@@ -223,9 +369,9 @@ export default function PricingPage() {
             </p>
           </div>
           <div className="space-y-1">
-            <span className="font-bold text-slate-800">When will paid plans launch?</span>
+            <span className="font-bold text-slate-800">What payment methods are supported?</span>
             <p className="text-slate-500 leading-relaxed">
-              Paid automation tiers are in private beta. Joining the waitlist grants you priority onboarding and a launch-week discount.
+              We process Indian domestic payments via Razorpay: UPI QR code, UPI ID (GPay/PhonePe), NetBanking across all major banks, and Debit/Credit cards.
             </p>
           </div>
         </div>
