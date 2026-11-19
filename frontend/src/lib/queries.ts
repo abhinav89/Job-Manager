@@ -221,6 +221,104 @@ export type ApifyAlert = {
   read: boolean;
 };
 
+export type AutoApplyDefaults = {
+  user_id: string;
+  role_themes: string[];
+  min_experience_years: number;
+  max_experience_years: number;
+  preferred_locations: string[];
+  work_arrangements: string[];
+  location_mode: "filter" | "prioritize";
+  unattended_include_lower_ranked: boolean;
+  auto_queue_future_matches: boolean;
+  updated_at?: string;
+};
+
+export type AutoApplyProfileSuggestions = {
+  calculated_tenure_years: number;
+  suggested_min_experience: number;
+  suggested_max_experience: number;
+  suggested_themes: string[];
+  default_preferred_locations: string[];
+  default_work_arrangements: string[];
+};
+
+export type AutoApplyPreviewJob = {
+  job_id: string;
+  company_name: string;
+  job_title: string;
+  matched_theme: string;
+  advertised_experience_range: string;
+  location: string;
+  work_arrangement: string;
+  source: string;
+  job_url: string;
+  why_it_qualified: string;
+  is_preferred_location: boolean;
+  has_ambiguity: boolean;
+  ambiguity_flags: string[];
+  eligible_for_auto_queue: boolean;
+};
+
+export type AutoApplyPreviewResponse = {
+  status: string;
+  total_preview_jobs: number;
+  preferred_location_count: number;
+  other_eligible_location_count: number;
+  ambiguous_flagged_count: number;
+  cross_posts_excluded_count: number;
+  previously_applied_excluded_count: number;
+  effective_run_settings: {
+    locations: string[];
+    location_mode: "filter" | "prioritize";
+    work_arrangements: string[];
+    unattended_include_lower_ranked: boolean;
+  };
+  saved_defaults_preserved: {
+    role_themes: string[];
+    min_experience_years: number;
+    max_experience_years: number;
+  };
+  jobs: AutoApplyPreviewJob[];
+};
+
+export type AutoApplyQueueItem = {
+  queue_item_id: string;
+  job_id: string;
+  company_name: string;
+  job_title: string;
+  matched_theme: string;
+  advertised_experience_range: string;
+  location: string;
+  source: string;
+  job_url: string;
+  why_it_qualified: string;
+  has_ambiguity: boolean;
+  ambiguity_flags: string[];
+  status: "queued" | "in_progress" | "paused" | "needs_input" | "dismissed";
+  queued_at: string;
+};
+
+export type AutoApplyActivityEvent = {
+  id: string;
+  timestamp: string;
+  sender: "agent" | "system";
+  message: string;
+  badge: string;
+  payload?: any;
+};
+
+export type AutoApplyQueueResponse = {
+  status: string;
+  queue: {
+    user_id: string;
+    queue_status: "ready" | "running" | "paused";
+    queue_items: AutoApplyQueueItem[];
+    activity_feed: AutoApplyActivityEvent[];
+    last_updated: string;
+  };
+};
+
 export class ApiQueryError extends Error {
   constructor(message: string, readonly status: number) {
     super(message);
@@ -272,6 +370,8 @@ export const queryKeys = {
   apifyProfile: ["apify", "profile"] as const,
   apifyJobs: (themeId?: string) => ["apify", "jobs", themeId || "all"] as const,
   apifyAlerts: ["apify", "alerts"] as const,
+  autoApplySetup: ["auto-apply", "setup"] as const,
+  autoApplyQueue: ["auto-apply", "queue"] as const,
 };
 
 export const workspaceQueryOptions = () => queryOptions({
@@ -445,6 +545,29 @@ export function useApifyAlerts(enabled = true) {
     queryFn: () => readJson<{ status: string; total: number; unread_count: number; alerts: ApifyAlert[] }>("/apify/alerts", "Unable to load alerts."),
     enabled,
     refetchInterval: 20_000,
+  });
+}
+
+export function useAutoApplySetup() {
+  return useQuery<{
+    status: string;
+    defaults: AutoApplyDefaults;
+    profile_suggestions: AutoApplyProfileSuggestions;
+  }>({
+    queryKey: queryKeys.autoApplySetup,
+    queryFn: () => readJson<{
+      status: string;
+      defaults: AutoApplyDefaults;
+      profile_suggestions: AutoApplyProfileSuggestions;
+    }>("/auto-apply/setup", "Unable to load Auto Apply setup."),
+  });
+}
+
+export function useAutoApplyQueue() {
+  return useQuery<AutoApplyQueueResponse>({
+    queryKey: queryKeys.autoApplyQueue,
+    queryFn: () => readJson<AutoApplyQueueResponse>("/auto-apply/queue", "Unable to load Auto Apply queue."),
+    refetchInterval: 5_000,
   });
 }
 
