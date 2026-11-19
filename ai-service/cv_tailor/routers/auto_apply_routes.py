@@ -23,6 +23,11 @@ from cv_tailor.services.auto_apply_service import (
     add_jobs_to_queue,
     set_queue_paused_state,
     resolve_needs_input_item,
+    get_answer_bank,
+    save_answer_bank,
+    process_queue_form_filling,
+    answer_pending_question,
+    get_application_form_review,
 )
 
 logger = logging.getLogger("auto-apply-routes")
@@ -57,6 +62,21 @@ class QueueJobsRequest(BaseModel):
 
 class ResolveNeedsInputRequest(BaseModel):
     action: str = Field(description="'approve' or 'dismiss'")
+
+
+class AnswerBankUpdateRequest(BaseModel):
+    answers: List[Dict[str, Any]]
+    rule_answers: Optional[Dict[str, List[Dict[str, Any]]]] = None
+
+
+class AnswerQuestionRequest(BaseModel):
+    answer_text: str = Field(description="Answer text or option label")
+    scope: Optional[str] = Field(default="save_as_default", description="'use_once', 'save_for_rule', 'save_as_default', 'ask_every_time'")
+    selected_option: Optional[str] = None
+
+
+class ProcessQueueRequest(BaseModel):
+    mock_form_catalog: Optional[Dict[str, List[Dict[str, Any]]]] = None
 
 
 # --- Endpoints ---
@@ -179,3 +199,77 @@ def resolve_needs_input(item_id: str, payload: ResolveNeedsInputRequest, request
         return resolve_needs_input_item(user_id, item_id, payload.action)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# --- Phase 2 Endpoints: Answer Bank & Assisted Form Filling ---
+
+@router.get("/answer-bank")
+def get_user_answer_bank(request: Request):
+    """Returns candidate Answer Bank seeded with core application question categories."""
+    user_id = _resolve_user_id(request)
+    bank = get_answer_bank(user_id)
+    return {
+        "status": "success",
+        "answer_bank": bank
+    }
+
+
+@router.put("/answer-bank")
+def update_user_answer_bank(payload: AnswerBankUpdateRequest, request: Request):
+    """Updates candidate Answer Bank with customized questions, categories, and answers."""
+    user_id = _resolve_user_id(request)
+    bank = get_answer_bank(user_id)
+    bank["answers"] = payload.answers
+    if payload.rule_answers is not None:
+        bank["rule_answers"] = payload.rule_answers
+    saved = save_answer_bank(user_id, bank)
+    return {
+        "status": "success",
+        "message": "Answer Bank updated successfully.",
+        "answer_bank": saved
+    }
+
+
+@router.post("/queue/process")
+def process_queue_fill(payload: Optional[ProcessQueueRequest] = None, request: Request = None):
+    """
+    Executes a form-filling cycle across active queued jobs.
+    Pauses any job encountering unfamiliar required questions ('needs_answer')
+    while allowing other eligible jobs in the queue to continue to 'ready_for_review'.
+    """
+    user_id = _resolve_user_id(request)
+    mock_catalog = payload.mock_form_catalog if payload else None
+    return process_queue_form_filling(user_id, mock_catalog)
+
+
+@router.post("/queue/{item_id}/answer")
+def submit_question_answer(item_id: str, payload: AnswerQuestionRequest, request: Request):
+    """
+    Answers an unfamiliar required question for a paused job.
+    Supports 4 scopes: 'use_once', 'save_for_rule', 'save_as_default', 'ask_every_time'.
+    Resumes the job and advances it to 'ready_for_review'.
+    """
+    user_id = _resolve_user_id(request)
+    try:
+        return answer_pending_question(
+            user_id=user_id,
+            queue_item_id=item_id,
+            answer_text=payload.answer_text,
+            scope=payload.scope or "save_as_default",
+            selected_option=payload.selected_option
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/queue/{item_id}/review")
+def review_job_application(item_id: str, request: Request):
+    """
+    Fetches full form answers snapshot for manual inspection prior to submission.
+    Submission remains strictly manual in Phase 2.
+    """
+    user_id = _resolve_user_id(request)
+    try:
+        return get_application_form_review(user_id, item_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))

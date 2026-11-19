@@ -29,16 +29,22 @@ import {
   ListFilter,
   Eye,
   FileText,
+  BookOpen,
+  Zap,
+  HelpCircle,
+  BookmarkCheck,
 } from "lucide-react";
 
 import { API_URL } from "@/lib/api";
 import {
   useAutoApplySetup,
   useAutoApplyQueue,
+  useAnswerBank,
   queryKeys,
   type AutoApplyPreviewJob,
   type AutoApplyPreviewResponse,
   type AutoApplyQueueItem,
+  type AnswerBankItem,
 } from "@/lib/queries";
 
 export default function AutoApplyPage() {
@@ -47,6 +53,7 @@ export default function AutoApplyPage() {
   // Queries
   const setupQuery = useAutoApplySetup();
   const queueQuery = useAutoApplyQueue();
+  const answerBankQuery = useAnswerBank();
 
   // Run-level location adjustments (Independent from saved defaults!)
   const [locationMode, setLocationMode] = useState<"prioritize" | "filter">("prioritize");
@@ -68,8 +75,24 @@ export default function AutoApplyPage() {
   const [saveAsRule, setSaveAsRule] = useState(false);
   const [isQueueing, setIsQueueing] = useState(false);
 
-  // Queue tab filter
-  const [queueTab, setQueueTab] = useState<"all" | "active" | "needs_input">("all");
+  // Queue state & tabs
+  const [queueTab, setQueueTab] = useState<"all" | "queued" | "needs_answer" | "needs_input" | "ready_for_review">("all");
+  const [isProcessingQueue, setIsProcessingQueue] = useState(false);
+
+  // Phase 2: Answer Bank Modal State
+  const [isAnswerBankOpen, setIsAnswerBankOpen] = useState(false);
+  const [editableAnswers, setEditableAnswers] = useState<AnswerBankItem[]>([]);
+  const [isSavingBank, setIsSavingBank] = useState(false);
+
+  // Phase 2: Answering Unfamiliar Question Modal / Card State
+  const [answeringItem, setAnsweringItem] = useState<AutoApplyQueueItem | null>(null);
+  const [answerTextInput, setAnswerTextInput] = useState("");
+  const [selectedOptionInput, setSelectedOptionInput] = useState("");
+  const [scopeInput, setScopeInput] = useState<"save_as_default" | "save_for_rule" | "use_once" | "ask_every_time">("save_as_default");
+  const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
+
+  // Phase 2: Form Review Modal State
+  const [reviewingItem, setReviewingItem] = useState<AutoApplyQueueItem | null>(null);
 
   // Sync initial setup values
   useEffect(() => {
@@ -85,6 +108,13 @@ export default function AutoApplyPage() {
       setUnattendedLowerRanked(defs.unattended_include_lower_ranked || false);
     }
   }, [setupQuery.data]);
+
+  // Sync Answer Bank editable list
+  useEffect(() => {
+    if (answerBankQuery.data?.answer_bank?.answers) {
+      setEditableAnswers(answerBankQuery.data.answer_bank.answers);
+    }
+  }, [answerBankQuery.data]);
 
   // Load preview function
   const handleFetchPreview = async (overrideLocs?: string[], overrideMode?: "prioritize" | "filter") => {
@@ -102,7 +132,6 @@ export default function AutoApplyPage() {
       const data: AutoApplyPreviewResponse = await res.json();
       if (res.ok) {
         setPreviewData(data);
-        // Pre-select all eligible unflagged jobs by default
         const eligibleIds = new Set(
           data.jobs.filter((j) => j.eligible_for_auto_queue).map((j) => j.job_id)
         );
@@ -117,7 +146,6 @@ export default function AutoApplyPage() {
     }
   };
 
-  // Run preview on initial mount once setup is ready
   useEffect(() => {
     if (setupQuery.data && !previewData) {
       handleFetchPreview();
@@ -241,18 +269,121 @@ export default function AutoApplyPage() {
     }
   };
 
+  // Phase 2: Run Form Filling across Queued Jobs
+  const handleRunQueueFormFill = async () => {
+    setIsProcessingQueue(true);
+    try {
+      const res = await fetch(`${API_URL}/auto-apply/queue/process`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        if (data.status === "queue_paused") {
+          toast.info(data.message);
+        } else {
+          toast.success(
+            `Processed ${data.processed_count} jobs: ${data.ready_count} ready for review, ${data.paused_for_answer_count} paused for unfamiliar questions.`
+          );
+        }
+        queryClient.invalidateQueries({ queryKey: queryKeys.autoApplyQueue });
+      } else {
+        toast.error("Failed to run assisted form fill.");
+      }
+    } catch {
+      toast.error("Network error running form fill.");
+    } finally {
+      setIsProcessingQueue(false);
+    }
+  };
+
+  // Phase 2: Save Answer Bank Updates
+  const handleSaveAnswerBank = async () => {
+    setIsSavingBank(true);
+    try {
+      const res = await fetch(`${API_URL}/auto-apply/answer-bank`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers: editableAnswers }),
+      });
+      if (res.ok) {
+        toast.success("Answer Bank updated successfully!");
+        setIsAnswerBankOpen(false);
+        queryClient.invalidateQueries({ queryKey: queryKeys.autoApplyAnswerBank });
+      } else {
+        toast.error("Failed to update Answer Bank.");
+      }
+    } catch {
+      toast.error("Network error updating Answer Bank.");
+    } finally {
+      setIsSavingBank(false);
+    }
+  };
+
+  // Phase 2: Open Answering Card/Modal
+  const handleOpenAnswering = (item: AutoApplyQueueItem) => {
+    setAnsweringItem(item);
+    setSelectedOptionInput(item.pending_question?.options?.[0] || "");
+    setAnswerTextInput("");
+    setScopeInput("save_as_default");
+  };
+
+  // Phase 2: Submit Answer for Paused Job
+  const handleSubmitAnswer = async () => {
+    if (!answeringItem || !answeringItem.pending_question) return;
+    const finalAnswer = selectedOptionInput || answerTextInput;
+    if (!finalAnswer.trim()) {
+      toast.error("Please provide an answer.");
+      return;
+    }
+
+    setIsSubmittingAnswer(true);
+    try {
+      const res = await fetch(`${API_URL}/auto-apply/queue/${answeringItem.queue_item_id}/answer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          answer_text: finalAnswer,
+          scope: scopeInput,
+          selected_option: selectedOptionInput || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(data.message || "Answer saved! Job resumed and ready for review.");
+        setAnsweringItem(null);
+        queryClient.invalidateQueries({ queryKey: queryKeys.autoApplyQueue });
+        queryClient.invalidateQueries({ queryKey: queryKeys.autoApplyAnswerBank });
+      } else {
+        toast.error(data.detail || "Failed to submit answer.");
+      }
+    } catch {
+      toast.error("Network error submitting answer.");
+    } finally {
+      setIsSubmittingAnswer(false);
+    }
+  };
+
   const queue = queueQuery.data?.queue;
   const queueItems: AutoApplyQueueItem[] = queue?.queue_items || [];
   const activityFeed = queue?.activity_feed || [];
   const isQueuePaused = queue?.queue_status === "paused";
 
+  const queuedCount = queueItems.filter((i) => i.status === "queued").length;
+  const needsAnswerCount = queueItems.filter((i) => i.status === "needs_answer").length;
+  const needsInputCount = queueItems.filter((i) => i.status === "needs_input").length;
+  const readyReviewCount = queueItems.filter((i) => i.status === "ready_for_review").length;
+
   const filteredQueueItems = queueItems.filter((item) => {
-    if (queueTab === "active") return item.status === "queued" || item.status === "in_progress";
+    if (queueTab === "queued") return item.status === "queued" || item.status === "in_progress";
+    if (queueTab === "needs_answer") return item.status === "needs_answer";
     if (queueTab === "needs_input") return item.status === "needs_input";
+    if (queueTab === "ready_for_review") return item.status === "ready_for_review";
     return true;
   });
 
-  const needsInputCount = queueItems.filter((i) => i.status === "needs_input").length;
+  const answerBank = answerBankQuery.data?.answer_bank;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -262,18 +393,43 @@ export default function AutoApplyPage() {
           <div className="space-y-1.5">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold border border-blue-200">
               <Bot className="w-3.5 h-3.5" />
-              Phase 1 · Job Filtering, Selection &amp; Run Queue
+              Phase 2 · Form Filling, Reusable Answer Bank &amp; Queue Workflow
             </div>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-              Auto Apply Setup &amp; Application Queue
+              Auto Apply Agent &amp; Application Queue
             </h1>
             <p className="text-xs text-slate-500 max-w-2xl leading-relaxed">
-              Define your role themes and target experience range. Select eligible jobs to populate a persistent
-              application queue with step-by-step activity tracking, pause/resume controls, and review flags.
+              Auto-fills application forms with your confirmed Answer Bank. When unfamiliar required questions arise,
+              the specific job pauses safely while remaining jobs continue. Submission remains manual for candidate review.
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Answer Bank Button */}
+            <button
+              type="button"
+              onClick={() => setIsAnswerBankOpen(true)}
+              className="px-4 py-2.5 rounded-xl border border-slate-200 hover:border-blue-400 bg-white hover:bg-blue-50/40 text-slate-700 font-extrabold text-xs inline-flex items-center gap-2 shadow-2xs transition-all"
+            >
+              <BookOpen className="w-4 h-4 text-blue-600" />
+              <span>Answer Bank ({answerBank?.answers?.length || 8})</span>
+              <span className="px-1.5 py-0.5 rounded-md bg-slate-100 text-[10px] font-mono text-slate-600">
+                v{answerBank?.version || 1}
+              </span>
+            </button>
+
+            {/* Run Form Filling */}
+            <button
+              type="button"
+              disabled={isProcessingQueue}
+              onClick={handleRunQueueFormFill}
+              className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs inline-flex items-center gap-2 shadow-xs transition-all disabled:opacity-50"
+            >
+              <Zap className={`w-4 h-4 ${isProcessingQueue ? "animate-spin" : "fill-current"}`} />
+              <span>{isProcessingQueue ? "Autofilling Forms..." : "Run Assisted Form Fill"}</span>
+            </button>
+
+            {/* Pause / Resume Queue */}
             <button
               type="button"
               onClick={handleToggleQueuePause}
@@ -298,31 +454,26 @@ export default function AutoApplyPage() {
           </div>
         </div>
 
-        {/* ── Setup Defaults Bar (Reused Across Runs) ── */}
-        <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-                Saved Candidate Defaults (Reused Across Runs)
-              </span>
-              <span className="text-[10px] bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded-full">
-                Persistent
-              </span>
+        {/* ── Saved Defaults Banner ── */}
+        <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+              Active Candidate Defaults (Reused Across Runs)
             </div>
-
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="font-bold text-slate-700">Target Themes:</span>
-              {(setupQuery.data?.defaults?.role_themes || ["Strategy Consulting", "Corporate Strategy"]).map((t) => (
-                <span key={t} className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-800 font-bold text-xs">
-                  {t}
+            <div className="flex flex-wrap items-center gap-2 pt-0.5">
+              <span className="text-xs font-bold text-slate-700">Role Themes:</span>
+              {(setupQuery.data?.defaults?.role_themes || []).map((th) => (
+                <span
+                  key={th}
+                  className="px-2.5 py-0.5 rounded-lg bg-white border border-slate-200 text-xs font-bold text-slate-800 shadow-2xs"
+                >
+                  {th}
                 </span>
               ))}
-
               <span className="text-slate-300">|</span>
-
-              <span className="font-bold text-slate-700">Experience Range:</span>
-              <span className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-blue-700 font-mono font-bold text-xs">
-                {setupQuery.data?.defaults?.min_experience_years || 4}–{setupQuery.data?.defaults?.max_experience_years || 10} years
+              <span className="text-xs font-bold text-slate-700">Target Range:</span>
+              <span className="px-2.5 py-0.5 rounded-lg bg-blue-50 border border-blue-200 text-xs font-black text-blue-700">
+                {setupQuery.data?.defaults?.min_experience_years || 4}–{setupQuery.data?.defaults?.max_experience_years || 7} yrs
               </span>
             </div>
           </div>
@@ -330,90 +481,74 @@ export default function AutoApplyPage() {
           <button
             type="button"
             onClick={() => setIsEditingSetup(true)}
-            className="px-4 py-2 rounded-xl bg-white border border-slate-200 hover:border-slate-300 text-slate-700 font-bold text-xs inline-flex items-center gap-1.5 shadow-2xs shrink-0 transition-colors"
+            className="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-extrabold text-xs inline-flex items-center gap-1.5 shadow-2xs shrink-0 self-start md:self-auto"
           >
-            <Settings2 className="w-3.5 h-3.5 text-blue-600" />
-            Edit Themes &amp; Experience Range
+            <Settings2 className="w-3.5 h-3.5 text-slate-500" />
+            <span>Edit Defaults</span>
           </button>
         </div>
       </div>
 
-      {/* ── Run Configuration: Adjustable Location for Each Run ── */}
-      <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
+      {/* ── Run Configuration & Filter Controls ── */}
+      <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xs space-y-5">
         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-          <div>
-            <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-              <SlidersHorizontal className="w-4 h-4 text-blue-600" />
-              Adjust Location for This Run
+          <div className="flex items-center gap-2">
+            <SlidersHorizontal className="w-4 h-4 text-blue-600" />
+            <h2 className="text-base font-extrabold text-slate-900">
+              Run Configuration (Non-Destructive Location Adjustment)
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Adjusting location for this run leaves your saved themes and experience range defaults completely intact.
-            </p>
           </div>
-
-          <button
-            type="button"
-            disabled={isLoadingPreview}
-            onClick={() => handleFetchPreview()}
-            className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs inline-flex items-center gap-1.5 shadow-xs transition-all disabled:opacity-50"
-          >
-            <RotateCw className={`w-3.5 h-3.5 ${isLoadingPreview ? "animate-spin" : ""}`} />
-            Refresh Preview
-          </button>
+          <span className="text-xs text-slate-400">
+            Adjusting locations for this run leaves your saved themes and experience range intact.
+          </span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           {/* Mode Selector */}
-          <div className="space-y-3">
-            <label className="text-xs font-extrabold uppercase tracking-wider text-slate-400 block">
-              Location Mode
-            </label>
-            <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-2">
+            <label className="text-xs font-extrabold text-slate-700 block">Location Mode</label>
+            <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-2xl text-xs font-bold">
               <button
                 type="button"
                 onClick={() => {
                   setLocationMode("prioritize");
-                  handleFetchPreview(undefined, "prioritize");
+                  handleFetchPreview(selectedLocations, "prioritize");
                 }}
-                className={`p-3.5 rounded-2xl border text-left transition-all ${
+                className={`py-2 px-3 rounded-xl transition-all ${
                   locationMode === "prioritize"
-                    ? "border-blue-600 bg-blue-50/50 text-blue-900 ring-2 ring-blue-500/10"
-                    : "border-slate-200 hover:border-slate-300 bg-white"
+                    ? "bg-white text-blue-700 shadow-2xs font-black"
+                    : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                <div className="text-xs font-extrabold">Prioritize by Location</div>
-                <div className="text-[11px] text-slate-500 mt-0.5">
-                  Preferred locations first; other eligible locations shown below.
-                </div>
+                Prioritize
               </button>
-
               <button
                 type="button"
                 onClick={() => {
                   setLocationMode("filter");
-                  handleFetchPreview(undefined, "filter");
+                  handleFetchPreview(selectedLocations, "filter");
                 }}
-                className={`p-3.5 rounded-2xl border text-left transition-all ${
+                className={`py-2 px-3 rounded-xl transition-all ${
                   locationMode === "filter"
-                    ? "border-blue-600 bg-blue-50/50 text-blue-900 ring-2 ring-blue-500/10"
-                    : "border-slate-200 hover:border-slate-300 bg-white"
+                    ? "bg-white text-blue-700 shadow-2xs font-black"
+                    : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                <div className="text-xs font-extrabold">Filter by Location</div>
-                <div className="text-[11px] text-slate-500 mt-0.5">
-                  Includes only jobs strictly matching selected locations.
-                </div>
+                Filter Strict
               </button>
             </div>
+            <p className="text-[11px] text-slate-500">
+              {locationMode === "prioritize"
+                ? "Preferred locations listed first; other eligible openings appear below."
+                : "Restricts results strictly to selected locations and work arrangements."}
+            </p>
           </div>
 
-          {/* Location Selection Pills */}
-          <div className="space-y-3">
-            <label className="text-xs font-extrabold uppercase tracking-wider text-slate-400 block">
-              Preferred Cities for this Run
-            </label>
-            <div className="flex flex-wrap gap-1.5">
-              {["Hyderabad", "Bengaluru", "Mumbai", "Pune", "Delhi NCR", "Chennai", "Remote (India)"].map((city) => {
+          {/* Location Pills */}
+          <div className="space-y-2 md:col-span-2">
+            <label className="text-xs font-extrabold text-slate-700 block">Preferred Target Cities</label>
+            <div className="flex flex-wrap items-center gap-2">
+              {["Hyderabad", "Bengaluru", "Mumbai", "Delhi NCR", "Pune", "Remote"].map((city) => {
                 const isSelected = selectedLocations.includes(city);
                 return (
                   <button
@@ -423,19 +558,20 @@ export default function AutoApplyPage() {
                       const next = isSelected
                         ? selectedLocations.filter((c) => c !== city)
                         : [...selectedLocations, city];
-                      if (next.length === 0) return;
+                      if (next.length === 0) {
+                        toast.error("Please keep at least one target location.");
+                        return;
+                      }
                       setSelectedLocations(next);
                       handleFetchPreview(next, locationMode);
                     }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
                       isSelected
-                        ? "bg-slate-900 text-white shadow-2xs"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        ? "bg-blue-600 border-blue-600 text-white shadow-2xs"
+                        : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
                     }`}
                   >
-                    <MapPin className="w-3 h-3" />
-                    <span>{city}</span>
-                    {isSelected && <Check className="w-3 h-3 text-emerald-400" />}
+                    {city} {isSelected ? "✓" : "+"}
                   </button>
                 );
               })}
@@ -447,55 +583,68 @@ export default function AutoApplyPage() {
                 <input
                   type="checkbox"
                   checked={unattendedLowerRanked}
-                  onChange={(e) => setUnattendedLowerRanked(e.target.checked)}
+                  onChange={(e) => {
+                    setUnattendedLowerRanked(e.target.checked);
+                    handleFetchPreview(selectedLocations, locationMode);
+                  }}
                   className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
                 />
-                <span>For unattended runs: Allow lower-ranked eligible locations (otherwise preferred only).</span>
+                <span>
+                  For unattended runs, allow queuing eligible roles in lower-ranked locations (uncheck to apply strictly to preferred locations only).
+                </span>
               </label>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ── Preview Table & Selection ── */}
-      <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-          <div>
-            <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-              <Eye className="w-4 h-4 text-blue-600" />
-              Eligible Job Matches Preview
+      {/* ── Preview & Selection Section ── */}
+      <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xs space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div className="flex items-center gap-2">
+            <Eye className="w-4 h-4 text-blue-600" />
+            <h2 className="text-base font-extrabold text-slate-900">
+              Matches Preview &amp; Selection
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Review matching openings, check cross-posting deduplication, and inspect why each job qualified.
-            </p>
+            {previewData && (
+              <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs font-bold font-mono">
+                {previewData.jobs.length} roles
+              </span>
+            )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => {
-                if (!previewData) return;
-                const allIds = new Set(previewData.jobs.map((j) => j.job_id));
-                setSelectedJobIds(selectedJobIds.size === allIds.size ? new Set() : allIds);
+                if (previewData) {
+                  const allIds = new Set(previewData.jobs.map((j) => j.job_id));
+                  setSelectedJobIds(allIds);
+                }
               }}
-              className="px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs"
+              className="px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-bold"
             >
-              {previewData && selectedJobIds.size === previewData.jobs.length ? "Deselect All" : "Select All Eligible"}
+              Select All
             </button>
-
+            <button
+              type="button"
+              onClick={() => setSelectedJobIds(new Set())}
+              className="px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-bold"
+            >
+              Clear
+            </button>
             <button
               type="button"
               disabled={isQueueing || selectedJobIds.size === 0}
               onClick={handleQueueSelected}
-              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs inline-flex items-center gap-1.5 shadow-xs transition-all disabled:opacity-50"
+              className="px-4 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold shadow-xs transition-all disabled:opacity-50"
             >
-              <Bot className="w-3.5 h-3.5" />
-              {isQueueing ? "Queuing..." : `Queue Selected Jobs (${selectedJobIds.size})`}
+              {isQueueing ? "Queueing..." : `Add Selected to Queue (${selectedJobIds.size})`}
             </button>
           </div>
         </div>
 
-        {/* Telemetry Pills */}
+        {/* Stats strip */}
         {previewData && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 text-center">
@@ -516,19 +665,6 @@ export default function AutoApplyPage() {
             </div>
           </div>
         )}
-
-        {/* Rule checkbox */}
-        <div className="p-3 bg-blue-50/50 rounded-2xl border border-blue-200/60 flex items-center justify-between">
-          <label className="flex items-center gap-2 cursor-pointer text-xs text-blue-900 font-semibold">
-            <input
-              type="checkbox"
-              checked={saveAsRule}
-              onChange={(e) => setSaveAsRule(e.target.checked)}
-              className="rounded border-blue-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
-            />
-            <span>Save this selection rule to automatically queue future crawler matches.</span>
-          </label>
-        </div>
 
         {/* Jobs List */}
         {isLoadingPreview ? (
@@ -626,7 +762,7 @@ export default function AutoApplyPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Queue Items */}
         <div className="lg:col-span-2 bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xs space-y-5">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
             <div className="flex items-center gap-2">
               <Layers className="w-4 h-4 text-blue-600" />
               <h2 className="text-base font-extrabold text-slate-900">
@@ -642,7 +778,7 @@ export default function AutoApplyPage() {
             </div>
 
             {/* Filter Tabs */}
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-bold">
+            <div className="flex flex-wrap items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-bold">
               <button
                 type="button"
                 onClick={() => setQueueTab("all")}
@@ -651,6 +787,32 @@ export default function AutoApplyPage() {
                 }`}
               >
                 All ({queueItems.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setQueueTab("needs_answer")}
+                className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1 ${
+                  queueTab === "needs_answer"
+                    ? "bg-white text-rose-700 shadow-2xs font-extrabold"
+                    : needsAnswerCount > 0
+                    ? "text-rose-600 font-extrabold"
+                    : "text-slate-600"
+                }`}
+              >
+                Needs Answer ({needsAnswerCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setQueueTab("ready_for_review")}
+                className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1 ${
+                  queueTab === "ready_for_review"
+                    ? "bg-white text-emerald-700 shadow-2xs font-extrabold"
+                    : readyReviewCount > 0
+                    ? "text-emerald-600 font-extrabold"
+                    : "text-slate-600"
+                }`}
+              >
+                Ready Review ({readyReviewCount})
               </button>
               <button
                 type="button"
@@ -669,60 +831,126 @@ export default function AutoApplyPage() {
               No jobs currently in this queue view. Select eligible jobs in the preview above to populate.
             </div>
           ) : (
-            <div className="space-y-3">
-              {filteredQueueItems.map((item) => (
-                <div
-                  key={item.queue_item_id}
-                  className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                    item.status === "needs_input"
-                      ? "border-amber-300 bg-amber-50/40"
-                      : "border-slate-200 bg-white"
-                  }`}
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-extrabold text-sm text-slate-900">{item.job_title}</span>
-                      <span className="text-xs text-slate-500">· {item.company_name}</span>
+            <div className="space-y-4">
+              {filteredQueueItems.map((item) => {
+                const isNeedsAnswer = item.status === "needs_answer";
+                const isReadyReview = item.status === "ready_for_review";
+                const isNeedsInput = item.status === "needs_input";
+
+                return (
+                  <div
+                    key={item.queue_item_id}
+                    className={`p-4 sm:p-5 rounded-2xl border transition-all space-y-3 ${
+                      isNeedsAnswer
+                        ? "border-rose-300 bg-rose-50/30"
+                        : isReadyReview
+                        ? "border-emerald-300 bg-emerald-50/20"
+                        : isNeedsInput
+                        ? "border-amber-300 bg-amber-50/40"
+                        : "border-slate-200 bg-white"
+                    }`}
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold text-sm text-slate-900">{item.job_title}</span>
+                          <span className="text-xs text-slate-500">· {item.company_name}</span>
+                        </div>
+                        <div className="text-xs text-slate-600 flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 text-[10px] font-bold">
+                            {item.matched_theme}
+                          </span>
+                          <span>{item.location}</span>
+                          <span>•</span>
+                          <span className="text-[10px] text-slate-400 font-mono">{item.source}</span>
+                        </div>
+                      </div>
+
+                      {/* Status Badges & Quick Actions */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {isNeedsAnswer ? (
+                          <span className="px-2.5 py-1 rounded-xl bg-rose-100 text-rose-800 text-xs font-black uppercase tracking-wider flex items-center gap-1">
+                            <HelpCircle className="w-3.5 h-3.5" />
+                            Needs Answer
+                          </span>
+                        ) : isReadyReview ? (
+                          <div className="flex items-center gap-2">
+                            <span className="px-2.5 py-1 rounded-xl bg-emerald-100 text-emerald-800 text-xs font-black uppercase tracking-wider flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              Ready for Review
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setReviewingItem(item)}
+                              className="px-3 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-2xs"
+                            >
+                              Review Form
+                            </button>
+                          </div>
+                        ) : isNeedsInput ? (
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleResolveNeedsInput(item.queue_item_id, "approve")}
+                              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleResolveNeedsInput(item.queue_item_id, "dismiss")}
+                              className="px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold text-xs"
+                            >
+                              Dismiss
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 uppercase tracking-wider">
+                            Queued
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-xs text-slate-600 flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded-md bg-slate-100 text-[10px] font-bold">
-                        {item.matched_theme}
-                      </span>
-                      <span>{item.location}</span>
-                    </div>
-                    {item.has_ambiguity && (
-                      <div className="text-[11px] text-amber-800">
-                        ⚠️ <strong>Action needed:</strong> {item.ambiguity_flags.join("; ")}
+
+                    {/* Unfamiliar Question Callout Card (When paused for answer) */}
+                    {isNeedsAnswer && item.pending_question && (
+                      <div className="p-4 rounded-xl bg-white border border-rose-200 shadow-xs space-y-3">
+                        <div className="flex items-start gap-2">
+                          <HelpCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                          <div className="space-y-0.5">
+                            <div className="text-[11px] font-black text-rose-800 uppercase tracking-wider">
+                              Unfamiliar Question (Job Paused Safely)
+                            </div>
+                            <div className="text-xs font-extrabold text-slate-900">
+                              "{item.pending_question.exact_question_text}"
+                            </div>
+                            {item.pending_question.options && item.pending_question.options.length > 0 && (
+                              <div className="text-[11px] text-slate-500 flex items-center gap-1.5 pt-1">
+                                <span className="font-bold">Available Options:</span>
+                                {item.pending_question.options.map((opt) => (
+                                  <span key={opt} className="px-2 py-0.5 rounded-md bg-slate-100 font-mono text-[10px]">
+                                    {opt}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenAnswering(item)}
+                            className="px-4 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-2xs"
+                          >
+                            Answer Question &amp; Resume Job
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
-
-                  {item.status === "needs_input" ? (
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handleResolveNeedsInput(item.queue_item_id, "approve")}
-                        className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs"
-                      >
-                        Approve for Queue
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleResolveNeedsInput(item.queue_item_id, "dismiss")}
-                        className="px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold text-xs"
-                      >
-                        Dismiss
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 uppercase tracking-wider">
-                        Queued
-                      </span>
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -739,7 +967,7 @@ export default function AutoApplyPage() {
             </div>
 
             <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
-              {activityFeed.slice(-15).map((act) => (
+              {activityFeed.slice(-20).map((act) => (
                 <div key={act.id} className="p-3 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
                   <div className="flex items-center justify-between text-[10px]">
                     <span className="font-extrabold text-blue-700 flex items-center gap-1">
@@ -753,12 +981,337 @@ export default function AutoApplyPage() {
                   <p className="text-xs text-slate-700 leading-relaxed font-medium">
                     {act.message}
                   </p>
+                  {act.badge && (
+                    <div className="pt-1">
+                      <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[9px] font-bold text-slate-500">
+                        {act.badge}
+                      </span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           </div>
         </div>
       </div>
+
+      {/* ── Phase 2: Answer Bank Management Modal ── */}
+      {isAnswerBankOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-2xl w-full p-6 sm:p-8 space-y-5 shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-blue-600" />
+                  Answer Bank (8 Core Categories)
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Reusable answers for notice period, availability, work authorization, sponsorship, relocation, compensation, travel, and experience.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAnswerBankOpen(false)}
+                className="text-slate-400 hover:text-slate-600 text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 overflow-y-auto pr-2 flex-1">
+              {editableAnswers.map((item, idx) => (
+                <div key={item.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-extrabold text-slate-900">{item.canonical_question}</span>
+                    <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
+                      {item.category}
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-500 block mb-1">Your Default Answer:</label>
+                    <input
+                      type="text"
+                      value={item.answer_text}
+                      onChange={(e) => {
+                        const updated = [...editableAnswers];
+                        updated[idx].answer_text = e.target.value;
+                        setEditableAnswers(updated);
+                      }}
+                      className="w-full px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-xs font-medium outline-none focus:border-blue-600"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
+                    <span>Patterns: {item.matched_patterns?.slice(0, 3).join(", ")}</span>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-slate-600 font-bold">
+                      <input
+                        type="checkbox"
+                        checked={item.ask_every_time}
+                        onChange={(e) => {
+                          const updated = [...editableAnswers];
+                          updated[idx].ask_every_time = e.target.checked;
+                          setEditableAnswers(updated);
+                        }}
+                        className="rounded border-slate-300 text-blue-600 w-3.5 h-3.5"
+                      />
+                      <span>Ask every time</span>
+                    </label>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsAnswerBankOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSavingBank}
+                onClick={handleSaveAnswerBank}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shadow-xs"
+              >
+                {isSavingBank ? "Saving..." : "Save Answer Bank"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Phase 2: Answering Unfamiliar Question Modal ── */}
+      {answeringItem && answeringItem.pending_question && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-lg w-full p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">Answer Application Question</h3>
+                <p className="text-xs text-slate-500">
+                  {answeringItem.job_title} at {answeringItem.company_name}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAnsweringItem(null)}
+                className="text-slate-400 hover:text-slate-600 text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="p-3.5 rounded-2xl bg-rose-50/70 border border-rose-200 space-y-1">
+                <span className="text-[10px] font-black text-rose-800 uppercase tracking-wider">Exact Question Text</span>
+                <p className="text-xs font-extrabold text-slate-900">
+                  "{answeringItem.pending_question.exact_question_text}"
+                </p>
+              </div>
+
+              {/* If options available, display option pills */}
+              {answeringItem.pending_question.options && answeringItem.pending_question.options.length > 0 ? (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-extrabold text-slate-700 block">Select Compatible Option:</label>
+                  <div className="flex flex-wrap gap-2">
+                    {answeringItem.pending_question.options.map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setSelectedOptionInput(opt)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                          selectedOptionInput === opt
+                            ? "bg-blue-600 text-white border-blue-600 shadow-2xs"
+                            : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                        }`}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-extrabold text-slate-700 block">Your Answer:</label>
+                  <textarea
+                    rows={3}
+                    value={answerTextInput}
+                    onChange={(e) => setAnswerTextInput(e.target.value)}
+                    placeholder="Enter your response..."
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs outline-none focus:border-blue-600"
+                  />
+                </div>
+              )}
+
+              {/* 4 Scope Selector */}
+              <div className="space-y-2 pt-2 border-t border-slate-100">
+                <label className="text-xs font-extrabold text-slate-700 block">Persistence Scope:</label>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 p-2 rounded-xl border border-slate-200 cursor-pointer text-xs font-medium hover:bg-slate-50">
+                    <input
+                      type="radio"
+                      name="scope"
+                      value="save_as_default"
+                      checked={scopeInput === "save_as_default"}
+                      onChange={() => setScopeInput("save_as_default")}
+                      className="text-blue-600"
+                    />
+                    <div>
+                      <strong className="text-slate-900 block">Save as Default (Recommended)</strong>
+                      <span className="text-[11px] text-slate-500">Universal reuse across all future job applications.</span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-2 p-2 rounded-xl border border-slate-200 cursor-pointer text-xs font-medium hover:bg-slate-50">
+                    <input
+                      type="radio"
+                      name="scope"
+                      value="save_for_rule"
+                      checked={scopeInput === "save_for_rule"}
+                      onChange={() => setScopeInput("save_for_rule")}
+                      className="text-blue-600"
+                    />
+                    <div>
+                      <strong className="text-slate-900 block">Save for this Rule</strong>
+                      <span className="text-[11px] text-slate-500">Reused only for '{answeringItem.matched_theme}' roles.</span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-2 p-2 rounded-xl border border-slate-200 cursor-pointer text-xs font-medium hover:bg-slate-50">
+                    <input
+                      type="radio"
+                      name="scope"
+                      value="use_once"
+                      checked={scopeInput === "use_once"}
+                      onChange={() => setScopeInput("use_once")}
+                      className="text-blue-600"
+                    />
+                    <div>
+                      <strong className="text-slate-900 block">Use Once</strong>
+                      <span className="text-[11px] text-slate-500">Applied solely to this specific application.</span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-2 p-2 rounded-xl border border-slate-200 cursor-pointer text-xs font-medium hover:bg-slate-50">
+                    <input
+                      type="radio"
+                      name="scope"
+                      value="ask_every_time"
+                      checked={scopeInput === "ask_every_time"}
+                      onChange={() => setScopeInput("ask_every_time")}
+                      className="text-blue-600"
+                    />
+                    <div>
+                      <strong className="text-slate-900 block">Ask Every Time</strong>
+                      <span className="text-[11px] text-slate-500">Always pause and request confirmation when this question appears.</span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setAnsweringItem(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSubmittingAnswer}
+                onClick={handleSubmitAnswer}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shadow-xs"
+              >
+                {isSubmittingAnswer ? "Saving..." : "Save Answer & Resume Job"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Phase 2: Form Review Modal (Manual Submission Mode) ── */}
+      {reviewingItem && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-2xl w-full p-6 sm:p-8 space-y-5 shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase">
+                  Manual Submission Checkpoint
+                </div>
+                <h3 className="text-base font-extrabold text-slate-900 pt-1">
+                  {reviewingItem.job_title} · {reviewingItem.company_name}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReviewingItem(null)}
+                className="text-slate-400 hover:text-slate-600 text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 overflow-y-auto pr-1 flex-1">
+              <div className="p-3.5 rounded-2xl bg-blue-50/60 border border-blue-200 text-xs text-blue-900 leading-relaxed font-medium">
+                🛡️ <strong>Phase 2 Policy:</strong> Submission remains manual. Review all autofilled responses below.
+                When verified, open the application portal to submit.
+              </div>
+
+              {reviewingItem.answers_snapshot?.fields ? (
+                <div className="space-y-3">
+                  {Object.values(reviewingItem.answers_snapshot.fields).map((f) => (
+                    <div key={f.question_id} className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-extrabold text-slate-700">{f.exact_question_text}</span>
+                        <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[10px] font-mono font-bold text-slate-500">
+                          {f.source_scope}
+                        </span>
+                      </div>
+                      <div className="text-xs font-black text-slate-900 pt-0.5">
+                        {f.answer_value || "(Blank / Skipped optional field)"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-6 text-center text-xs text-slate-400">
+                  No snapshot answers recorded yet.
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+              <span className="text-[11px] text-slate-400 font-mono">
+                Bank Snapshot v{reviewingItem.answers_snapshot?.bank_version || 1}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReviewingItem(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+                >
+                  Close
+                </button>
+                {reviewingItem.job_url && (
+                  <a
+                    href={reviewingItem.job_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs inline-flex items-center gap-1.5"
+                  >
+                    <span>Open Portal &amp; Submit</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Edit Setup Defaults Modal ── */}
       {isEditingSetup && (

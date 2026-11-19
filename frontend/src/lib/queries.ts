@@ -282,6 +282,39 @@ export type AutoApplyPreviewResponse = {
   jobs: AutoApplyPreviewJob[];
 };
 
+export type AutoApplyPendingQuestion = {
+  question_id: string;
+  exact_question_text: string;
+  options: string[];
+  required: boolean;
+  field_type: string;
+  reason?: string;
+  job_context: {
+    job_id?: string;
+    company_name?: string;
+    job_title?: string;
+    location?: string;
+    matched_theme?: string;
+  };
+};
+
+export type AutoApplyFilledField = {
+  question_id: string;
+  exact_question_text: string;
+  answer_value: string;
+  field_type: string;
+  source_scope: string;
+  bank_version: number;
+  matched_category: string;
+};
+
+export type AutoApplyAnswersSnapshot = {
+  bank_version: number;
+  filled_at: string;
+  total_fields: number;
+  fields: Record<string, AutoApplyFilledField>;
+};
+
 export type AutoApplyQueueItem = {
   queue_item_id: string;
   job_id: string;
@@ -295,8 +328,34 @@ export type AutoApplyQueueItem = {
   why_it_qualified: string;
   has_ambiguity: boolean;
   ambiguity_flags: string[];
-  status: "queued" | "in_progress" | "paused" | "needs_input" | "dismissed";
+  status: "queued" | "in_progress" | "paused" | "needs_input" | "needs_answer" | "ready_for_review" | "dismissed";
+  pending_question?: AutoApplyPendingQuestion | null;
+  answers_snapshot?: AutoApplyAnswersSnapshot | null;
   queued_at: string;
+};
+
+export type AnswerBankItem = {
+  id: string;
+  category: string;
+  canonical_question: string;
+  matched_patterns: string[];
+  answer_text: string;
+  options_mapping: Record<string, string>;
+  scope: "save_as_default" | "save_for_rule" | "use_once" | "ask_every_time";
+  rule_theme: string | null;
+  ask_every_time: boolean;
+  updated_at: string;
+};
+
+export type AnswerBankResponse = {
+  status: string;
+  answer_bank: {
+    user_id: string;
+    version: number;
+    last_updated: string;
+    answers: AnswerBankItem[];
+    rule_answers: Record<string, AnswerBankItem[]>;
+  };
 };
 
 export type AutoApplyActivityEvent = {
@@ -372,6 +431,7 @@ export const queryKeys = {
   apifyAlerts: ["apify", "alerts"] as const,
   autoApplySetup: ["auto-apply", "setup"] as const,
   autoApplyQueue: ["auto-apply", "queue"] as const,
+  autoApplyAnswerBank: ["auto-apply", "answer-bank"] as const,
 };
 
 export const workspaceQueryOptions = () => queryOptions({
@@ -568,6 +628,13 @@ export function useAutoApplyQueue() {
     queryKey: queryKeys.autoApplyQueue,
     queryFn: () => readJson<AutoApplyQueueResponse>("/auto-apply/queue", "Unable to load Auto Apply queue."),
     refetchInterval: 5_000,
+  });
+}
+
+export function useAnswerBank() {
+  return useQuery<AnswerBankResponse>({
+    queryKey: queryKeys.autoApplyAnswerBank,
+    queryFn: () => readJson<AnswerBankResponse>("/auto-apply/answer-bank", "Unable to load Answer Bank."),
   });
 }
 

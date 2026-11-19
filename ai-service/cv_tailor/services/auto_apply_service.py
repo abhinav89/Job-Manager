@@ -592,3 +592,610 @@ def resolve_needs_input_item(user_id: str, queue_item_id: str, action: str) -> D
         "message": msg,
         "item": target
     }
+
+
+# =====================================================================
+# Phase 2 — Form Filling, Reusable Answer Bank & Queue Workflow Engine
+# =====================================================================
+
+def get_default_seed_answers() -> List[Dict[str, Any]]:
+    """Seeds the initial Answer Bank with canonical answers for the 8 core application question categories."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    return [
+        {
+            "id": "ans-seed-notice-period",
+            "category": "notice_period",
+            "canonical_question": "Notice Period / Earliest Start Date",
+            "matched_patterns": ["notice period", "official notice", "notice", "how soon can you start", "joining time", "start date"],
+            "answer_text": "30 Days (Negotiable / Can buy out if required)",
+            "options_mapping": {
+                "immediate": "30 Days (Negotiable / Can buy out if required)",
+                "30 days": "30 Days (Negotiable / Can buy out if required)",
+                "1 month": "30 Days (Negotiable / Can buy out if required)",
+                "less than 1 month": "30 Days (Negotiable / Can buy out if required)"
+            },
+            "scope": "save_as_default",
+            "rule_theme": None,
+            "ask_every_time": False,
+            "updated_at": now_iso
+        },
+        {
+            "id": "ans-seed-availability",
+            "category": "availability",
+            "canonical_question": "Availability to Begin Employment",
+            "matched_patterns": ["earliest start", "when can you start", "available to begin", "availability date"],
+            "answer_text": "Within 30 days of offer acceptance",
+            "options_mapping": {
+                "immediately": "Within 30 days of offer acceptance",
+                "within 30 days": "Within 30 days of offer acceptance"
+            },
+            "scope": "save_as_default",
+            "rule_theme": None,
+            "ask_every_time": False,
+            "updated_at": now_iso
+        },
+        {
+            "id": "ans-seed-work-auth",
+            "category": "work_authorization",
+            "canonical_question": "Work Authorization & Legal Eligibility",
+            "matched_patterns": ["authorized to work", "legally authorized", "right to work", "work eligibility", "citizen", "eligible to work in"],
+            "answer_text": "Yes",
+            "options_mapping": {
+                "yes": "Yes",
+                "authorized": "Yes",
+                "eligible": "Yes"
+            },
+            "scope": "save_as_default",
+            "rule_theme": None,
+            "ask_every_time": False,
+            "updated_at": now_iso
+        },
+        {
+            "id": "ans-seed-sponsorship",
+            "category": "sponsorship",
+            "canonical_question": "Visa Sponsorship Requirements",
+            "matched_patterns": ["visa sponsorship", "require sponsorship", "future sponsorship", "require visa", "immigration sponsorship"],
+            "answer_text": "No",
+            "options_mapping": {
+                "no": "No",
+                "will not": "No",
+                "do not require": "No"
+            },
+            "scope": "save_as_default",
+            "rule_theme": None,
+            "ask_every_time": False,
+            "updated_at": now_iso
+        },
+        {
+            "id": "ans-seed-relocation",
+            "category": "relocation",
+            "canonical_question": "Willingness to Relocate",
+            "matched_patterns": ["willing to relocate", "open to relocation", "relocation", "willing to move"],
+            "answer_text": "Yes, open to relocation for the right strategic opportunity",
+            "options_mapping": {
+                "yes": "Yes, open to relocation for the right strategic opportunity",
+                "open": "Yes, open to relocation for the right strategic opportunity"
+            },
+            "scope": "save_as_default",
+            "rule_theme": None,
+            "ask_every_time": False,
+            "updated_at": now_iso
+        },
+        {
+            "id": "ans-seed-compensation",
+            "category": "compensation",
+            "canonical_question": "Target Compensation & CTC Expectations",
+            "matched_patterns": ["expected salary", "salary expectation", "current ctc", "expected ctc", "compensation expectation", "desired salary"],
+            "answer_text": "Competitive / Market standard based on scope and senior leadership responsibilities",
+            "options_mapping": {},
+            "scope": "save_as_default",
+            "rule_theme": None,
+            "ask_every_time": False,
+            "updated_at": now_iso
+        },
+        {
+            "id": "ans-seed-travel",
+            "category": "travel",
+            "canonical_question": "Willingness to Travel",
+            "matched_patterns": ["willing to travel", "travel requirement", "business travel", "travel up to"],
+            "answer_text": "Yes, comfortable traveling up to 25-50% for client and strategic business priorities",
+            "options_mapping": {
+                "yes": "Yes, comfortable traveling up to 25-50% for client and strategic business priorities",
+                "up to 25%": "Yes, comfortable traveling up to 25-50% for client and strategic business priorities",
+                "up to 50%": "Yes, comfortable traveling up to 25-50% for client and strategic business priorities"
+            },
+            "scope": "save_as_default",
+            "rule_theme": None,
+            "ask_every_time": False,
+            "updated_at": now_iso
+        },
+        {
+            "id": "ans-seed-experience",
+            "category": "experience",
+            "canonical_question": "Years of Relevant Domain / Leadership Experience",
+            "matched_patterns": ["years of experience", "total experience", "relevant experience", "how many years of experience"],
+            "answer_text": "12+ years of strategy, execution, and senior finance/operating leadership",
+            "options_mapping": {
+                "10+ years": "12+ years of strategy, execution, and senior finance/operating leadership",
+                "7-10 years": "12+ years of strategy, execution, and senior finance/operating leadership",
+                "5-8 years": "12+ years of strategy, execution, and senior finance/operating leadership"
+            },
+            "scope": "save_as_default",
+            "rule_theme": None,
+            "ask_every_time": False,
+            "updated_at": now_iso
+        }
+    ]
+
+
+def get_answer_bank(user_id: str) -> Dict[str, Any]:
+    """Retrieves candidate Answer Bank, initializing with seeded defaults if empty."""
+    path = _get_user_file(user_id, "answer_bank")
+    if not path.exists():
+        initial_bank = {
+            "user_id": user_id,
+            "version": 1,
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+            "answers": get_default_seed_answers(),
+            "rule_answers": {}  # Maps rule_theme -> List of Answer objects
+        }
+        path.write_text(json.dumps(initial_bank, indent=2), encoding="utf-8")
+        return initial_bank
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not data.get("answers"):
+            data["answers"] = get_default_seed_answers()
+            save_answer_bank(user_id, data)
+        return data
+    except Exception as e:
+        logger.warning(f"Error loading answer bank for {user_id}: {e}")
+        initial_bank = {
+            "user_id": user_id,
+            "version": 1,
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+            "answers": get_default_seed_answers(),
+            "rule_answers": {}
+        }
+        return initial_bank
+
+
+def save_answer_bank(user_id: str, bank_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Persists candidate Answer Bank and increments version for audit tracking."""
+    path = _get_user_file(user_id, "answer_bank")
+    bank_data["version"] = bank_data.get("version", 1) + 1
+    bank_data["last_updated"] = datetime.now(timezone.utc).isoformat()
+    path.write_text(json.dumps(bank_data, indent=2), encoding="utf-8")
+    return bank_data
+
+
+def check_option_compatibility(
+    saved_answer: str,
+    options: List[str],
+    options_mapping: Optional[Dict[str, str]] = None
+) -> Tuple[bool, Optional[str]]:
+    """
+    Checks if a saved answer can be cleanly and unambiguously mapped to one of the field's options.
+    Returns (is_compatible, matched_option_value).
+    """
+    if not options:
+        # Free-text or unconstrained field
+        return True, saved_answer
+
+    ans_clean = saved_answer.strip().lower()
+    mapping = options_mapping or {}
+
+    # 1. Exact match (case-insensitive)
+    for opt in options:
+        if opt.strip().lower() == ans_clean:
+            return True, opt
+
+    # 2. Check explicit options mapping dictionary
+    for map_key, map_val in mapping.items():
+        if map_key.lower() in ans_clean or ans_clean in map_key.lower():
+            for opt in options:
+                if opt.strip().lower() == map_val.lower() or map_key.lower() in opt.strip().lower():
+                    return True, opt
+
+    # 3. Direct substring / semantic overlap
+    for opt in options:
+        opt_clean = opt.strip().lower()
+        if ans_clean == "yes" and (opt_clean == "yes" or opt_clean.startswith("yes")):
+            return True, opt
+        if ans_clean == "no" and (opt_clean == "no" or opt_clean.startswith("no")):
+            return True, opt
+        if "30" in ans_clean and "30" in opt_clean:
+            return True, opt
+        if "immediate" in ans_clean and "immediate" in opt_clean:
+            return True, opt
+        if opt_clean in ans_clean or ans_clean in opt_clean:
+            return True, opt
+
+    # No safe, unambiguous option match
+    return False, None
+
+
+def match_question_with_bank(
+    question_dict: Dict[str, Any],
+    answer_bank: Dict[str, Any],
+    rule_theme: Optional[str] = None
+) -> Tuple[Optional[Dict[str, Any]], Optional[str], str]:
+    """
+    Evaluates whether an application question matches an existing answer in the bank.
+    Returns (matched_answer_object, resolved_value_to_fill, match_status_reason).
+    Reasons: 'matched', 'marked_ask_every_time', 'incompatible_options', 'unfamiliar_question'.
+    """
+    raw_question = question_dict.get("exact_question_text", "").strip()
+    q_lower = raw_question.lower()
+    options = question_dict.get("options") or []
+
+    candidate_answers: List[Dict[str, Any]] = []
+
+    # 1. First check rule-specific answers if rule_theme is provided
+    if rule_theme and rule_theme in answer_bank.get("rule_answers", {}):
+        candidate_answers.extend(answer_bank["rule_answers"][rule_theme])
+
+    # 2. Then check default answers
+    candidate_answers.extend(answer_bank.get("answers", []))
+
+    for ans_obj in candidate_answers:
+        # Check patterns
+        patterns = ans_obj.get("matched_patterns", [])
+        canonical = ans_obj.get("canonical_question", "").lower()
+        exact_text = ans_obj.get("exact_question_text", "").lower()
+
+        is_match = False
+        if exact_text and exact_text == q_lower:
+            is_match = True
+        elif canonical and canonical in q_lower:
+            is_match = True
+        else:
+            for pattern in patterns:
+                if pattern.lower() in q_lower:
+                    is_match = True
+                    break
+
+        if is_match:
+            # If user marked this question as ask_every_time, prompt user every time
+            if ans_obj.get("ask_every_time"):
+                return None, None, "marked_ask_every_time"
+
+            saved_val = ans_obj.get("answer_text", "")
+            mapping = ans_obj.get("options_mapping", {})
+
+            # Check option compatibility
+            is_compat, matched_opt = check_option_compatibility(saved_val, options, mapping)
+            if not is_compat:
+                return ans_obj, None, "incompatible_options"
+
+            return ans_obj, matched_opt or saved_val, "matched"
+
+    return None, None, "unfamiliar_question"
+
+
+def generate_mock_job_form(job_item: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Generates standard ATS application form fields for a job role.
+    Used for simulated ATS filling in Phase 2 tests and previews.
+    """
+    return [
+        {
+            "question_id": "q_work_auth",
+            "exact_question_text": "Are you legally authorized to work in the country of employment?",
+            "field_type": "select",
+            "options": ["Yes", "No"],
+            "required": True
+        },
+        {
+            "question_id": "q_sponsorship",
+            "exact_question_text": "Will you now or in the future require visa sponsorship for employment?",
+            "field_type": "select",
+            "options": ["Yes", "No"],
+            "required": True
+        },
+        {
+            "question_id": "q_notice",
+            "exact_question_text": "What is your official notice period / earliest joining date?",
+            "field_type": "text",
+            "options": [],
+            "required": True
+        },
+        {
+            "question_id": "q_compensation",
+            "exact_question_text": "What are your salary and compensation expectations?",
+            "field_type": "text",
+            "options": [],
+            "required": False
+        }
+    ]
+
+
+def autofill_job_application(
+    user_id: str,
+    job_item: Dict[str, Any],
+    form_questions: Optional[List[Dict[str, Any]]] = None
+) -> Dict[str, Any]:
+    """
+    Executes automated form filling for a single job against the candidate's Answer Bank.
+    If an unfamiliar required question or incompatible option is encountered:
+      - Pauses the job with status 'needs_answer'
+      - Records exact wording, options, required status, and job context.
+    If all required questions succeed:
+      - Transitions status to 'ready_for_review' (manual submission checkpoint)
+      - Records version-stamped snapshot of all filled fields.
+    """
+    answer_bank = get_answer_bank(user_id)
+    questions = form_questions if form_questions is not None else generate_mock_job_form(job_item)
+    rule_theme = job_item.get("matched_theme")
+
+    filled_fields: Dict[str, Any] = {}
+    pending_question: Optional[Dict[str, Any]] = None
+
+    for q in questions:
+        q_id = q.get("question_id", f"q_{int(time.time()*1000)}")
+        raw_text = q.get("exact_question_text", "")
+        is_required = q.get("required", True)
+        options = q.get("options", [])
+        field_type = q.get("field_type", "text")
+
+        matched_obj, resolved_val, reason = match_question_with_bank(q, answer_bank, rule_theme)
+
+        if reason == "matched" and resolved_val is not None:
+            filled_fields[q_id] = {
+                "question_id": q_id,
+                "exact_question_text": raw_text,
+                "answer_value": resolved_val,
+                "field_type": field_type,
+                "source_scope": matched_obj.get("scope", "save_as_default") if matched_obj else "save_as_default",
+                "bank_version": answer_bank.get("version", 1),
+                "matched_category": matched_obj.get("category", "custom") if matched_obj else "custom"
+            }
+        else:
+            # Unfamiliar question, incompatible options, or marked ask_every_time
+            if is_required:
+                pending_question = {
+                    "question_id": q_id,
+                    "exact_question_text": raw_text,
+                    "options": options,
+                    "required": True,
+                    "field_type": field_type,
+                    "reason": reason,
+                    "job_context": {
+                        "job_id": job_item.get("job_id"),
+                        "company_name": job_item.get("company_name"),
+                        "job_title": job_item.get("job_title"),
+                        "location": job_item.get("location"),
+                        "matched_theme": job_item.get("matched_theme"),
+                    }
+                }
+                # Stop processing further fields for this job and pause it
+                break
+            else:
+                # Optional field without answer can be left blank
+                filled_fields[q_id] = {
+                    "question_id": q_id,
+                    "exact_question_text": raw_text,
+                    "answer_value": "",
+                    "field_type": field_type,
+                    "source_scope": "skipped_optional",
+                    "bank_version": answer_bank.get("version", 1),
+                    "matched_category": "optional"
+                }
+
+    if pending_question:
+        job_item["status"] = "needs_answer"
+        job_item["pending_question"] = pending_question
+        return {
+            "status": "needs_answer",
+            "job_item": job_item,
+            "pending_question": pending_question,
+            "partial_answers": filled_fields
+        }
+
+    # All required fields filled successfully -> Ready for manual review
+    job_item["status"] = "ready_for_review"
+    job_item["pending_question"] = None
+    job_item["answers_snapshot"] = {
+        "bank_version": answer_bank.get("version", 1),
+        "filled_at": datetime.now(timezone.utc).isoformat(),
+        "total_fields": len(filled_fields),
+        "fields": filled_fields
+    }
+
+    return {
+        "status": "ready_for_review",
+        "job_item": job_item,
+        "answers_snapshot": job_item["answers_snapshot"]
+    }
+
+
+def process_queue_form_filling(
+    user_id: str,
+    mock_form_catalog: Optional[Dict[str, List[Dict[str, Any]]]] = None
+) -> Dict[str, Any]:
+    """
+    Processes active queue items through the assisted form-filling engine.
+    Demonstrates multi-job queue execution:
+      - If Job A encounters an unfamiliar required question, Job A pauses with status 'needs_answer'.
+      - The worker DOES NOT halt the queue — it continues with Job B, Job C, etc.
+      - Successfully filled jobs transition to 'ready_for_review' (manual submission checkpoint).
+    """
+    queue = get_queue_data(user_id)
+    if queue.get("queue_status") == "paused":
+        return {
+            "status": "queue_paused",
+            "message": "Queue is currently paused. Resume queue to continue form filling.",
+            "queue_data": queue
+        }
+
+    mock_forms = mock_form_catalog or {}
+    processed_count = 0
+    ready_count = 0
+    paused_for_answer_count = 0
+
+    for item in queue["queue_items"]:
+        # Only process items that are queued
+        if item.get("status") != "queued":
+            continue
+
+        job_id = str(item.get("job_id"))
+        custom_form = mock_forms.get(job_id)
+
+        res = autofill_job_application(user_id, item, custom_form)
+        processed_count += 1
+
+        if res["status"] == "needs_answer":
+            paused_for_answer_count += 1
+            pq = res["pending_question"]
+            _append_activity_event(
+                queue,
+                f"⏸️ Form filling paused for '{item['job_title']}' at {item['company_name']}: "
+                f"unfamiliar required question needs answer: '{pq['exact_question_text']}'. Continuing remaining jobs.",
+                badge="Needs Answer",
+                data_payload={"queue_item_id": item["queue_item_id"], "pending_question": pq}
+            )
+        elif res["status"] == "ready_for_review":
+            ready_count += 1
+            _append_activity_event(
+                queue,
+                f"✅ Form autofilled for '{item['job_title']}' at {item['company_name']}. Ready for candidate review.",
+                badge="Ready Review",
+                data_payload={"queue_item_id": item["queue_item_id"]}
+            )
+
+    save_queue_data(user_id, queue)
+    return {
+        "status": "success",
+        "processed_count": processed_count,
+        "ready_count": ready_count,
+        "paused_for_answer_count": paused_for_answer_count,
+        "queue_data": queue
+    }
+
+
+def answer_pending_question(
+    user_id: str,
+    queue_item_id: str,
+    answer_text: str,
+    scope: str = "save_as_default",
+    selected_option: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Resolves an unfamiliar required question for a paused job.
+    Supports 4 persistence scopes:
+      1. 'use_once': Applied solely to this application run snapshot.
+      2. 'save_for_rule': Saved to Answer Bank under the job's role theme.
+      3. 'save_as_default': Saved to global Answer Bank for universal reuse across future jobs.
+      4. 'ask_every_time': Saved with ask_every_time=True (will prompt candidate every time).
+
+    Resumes the job and advances it to 'ready_for_review'.
+    """
+    valid_scopes = {"use_once", "save_for_rule", "save_as_default", "ask_every_time"}
+    if scope not in valid_scopes:
+        raise ValueError(f"Invalid scope '{scope}'. Must be one of {valid_scopes}.")
+
+    queue = get_queue_data(user_id)
+    target = next((item for item in queue["queue_items"] if item["queue_item_id"] == queue_item_id), None)
+
+    if not target:
+        raise ValueError(f"Queue item '{queue_item_id}' not found.")
+
+    pending_q = target.get("pending_question")
+    if not pending_q:
+        raise ValueError(f"Queue item '{queue_item_id}' has no pending question.")
+
+    resolved_answer = (selected_option or answer_text).strip()
+    raw_question_text = pending_q["exact_question_text"]
+    rule_theme = target.get("matched_theme")
+    options = pending_q.get("options", [])
+
+    # If scope is not use_once, persist in Answer Bank
+    if scope != "use_once":
+        bank = get_answer_bank(user_id)
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        new_entry = {
+            "id": f"ans-custom-{int(time.time()*1000)}",
+            "category": "custom",
+            "canonical_question": raw_question_text,
+            "exact_question_text": raw_question_text,
+            "matched_patterns": [raw_question_text.lower()[:40]],
+            "answer_text": resolved_answer,
+            "options_mapping": {resolved_answer.lower(): resolved_answer} if options else {},
+            "scope": scope,
+            "rule_theme": rule_theme if scope == "save_for_rule" else None,
+            "ask_every_time": (scope == "ask_every_time"),
+            "updated_at": now_iso
+        }
+
+        if scope == "save_for_rule" and rule_theme:
+            bank.setdefault("rule_answers", {}).setdefault(rule_theme, []).append(new_entry)
+        else:
+            # Check if existing entry with same exact text exists, update or append
+            existing_idx = next((i for i, a in enumerate(bank["answers"]) if a.get("exact_question_text", "").lower() == raw_question_text.lower()), None)
+            if existing_idx is not None:
+                bank["answers"][existing_idx] = new_entry
+            else:
+                bank["answers"].append(new_entry)
+
+        save_answer_bank(user_id, bank)
+
+    # Resume form filling for this job
+    # Fulfill the pending question
+    q_id = pending_q["question_id"]
+    target.setdefault("answers_snapshot", {}).setdefault("fields", {})
+    target["answers_snapshot"]["fields"][q_id] = {
+        "question_id": q_id,
+        "exact_question_text": raw_question_text,
+        "answer_value": resolved_answer,
+        "field_type": pending_q.get("field_type", "text"),
+        "source_scope": scope,
+        "bank_version": get_answer_bank(user_id).get("version", 1),
+        "matched_category": "candidate_resolved"
+    }
+
+    # Transition job to ready_for_review
+    target["status"] = "ready_for_review"
+    target["pending_question"] = None
+    target["answers_snapshot"]["filled_at"] = datetime.now(timezone.utc).isoformat()
+    target["answers_snapshot"]["total_fields"] = len(target["answers_snapshot"]["fields"])
+
+    _append_activity_event(
+        queue,
+        f"Candidate answered '{raw_question_text}' (Scope: {scope}). "
+        f"'{target['job_title']}' resumed ▶️ and marked Ready for Review.",
+        badge="Answered",
+        data_payload={"queue_item_id": queue_item_id, "scope": scope}
+    )
+
+    save_queue_data(user_id, queue)
+    return {
+        "status": "success",
+        "message": f"Answer recorded with scope '{scope}'. Job resumed to Ready for Review.",
+        "queue_item": target
+    }
+
+
+def get_application_form_review(user_id: str, queue_item_id: str) -> Dict[str, Any]:
+    """
+    Returns full application form snapshot for candidate manual inspection prior to submission.
+    Submission remains strictly manual in Phase 2.
+    """
+    queue = get_queue_data(user_id)
+    target = next((item for item in queue["queue_items"] if item["queue_item_id"] == queue_item_id), None)
+    if not target:
+        raise ValueError(f"Queue item '{queue_item_id}' not found.")
+
+    return {
+        "queue_item_id": queue_item_id,
+        "company_name": target.get("company_name"),
+        "job_title": target.get("job_title"),
+        "matched_theme": target.get("matched_theme"),
+        "location": target.get("location"),
+        "source": target.get("source"),
+        "job_url": target.get("job_url"),
+        "status": target.get("status"),
+        "submission_mode": "manual_review_only",
+        "answers_snapshot": target.get("answers_snapshot", {}),
+        "pending_question": target.get("pending_question")
+    }
