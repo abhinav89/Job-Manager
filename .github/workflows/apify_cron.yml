@@ -1,0 +1,29 @@
+name: Scheduled Apify Private Job Scraper
+
+on:
+  schedule:
+    # Runs twice a day at 6:00 AM and 6:00 PM IST (00:30 UTC and 12:30 UTC)
+    - cron: '30 0,12 * * *'
+  workflow_dispatch:
+    inputs:
+      target_api_url:
+        description: 'Target Job-Manager API URL'
+        required: false
+        default: 'https://api-jobs.dealos.in/api'
+
+jobs:
+  run-apify-scrape:
+    name: Executive Apify Job Matches (Abhinav & Shivangi)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger Private Scheduled Apify Engine
+        env:
+          JOB_MANAGER_API_URL: ${{ github.event.inputs.target_api_url || secrets.JOB_MANAGER_API_URL || 'https://api-jobs.dealos.in/api' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET || 'dealos-cron-secret-2026' }}
+        run: |
+          echo "Starting private executive Apify crawler against: $JOB_MANAGER_API_URL"
+          curl -s -X POST "$JOB_MANAGER_API_URL/apify/cron-trigger" \
+            -H "Content-Type: application/json" \
+            -H "X-Cron-Secret: $CRON_SECRET" \
+            --max-time 120 | jq . || echo "Completed triggering scheduled scrape."

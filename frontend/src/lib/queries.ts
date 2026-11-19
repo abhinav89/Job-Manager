@@ -149,9 +149,76 @@ export type ResumeItem = {
   education_count: number;
   last_updated: string;
   is_master: boolean;
+  version?: string;
+  versions?: { version: string; created_at: string; notes?: string }[];
+  assigned_themes?: string[];
   summary?: string;
   notes?: string;
   description?: string;
+};
+
+export type ApifyTheme = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  target_titles: string[];
+  keywords: string[];
+  active_resume_filename?: string;
+  active_resume_version?: string;
+  status: "Active" | "Resume needed" | "Paused";
+  last_searched?: string | null;
+  notes?: string;
+};
+
+export type ApifyProfile = {
+  user_id: string;
+  display_name: string;
+  email: string;
+  experience_years: number;
+  availability: string;
+  compensation_target?: string;
+  compensation_benchmark?: string;
+  location_mode: "hyderabad" | "all_india" | "custom_cities";
+  selected_cities: string[];
+  include_remote_india: boolean;
+  remote_only: boolean;
+  themes: ApifyTheme[];
+};
+
+export type ApifyJob = {
+  id: string;
+  title: string;
+  company: string;
+  location: string;
+  work_mode: string;
+  posting_date: string;
+  advertised_pay: string;
+  job_url: string;
+  is_hyderabad: boolean;
+  theme_matches: {
+    theme_id: string;
+    theme_name: string;
+    active_resume_filename?: string;
+    active_resume_version?: string;
+    why_it_fits: string;
+  }[];
+  primary_theme: string;
+  why_it_fits: string;
+  fetched_at: string;
+};
+
+export type ApifyAlert = {
+  id: string;
+  timestamp: string;
+  user_id: string;
+  job_title: string;
+  company: string;
+  location_group: "Hyderabad" | "Other India / Remote";
+  location: string;
+  theme: string;
+  why_it_fits: string;
+  apply_url: string;
+  read: boolean;
 };
 
 export class ApiQueryError extends Error {
@@ -171,6 +238,10 @@ export async function readJson<T>(path: string, fallback: string): Promise<T> {
         if (parsed?.email) {
           headers["X-User-Email"] = parsed.email;
         }
+      }
+      const apifyToken = localStorage.getItem("dealos_apify_token");
+      if (apifyToken) {
+        headers["Authorization"] = `Bearer ${apifyToken}`;
       }
     } catch {}
   }
@@ -198,6 +269,9 @@ export const queryKeys = {
   resumes: ["workspace-data", "resumes"] as const,
   themes: ["workspace-data", "themes"] as const,
   adminAnalytics: ["admin", "analytics"] as const,
+  apifyProfile: ["apify", "profile"] as const,
+  apifyJobs: (themeId?: string) => ["apify", "jobs", themeId || "all"] as const,
+  apifyAlerts: ["apify", "alerts"] as const,
 };
 
 export const workspaceQueryOptions = () => queryOptions({
@@ -337,6 +411,40 @@ export function useAdminAnalytics(enabled = true) {
     queryFn: () => readJson<any>("/admin/analytics", "Unable to load superadmin analytics."),
     enabled,
     refetchInterval: enabled ? 15_000 : false,
+  });
+}
+
+export function useApifyProfile(enabled = true) {
+  return useQuery<{ status: string; profile: ApifyProfile }>({
+    queryKey: queryKeys.apifyProfile,
+    queryFn: () => readJson<{ status: string; profile: ApifyProfile }>("/apify/profile", "Unable to load Apify profile."),
+    enabled,
+  });
+}
+
+export function useApifyJobs(themeId?: string, enabled = true) {
+  return useQuery<{
+    status: string;
+    total_matches: number;
+    hyderabad_matches: ApifyJob[];
+    other_india_matches: ApifyJob[];
+    all_matches: ApifyJob[];
+    themes: ApifyTheme[];
+    compensation_benchmark: string;
+  }>({
+    queryKey: queryKeys.apifyJobs(themeId),
+    queryFn: () => readJson<any>(`/apify/jobs${themeId ? `?theme_id=${encodeURIComponent(themeId)}` : ""}`, "Unable to load Apify job matches."),
+    enabled,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useApifyAlerts(enabled = true) {
+  return useQuery<{ status: string; total: number; unread_count: number; alerts: ApifyAlert[] }>({
+    queryKey: queryKeys.apifyAlerts,
+    queryFn: () => readJson<{ status: string; total: number; unread_count: number; alerts: ApifyAlert[] }>("/apify/alerts", "Unable to load alerts."),
+    enabled,
+    refetchInterval: 20_000,
   });
 }
 

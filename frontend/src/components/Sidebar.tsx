@@ -26,6 +26,7 @@ import {
   LogIn,
   LogOut,
   CreditCard,
+  Radar,
 } from "lucide-react";
 import { useWorkspace, useProfile, useTrackerJobs } from "@/lib/queries";
 import { useAuth } from "@/lib/authContext";
@@ -101,11 +102,20 @@ export default function Sidebar() {
     return pathname === href || pathname.startsWith(href + "/");
   };
 
+  const isApifyEligible = Boolean(
+    user?.email && (
+      user.email.toLowerCase() === "abhinava2015@email.iimcal.ac.in" ||
+      user.email.toLowerCase().includes("shivangi") ||
+      user.email.toLowerCase() === "abhinav"
+    )
+  );
+
   const navItems = [
     { label: "Dashboard", href: "/dashboard", icon: <LayoutDashboard className="w-4 h-4" /> },
     { label: "Find Jobs", href: "/discover", icon: <Search className="w-4 h-4" />, badge: "1.7k+ new" },
     { label: "Job Tracker", href: "/tracker", icon: <Kanban className="w-4 h-4" />, count: trackerJobs.length },
     { label: "My Resumes", href: "/generate?tab=original", icon: <FileText className="w-4 h-4" /> },
+    ...(isApifyEligible ? [{ label: "Apify Job Matches", href: "/apify-jobs", icon: <Radar className="w-4 h-4 text-emerald-600" />, badge: "Private" }] : []),
   ];
 
   const toolItems = [
