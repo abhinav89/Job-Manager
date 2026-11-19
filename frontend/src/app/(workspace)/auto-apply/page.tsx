@@ -33,6 +33,9 @@ import {
   Zap,
   HelpCircle,
   BookmarkCheck,
+  Split,
+  FileCheck2,
+  SendHorizontal,
 } from "lucide-react";
 
 import { API_URL } from "@/lib/api";
@@ -45,6 +48,7 @@ import {
   type AutoApplyPreviewResponse,
   type AutoApplyQueueItem,
   type AnswerBankItem,
+  type WordingChange,
 } from "@/lib/queries";
 
 export default function AutoApplyPage() {
@@ -59,6 +63,10 @@ export default function AutoApplyPage() {
   const [locationMode, setLocationMode] = useState<"prioritize" | "filter">("prioritize");
   const [selectedLocations, setSelectedLocations] = useState<string[]>(["Hyderabad"]);
   const [unattendedLowerRanked, setUnattendedLowerRanked] = useState<boolean>(false);
+
+  // Phase 3: Independent Approvals Settings (per rule/run)
+  const [reviewTailoredCv, setReviewTailoredCv] = useState<boolean>(true);
+  const [reviewBeforeSubmission, setReviewBeforeSubmission] = useState<boolean>(true);
 
   // Setup modal state
   const [isEditingSetup, setIsEditingSetup] = useState(false);
@@ -76,7 +84,9 @@ export default function AutoApplyPage() {
   const [isQueueing, setIsQueueing] = useState(false);
 
   // Queue state & tabs
-  const [queueTab, setQueueTab] = useState<"all" | "queued" | "needs_answer" | "needs_input" | "ready_for_review">("all");
+  const [queueTab, setQueueTab] = useState<
+    "all" | "queued" | "waiting_cv_review" | "needs_answer" | "waiting_submission_review" | "approved_for_submission" | "needs_input"
+  >("all");
   const [isProcessingQueue, setIsProcessingQueue] = useState(false);
 
   // Phase 2: Answer Bank Modal State
@@ -84,14 +94,17 @@ export default function AutoApplyPage() {
   const [editableAnswers, setEditableAnswers] = useState<AnswerBankItem[]>([]);
   const [isSavingBank, setIsSavingBank] = useState(false);
 
-  // Phase 2: Answering Unfamiliar Question Modal / Card State
+  // Phase 2: Answering Unfamiliar Question Modal State
   const [answeringItem, setAnsweringItem] = useState<AutoApplyQueueItem | null>(null);
   const [answerTextInput, setAnswerTextInput] = useState("");
   const [selectedOptionInput, setSelectedOptionInput] = useState("");
   const [scopeInput, setScopeInput] = useState<"save_as_default" | "save_for_rule" | "use_once" | "ask_every_time">("save_as_default");
   const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
 
-  // Phase 2: Form Review Modal State
+  // Phase 3: CV Review Diff Modal State
+  const [reviewingCvItem, setReviewingCvItem] = useState<AutoApplyQueueItem | null>(null);
+
+  // Phase 3: Submission Review Modal State
   const [reviewingItem, setReviewingItem] = useState<AutoApplyQueueItem | null>(null);
 
   // Sync initial setup values
@@ -106,6 +119,8 @@ export default function AutoApplyPage() {
       }
       setLocationMode(defs.location_mode || "prioritize");
       setUnattendedLowerRanked(defs.unattended_include_lower_ranked || false);
+      setReviewTailoredCv(defs.review_tailored_cv ?? true);
+      setReviewBeforeSubmission(defs.review_before_portal_submission ?? true);
     }
   }, [setupQuery.data]);
 
@@ -175,10 +190,12 @@ export default function AutoApplyPage() {
           preferred_locations: selectedLocations,
           location_mode: locationMode,
           unattended_include_lower_ranked: unattendedLowerRanked,
+          review_tailored_cv: reviewTailoredCv,
+          review_before_portal_submission: reviewBeforeSubmission,
         }),
       });
       if (res.ok) {
-        toast.success("Saved role themes & experience range defaults!");
+        toast.success("Saved role themes, experience bounds & approval settings!");
         setIsEditingSetup(false);
         queryClient.invalidateQueries({ queryKey: queryKeys.autoApplySetup });
         handleFetchPreview();
@@ -269,14 +286,19 @@ export default function AutoApplyPage() {
     }
   };
 
-  // Phase 2: Run Form Filling across Queued Jobs
-  const handleRunQueueFormFill = async () => {
+  // Phase 3: Run Queue Engine with independent approvals
+  const handleRunQueueProcessor = async () => {
     setIsProcessingQueue(true);
     try {
       const res = await fetch(`${API_URL}/auto-apply/queue/process`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          rule_overrides: {
+            review_tailored_cv: reviewTailoredCv,
+            review_before_portal_submission: reviewBeforeSubmission,
+          },
+        }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -284,17 +306,55 @@ export default function AutoApplyPage() {
           toast.info(data.message);
         } else {
           toast.success(
-            `Processed ${data.processed_count} jobs: ${data.ready_count} ready for review, ${data.paused_for_answer_count} paused for unfamiliar questions.`
+            `Processed: ${data.waiting_cv_review_count} waiting CV review, ${data.waiting_submission_review_count} waiting submission review, ${data.approved_for_submission_count} approved for submit.`
           );
         }
         queryClient.invalidateQueries({ queryKey: queryKeys.autoApplyQueue });
       } else {
-        toast.error("Failed to run assisted form fill.");
+        toast.error("Failed to run queue worker.");
       }
     } catch {
-      toast.error("Network error running form fill.");
+      toast.error("Network error running queue worker.");
     } finally {
       setIsProcessingQueue(false);
+    }
+  };
+
+  // Phase 3: Approve Tailored CV
+  const handleApproveCv = async (itemId: string) => {
+    try {
+      const res = await fetch(`${API_URL}/auto-apply/queue/${itemId}/approve-cv`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("Tailored CV approved! Advancing to application package.");
+        setReviewingCvItem(null);
+        queryClient.invalidateQueries({ queryKey: queryKeys.autoApplyQueue });
+      } else {
+        toast.error(data.detail || "Could not approve CV.");
+      }
+    } catch {
+      toast.error("Network error approving CV.");
+    }
+  };
+
+  // Phase 3: Approve Final Submission
+  const handleApproveSubmission = async (itemId: string) => {
+    try {
+      const res = await fetch(`${API_URL}/auto-apply/queue/${itemId}/approve-submission`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("Final submission package approved!");
+        setReviewingItem(null);
+        queryClient.invalidateQueries({ queryKey: queryKeys.autoApplyQueue });
+      } else {
+        toast.error(data.detail || "Could not approve submission.");
+      }
+    } catch {
+      toast.error("Network error approving submission.");
     }
   };
 
@@ -351,7 +411,7 @@ export default function AutoApplyPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        toast.success(data.message || "Answer saved! Job resumed and ready for review.");
+        toast.success(data.message || "Answer saved! Job resumed.");
         setAnsweringItem(null);
         queryClient.invalidateQueries({ queryKey: queryKeys.autoApplyQueue });
         queryClient.invalidateQueries({ queryKey: queryKeys.autoApplyAnswerBank });
@@ -371,15 +431,19 @@ export default function AutoApplyPage() {
   const isQueuePaused = queue?.queue_status === "paused";
 
   const queuedCount = queueItems.filter((i) => i.status === "queued").length;
+  const waitingCvCount = queueItems.filter((i) => i.status === "waiting_cv_review").length;
   const needsAnswerCount = queueItems.filter((i) => i.status === "needs_answer").length;
+  const waitingSubCount = queueItems.filter((i) => i.status === "waiting_submission_review").length;
+  const approvedCount = queueItems.filter((i) => i.status === "approved_for_submission" || i.status === "ready_for_review").length;
   const needsInputCount = queueItems.filter((i) => i.status === "needs_input").length;
-  const readyReviewCount = queueItems.filter((i) => i.status === "ready_for_review").length;
 
   const filteredQueueItems = queueItems.filter((item) => {
     if (queueTab === "queued") return item.status === "queued" || item.status === "in_progress";
+    if (queueTab === "waiting_cv_review") return item.status === "waiting_cv_review";
     if (queueTab === "needs_answer") return item.status === "needs_answer";
+    if (queueTab === "waiting_submission_review") return item.status === "waiting_submission_review";
+    if (queueTab === "approved_for_submission") return item.status === "approved_for_submission" || item.status === "ready_for_review";
     if (queueTab === "needs_input") return item.status === "needs_input";
-    if (queueTab === "ready_for_review") return item.status === "ready_for_review";
     return true;
   });
 
@@ -393,14 +457,14 @@ export default function AutoApplyPage() {
           <div className="space-y-1.5">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold border border-blue-200">
               <Bot className="w-3.5 h-3.5" />
-              Phase 2 · Form Filling, Reusable Answer Bank &amp; Queue Workflow
+              Phase 3 · Job-Specific CVs &amp; Independent Approvals
             </div>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
               Auto Apply Agent &amp; Application Queue
             </h1>
             <p className="text-xs text-slate-500 max-w-2xl leading-relaxed">
-              Auto-fills application forms with your confirmed Answer Bank. When unfamiliar required questions arise,
-              the specific job pauses safely while remaining jobs continue. Submission remains manual for candidate review.
+              Tailors a separate CV for LinkedIn, career portals, and email applications with verified facts and wording diffs,
+              while using the single profile CV for iimjobs and Naukri. Supports independent CV and final submission approvals.
             </p>
           </div>
 
@@ -418,15 +482,15 @@ export default function AutoApplyPage() {
               </span>
             </button>
 
-            {/* Run Form Filling */}
+            {/* Run Queue Worker */}
             <button
               type="button"
               disabled={isProcessingQueue}
-              onClick={handleRunQueueFormFill}
+              onClick={handleRunQueueProcessor}
               className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs inline-flex items-center gap-2 shadow-xs transition-all disabled:opacity-50"
             >
               <Zap className={`w-4 h-4 ${isProcessingQueue ? "animate-spin" : "fill-current"}`} />
-              <span>{isProcessingQueue ? "Autofilling Forms..." : "Run Assisted Form Fill"}</span>
+              <span>{isProcessingQueue ? "Running Queue Worker..." : "Run Queue Worker"}</span>
             </button>
 
             {/* Pause / Resume Queue */}
@@ -454,14 +518,14 @@ export default function AutoApplyPage() {
           </div>
         </div>
 
-        {/* ── Saved Defaults Banner ── */}
+        {/* ── Saved Defaults & Independent Approval Settings Strip ── */}
         <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1">
+          <div className="space-y-2">
             <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-              Active Candidate Defaults (Reused Across Runs)
+              Active Candidate Defaults &amp; Review Policy
             </div>
-            <div className="flex flex-wrap items-center gap-2 pt-0.5">
-              <span className="text-xs font-bold text-slate-700">Role Themes:</span>
+            <div className="flex flex-wrap items-center gap-3 pt-0.5 text-xs">
+              <span className="font-bold text-slate-700">Themes:</span>
               {(setupQuery.data?.defaults?.role_themes || []).map((th) => (
                 <span
                   key={th}
@@ -471,10 +535,29 @@ export default function AutoApplyPage() {
                 </span>
               ))}
               <span className="text-slate-300">|</span>
-              <span className="text-xs font-bold text-slate-700">Target Range:</span>
-              <span className="px-2.5 py-0.5 rounded-lg bg-blue-50 border border-blue-200 text-xs font-black text-blue-700">
+              <span className="font-bold text-slate-700">Target Range:</span>
+              <span className="px-2 py-0.5 rounded-lg bg-blue-50 border border-blue-200 text-xs font-black text-blue-700">
                 {setupQuery.data?.defaults?.min_experience_years || 4}–{setupQuery.data?.defaults?.max_experience_years || 7} yrs
               </span>
+              <span className="text-slate-300">|</span>
+
+              {/* Independent Review Pills */}
+              <div className="flex items-center gap-2">
+                <span className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold border ${
+                  reviewTailoredCv
+                    ? "bg-violet-50 text-violet-700 border-violet-200"
+                    : "bg-slate-100 text-slate-500 border-slate-200"
+                }`}>
+                  CV Review: <strong>{reviewTailoredCv ? "ON (Waits)" : "OFF (Auto)"}</strong>
+                </span>
+                <span className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold border ${
+                  reviewBeforeSubmission
+                    ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                    : "bg-slate-100 text-slate-500 border-slate-200"
+                }`}>
+                  Submit Review: <strong>{reviewBeforeSubmission ? "ON (Waits)" : "OFF (Auto)"}</strong>
+                </span>
+              </div>
             </div>
           </div>
 
@@ -484,7 +567,7 @@ export default function AutoApplyPage() {
             className="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-extrabold text-xs inline-flex items-center gap-1.5 shadow-2xs shrink-0 self-start md:self-auto"
           >
             <Settings2 className="w-3.5 h-3.5 text-slate-500" />
-            <span>Edit Defaults</span>
+            <span>Edit Settings</span>
           </button>
         </div>
       </div>
@@ -495,16 +578,16 @@ export default function AutoApplyPage() {
           <div className="flex items-center gap-2">
             <SlidersHorizontal className="w-4 h-4 text-blue-600" />
             <h2 className="text-base font-extrabold text-slate-900">
-              Run Configuration (Non-Destructive Location Adjustment)
+              Run Configuration &amp; Review Policy
             </h2>
           </div>
           <span className="text-xs text-slate-400">
-            Adjusting locations for this run leaves your saved themes and experience range intact.
+            Configure run location and independent approval gates.
           </span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {/* Mode Selector */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Location Mode */}
           <div className="space-y-2">
             <label className="text-xs font-extrabold text-slate-700 block">Location Mode</label>
             <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-2xl text-xs font-bold">
@@ -544,10 +627,10 @@ export default function AutoApplyPage() {
             </p>
           </div>
 
-          {/* Location Pills */}
-          <div className="space-y-2 md:col-span-2">
+          {/* Target Cities */}
+          <div className="space-y-2">
             <label className="text-xs font-extrabold text-slate-700 block">Preferred Target Cities</label>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
               {["Hyderabad", "Bengaluru", "Mumbai", "Delhi NCR", "Pune", "Remote"].map((city) => {
                 const isSelected = selectedLocations.includes(city);
                 return (
@@ -576,22 +659,40 @@ export default function AutoApplyPage() {
                 );
               })}
             </div>
+          </div>
 
-            {/* Unattended run setting */}
-            <div className="pt-2">
-              <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-600 font-medium">
+          {/* Phase 3: Independent Approvals Checkboxes */}
+          <div className="space-y-3 p-4 rounded-2xl bg-slate-50 border border-slate-200/80">
+            <div className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+              <Split className="w-4 h-4 text-blue-600" />
+              Independent Approval Checkpoints
+            </div>
+
+            <div className="space-y-2">
+              <label className="flex items-start gap-2 cursor-pointer text-xs text-slate-700 font-medium">
                 <input
                   type="checkbox"
-                  checked={unattendedLowerRanked}
-                  onChange={(e) => {
-                    setUnattendedLowerRanked(e.target.checked);
-                    handleFetchPreview(selectedLocations, locationMode);
-                  }}
-                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+                  checked={reviewTailoredCv}
+                  onChange={(e) => setReviewTailoredCv(e.target.checked)}
+                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 mt-0.5"
                 />
-                <span>
-                  For unattended runs, allow queuing eligible roles in lower-ranked locations (uncheck to apply strictly to preferred locations only).
-                </span>
+                <div>
+                  <strong className="block text-slate-900">Review tailored CV</strong>
+                  <span className="text-[11px] text-slate-500">Waits before attachment. Check diff &amp; PDF preview.</span>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-2 cursor-pointer text-xs text-slate-700 font-medium">
+                <input
+                  type="checkbox"
+                  checked={reviewBeforeSubmission}
+                  onChange={(e) => setReviewBeforeSubmission(e.target.checked)}
+                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 mt-0.5"
+                />
+                <div>
+                  <strong className="block text-slate-900">Review before portal submission</strong>
+                  <span className="text-[11px] text-slate-500">Waits after form and CV attachment are ready.</span>
+                </div>
               </label>
             </div>
           </div>
@@ -680,6 +781,8 @@ export default function AutoApplyPage() {
           <div className="space-y-3">
             {previewData.jobs.map((job) => {
               const isSelected = selectedJobIds.has(job.job_id);
+              const isNaukriOrIimjobs = (job.source || "").toLowerCase().includes("naukri") || (job.source || "").toLowerCase().includes("iimjobs");
+
               return (
                 <div
                   key={job.job_id}
@@ -712,6 +815,15 @@ export default function AutoApplyPage() {
                         <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">
                           {job.source}
                         </span>
+                        {isNaukriOrIimjobs ? (
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-mono">
+                            Single Profile CV
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-md bg-violet-50 text-violet-700 border border-violet-200 text-[10px] font-bold">
+                            Tailors Job-Specific CV
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
@@ -790,6 +902,45 @@ export default function AutoApplyPage() {
               </button>
               <button
                 type="button"
+                onClick={() => setQueueTab("waiting_cv_review")}
+                className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1 ${
+                  queueTab === "waiting_cv_review"
+                    ? "bg-white text-violet-700 shadow-2xs font-extrabold"
+                    : waitingCvCount > 0
+                    ? "text-violet-600 font-extrabold"
+                    : "text-slate-600"
+                }`}
+              >
+                CV Review ({waitingCvCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setQueueTab("waiting_submission_review")}
+                className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1 ${
+                  queueTab === "waiting_submission_review"
+                    ? "bg-white text-indigo-700 shadow-2xs font-extrabold"
+                    : waitingSubCount > 0
+                    ? "text-indigo-600 font-extrabold"
+                    : "text-slate-600"
+                }`}
+              >
+                Submit Review ({waitingSubCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setQueueTab("approved_for_submission")}
+                className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1 ${
+                  queueTab === "approved_for_submission"
+                    ? "bg-white text-emerald-700 shadow-2xs font-extrabold"
+                    : approvedCount > 0
+                    ? "text-emerald-600 font-extrabold"
+                    : "text-slate-600"
+                }`}
+              >
+                Ready ({approvedCount})
+              </button>
+              <button
+                type="button"
                 onClick={() => setQueueTab("needs_answer")}
                 className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1 ${
                   queueTab === "needs_answer"
@@ -800,19 +951,6 @@ export default function AutoApplyPage() {
                 }`}
               >
                 Needs Answer ({needsAnswerCount})
-              </button>
-              <button
-                type="button"
-                onClick={() => setQueueTab("ready_for_review")}
-                className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1 ${
-                  queueTab === "ready_for_review"
-                    ? "bg-white text-emerald-700 shadow-2xs font-extrabold"
-                    : readyReviewCount > 0
-                    ? "text-emerald-600 font-extrabold"
-                    : "text-slate-600"
-                }`}
-              >
-                Ready Review ({readyReviewCount})
               </button>
               <button
                 type="button"
@@ -828,23 +966,29 @@ export default function AutoApplyPage() {
 
           {filteredQueueItems.length === 0 ? (
             <div className="py-12 text-center text-xs text-slate-400">
-              No jobs currently in this queue view. Select eligible jobs in the preview above to populate.
+              No jobs currently in this queue view. Click 'Run Queue Worker' or add jobs from preview.
             </div>
           ) : (
             <div className="space-y-4">
               {filteredQueueItems.map((item) => {
+                const isWaitingCv = item.status === "waiting_cv_review";
+                const isWaitingSub = item.status === "waiting_submission_review";
+                const isApprovedSub = item.status === "approved_for_submission" || item.status === "ready_for_review";
                 const isNeedsAnswer = item.status === "needs_answer";
-                const isReadyReview = item.status === "ready_for_review";
                 const isNeedsInput = item.status === "needs_input";
 
                 return (
                   <div
                     key={item.queue_item_id}
                     className={`p-4 sm:p-5 rounded-2xl border transition-all space-y-3 ${
-                      isNeedsAnswer
-                        ? "border-rose-300 bg-rose-50/30"
-                        : isReadyReview
+                      isWaitingCv
+                        ? "border-violet-300 bg-violet-50/30"
+                        : isWaitingSub
+                        ? "border-indigo-300 bg-indigo-50/30"
+                        : isApprovedSub
                         ? "border-emerald-300 bg-emerald-50/20"
+                        : isNeedsAnswer
+                        ? "border-rose-300 bg-rose-50/30"
                         : isNeedsInput
                         ? "border-amber-300 bg-amber-50/40"
                         : "border-slate-200 bg-white"
@@ -863,28 +1007,88 @@ export default function AutoApplyPage() {
                           <span>{item.location}</span>
                           <span>•</span>
                           <span className="text-[10px] text-slate-400 font-mono">{item.source}</span>
+                          {item.tailored_cv?.skipped && (
+                            <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                              Single Profile CV
+                            </span>
+                          )}
                         </div>
                       </div>
 
-                      {/* Status Badges & Quick Actions */}
+                      {/* Status Badges & Quick Action Controls */}
                       <div className="flex items-center gap-2 shrink-0">
-                        {isNeedsAnswer ? (
-                          <span className="px-2.5 py-1 rounded-xl bg-rose-100 text-rose-800 text-xs font-black uppercase tracking-wider flex items-center gap-1">
-                            <HelpCircle className="w-3.5 h-3.5" />
-                            Needs Answer
-                          </span>
-                        ) : isReadyReview ? (
+                        {isWaitingCv ? (
                           <div className="flex items-center gap-2">
-                            <span className="px-2.5 py-1 rounded-xl bg-emerald-100 text-emerald-800 text-xs font-black uppercase tracking-wider flex items-center gap-1">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                              Ready for Review
+                            <span className="px-2.5 py-1 rounded-xl bg-violet-100 text-violet-800 text-xs font-black uppercase tracking-wider flex items-center gap-1">
+                              <FileCheck2 className="w-3.5 h-3.5" />
+                              CV Review
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setReviewingCvItem(item)}
+                              className="px-3 py-1.5 rounded-xl border border-violet-200 bg-white hover:bg-violet-50 text-violet-700 font-extrabold text-xs shadow-2xs"
+                            >
+                              Inspect Diff
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleApproveCv(item.queue_item_id)}
+                              className="px-3.5 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-extrabold text-xs shadow-2xs"
+                            >
+                              Approve CV
+                            </button>
+                          </div>
+                        ) : isWaitingSub ? (
+                          <div className="flex items-center gap-2">
+                            <span className="px-2.5 py-1 rounded-xl bg-indigo-100 text-indigo-800 text-xs font-black uppercase tracking-wider flex items-center gap-1">
+                              <SendHorizontal className="w-3.5 h-3.5" />
+                              Submit Review
                             </span>
                             <button
                               type="button"
                               onClick={() => setReviewingItem(item)}
-                              className="px-3 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-2xs"
+                              className="px-3 py-1.5 rounded-xl border border-indigo-200 bg-white hover:bg-indigo-50 text-indigo-700 font-extrabold text-xs shadow-2xs"
                             >
-                              Review Form
+                              Review Package
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleApproveSubmission(item.queue_item_id)}
+                              className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs shadow-2xs"
+                            >
+                              Approve Submit
+                            </button>
+                          </div>
+                        ) : isApprovedSub ? (
+                          <div className="flex items-center gap-2">
+                            <span className="px-2.5 py-1 rounded-xl bg-emerald-100 text-emerald-800 text-xs font-black uppercase tracking-wider flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              Ready to Submit
+                            </span>
+                            {item.job_url && (
+                              <a
+                                href={item.job_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-2xs inline-flex items-center gap-1"
+                              >
+                                <span>Portal</span>
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
+                          </div>
+                        ) : isNeedsAnswer ? (
+                          <div className="flex items-center gap-2">
+                            <span className="px-2.5 py-1 rounded-xl bg-rose-100 text-rose-800 text-xs font-black uppercase tracking-wider flex items-center gap-1">
+                              <HelpCircle className="w-3.5 h-3.5" />
+                              Needs Answer
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenAnswering(item)}
+                              className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-2xs"
+                            >
+                              Answer
                             </button>
                           </div>
                         ) : isNeedsInput ? (
@@ -912,39 +1116,19 @@ export default function AutoApplyPage() {
                       </div>
                     </div>
 
-                    {/* Unfamiliar Question Callout Card (When paused for answer) */}
-                    {isNeedsAnswer && item.pending_question && (
-                      <div className="p-4 rounded-xl bg-white border border-rose-200 shadow-xs space-y-3">
-                        <div className="flex items-start gap-2">
-                          <HelpCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                          <div className="space-y-0.5">
-                            <div className="text-[11px] font-black text-rose-800 uppercase tracking-wider">
-                              Unfamiliar Question (Job Paused Safely)
-                            </div>
-                            <div className="text-xs font-extrabold text-slate-900">
-                              "{item.pending_question.exact_question_text}"
-                            </div>
-                            {item.pending_question.options && item.pending_question.options.length > 0 && (
-                              <div className="text-[11px] text-slate-500 flex items-center gap-1.5 pt-1">
-                                <span className="font-bold">Available Options:</span>
-                                {item.pending_question.options.map((opt) => (
-                                  <span key={opt} className="px-2 py-0.5 rounded-md bg-slate-100 font-mono text-[10px]">
-                                    {opt}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
+                    {/* Wording Diff Snippet (If waiting CV review) */}
+                    {isWaitingCv && item.tailored_cv?.wording_changes && item.tailored_cv.wording_changes.length > 0 && (
+                      <div className="p-3.5 rounded-xl bg-white border border-violet-200 shadow-2xs space-y-2">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-extrabold text-violet-800">
+                            Wording Changes ({item.tailored_cv.wording_changes.length} sections tailored)
+                          </span>
+                          <span className="text-[10px] font-mono text-slate-500">
+                            Page Budget: {item.tailored_cv.page_count} pages · {item.tailored_cv.overflow_status}
+                          </span>
                         </div>
-
-                        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenAnswering(item)}
-                            className="px-4 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-2xs"
-                          >
-                            Answer Question &amp; Resume Job
-                          </button>
+                        <div className="text-xs text-slate-700 line-clamp-2 italic bg-slate-50 p-2 rounded-lg border border-slate-100">
+                          "{item.tailored_cv.wording_changes[0].tailored}"
                         </div>
                       </div>
                     )}
@@ -966,8 +1150,8 @@ export default function AutoApplyPage() {
               <span className="text-[10px] font-bold text-slate-400 font-mono">Live Sync</span>
             </div>
 
-            <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
-              {activityFeed.slice(-20).map((act) => (
+            <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
+              {activityFeed.slice(-25).map((act) => (
                 <div key={act.id} className="p-3 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
                   <div className="flex items-center justify-between text-[10px]">
                     <span className="font-extrabold text-blue-700 flex items-center gap-1">
@@ -994,6 +1178,170 @@ export default function AutoApplyPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Phase 3: Tailored CV Review & Diff Modal ── */}
+      {reviewingCvItem && reviewingCvItem.tailored_cv && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-3xl w-full p-6 sm:p-8 space-y-5 shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-violet-50 text-violet-700 text-[10px] font-black uppercase">
+                  Checkpoint 1: Review Tailored CV
+                </div>
+                <h3 className="text-base font-extrabold text-slate-900 pt-1">
+                  {reviewingCvItem.job_title} · {reviewingCvItem.company_name}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReviewingCvItem(null)}
+                className="text-slate-400 hover:text-slate-600 text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 overflow-y-auto pr-1 flex-1">
+              {/* Overflow Check Strip */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
+                <div>
+                  <span className="font-extrabold text-slate-700">Estimated Page Count:</span>{" "}
+                  <strong className="text-slate-900">{reviewingCvItem.tailored_cv.page_count} Pages</strong> (Recommended: 1–2 for senior; Max ceiling: 4)
+                </div>
+                <span className="px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 font-extrabold text-[11px]">
+                  ✓ Overflow: Passed
+                </span>
+              </div>
+
+              {/* Wording Changes Diff List */}
+              <div className="space-y-3">
+                <div className="text-xs font-black uppercase text-slate-400 tracking-wider">
+                  Wording Changes &amp; Section Tailoring
+                </div>
+                {reviewingCvItem.tailored_cv.wording_changes.map((wc, idx) => (
+                  <div key={idx} className="p-4 rounded-2xl border border-slate-200 space-y-2 bg-white shadow-2xs">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-extrabold text-blue-700">{wc.section}</span>
+                      <span className="px-2 py-0.5 rounded-md bg-slate-100 font-mono font-bold text-slate-500 text-[10px]">
+                        {wc.change_type}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                      <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-500">
+                        <strong className="block text-[10px] text-slate-400 uppercase font-black mb-1">Original Wording</strong>
+                        <p>{wc.original}</p>
+                      </div>
+                      <div className="p-3 rounded-xl bg-violet-50/70 border border-violet-200 text-violet-950">
+                        <strong className="block text-[10px] text-violet-600 uppercase font-black mb-1">Tailored for Opening</strong>
+                        <p className="font-semibold">{wc.tailored}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+              <span className="text-[11px] text-slate-400 font-mono">
+                Version: {reviewingCvItem.tailored_cv.version_id}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReviewingCvItem(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApproveCv(reviewingCvItem.queue_item_id)}
+                  className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-extrabold text-xs shadow-xs"
+                >
+                  Approve CV &amp; Advance
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Phase 3: Final Submission Review Modal ── */}
+      {reviewingItem && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-2xl w-full p-6 sm:p-8 space-y-5 shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase">
+                  Checkpoint 2: Final Submission Review
+                </div>
+                <h3 className="text-base font-extrabold text-slate-900 pt-1">
+                  {reviewingItem.job_title} · {reviewingItem.company_name}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReviewingItem(null)}
+                className="text-slate-400 hover:text-slate-600 text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 overflow-y-auto pr-1 flex-1">
+              <div className="p-3.5 rounded-2xl bg-indigo-50/60 border border-indigo-200 text-xs text-indigo-900 leading-relaxed font-medium">
+                🛡️ <strong>Application Package Ready:</strong> Form fields filled from Answer Bank and CV attached.
+                Review before approving for portal submission.
+              </div>
+
+              {reviewingItem.answers_snapshot?.fields ? (
+                <div className="space-y-3">
+                  {Object.values(reviewingItem.answers_snapshot.fields).map((f) => (
+                    <div key={f.question_id} className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-extrabold text-slate-700">{f.exact_question_text}</span>
+                        <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[10px] font-mono font-bold text-slate-500">
+                          {f.source_scope}
+                        </span>
+                      </div>
+                      <div className="text-xs font-black text-slate-900 pt-0.5">
+                        {f.answer_value || "(Blank / Skipped optional field)"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-6 text-center text-xs text-slate-400">
+                  Standard application package ready with profile answers.
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+              <span className="text-[11px] text-slate-400 font-mono">
+                CV: {reviewingItem.tailored_cv?.version_id || "Profile CV"}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReviewingItem(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApproveSubmission(reviewingItem.queue_item_id)}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs shadow-xs"
+                >
+                  Approve for Portal Submission
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Phase 2: Answer Bank Management Modal ── */}
       {isAnswerBankOpen && (
@@ -1111,7 +1459,6 @@ export default function AutoApplyPage() {
                 </p>
               </div>
 
-              {/* If options available, display option pills */}
               {answeringItem.pending_question.options && answeringItem.pending_question.options.length > 0 ? (
                 <div className="space-y-1.5">
                   <label className="text-xs font-extrabold text-slate-700 block">Select Compatible Option:</label>
@@ -1233,92 +1580,12 @@ export default function AutoApplyPage() {
         </div>
       )}
 
-      {/* ── Phase 2: Form Review Modal (Manual Submission Mode) ── */}
-      {reviewingItem && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl border border-slate-200 max-w-2xl w-full p-6 sm:p-8 space-y-5 shadow-2xl max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase">
-                  Manual Submission Checkpoint
-                </div>
-                <h3 className="text-base font-extrabold text-slate-900 pt-1">
-                  {reviewingItem.job_title} · {reviewingItem.company_name}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setReviewingItem(null)}
-                className="text-slate-400 hover:text-slate-600 text-xs font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-4 overflow-y-auto pr-1 flex-1">
-              <div className="p-3.5 rounded-2xl bg-blue-50/60 border border-blue-200 text-xs text-blue-900 leading-relaxed font-medium">
-                🛡️ <strong>Phase 2 Policy:</strong> Submission remains manual. Review all autofilled responses below.
-                When verified, open the application portal to submit.
-              </div>
-
-              {reviewingItem.answers_snapshot?.fields ? (
-                <div className="space-y-3">
-                  {Object.values(reviewingItem.answers_snapshot.fields).map((f) => (
-                    <div key={f.question_id} className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="font-extrabold text-slate-700">{f.exact_question_text}</span>
-                        <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[10px] font-mono font-bold text-slate-500">
-                          {f.source_scope}
-                        </span>
-                      </div>
-                      <div className="text-xs font-black text-slate-900 pt-0.5">
-                        {f.answer_value || "(Blank / Skipped optional field)"}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="py-6 text-center text-xs text-slate-400">
-                  No snapshot answers recorded yet.
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-              <span className="text-[11px] text-slate-400 font-mono">
-                Bank Snapshot v{reviewingItem.answers_snapshot?.bank_version || 1}
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setReviewingItem(null)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
-                >
-                  Close
-                </button>
-                {reviewingItem.job_url && (
-                  <a
-                    href={reviewingItem.job_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs inline-flex items-center gap-1.5"
-                  >
-                    <span>Open Portal &amp; Submit</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ── Edit Setup Defaults Modal ── */}
       {isEditingSetup && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl border border-slate-200 max-w-lg w-full p-6 space-y-5 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-base font-extrabold text-slate-900">Edit Auto Apply Defaults</h3>
+              <h3 className="text-base font-extrabold text-slate-900">Edit Auto Apply Settings</h3>
               <button
                 type="button"
                 onClick={() => setIsEditingSetup(false)}
@@ -1414,6 +1681,29 @@ export default function AutoApplyPage() {
                   />
                 </div>
               </div>
+
+              {/* Phase 3 Approval Checkboxes */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                <label className="text-xs font-extrabold text-slate-900 block">Default Review Policy:</label>
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={reviewTailoredCv}
+                    onChange={(e) => setReviewTailoredCv(e.target.checked)}
+                    className="rounded border-slate-300 text-blue-600 w-4 h-4"
+                  />
+                  <span>Review tailored CV before attachment</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={reviewBeforeSubmission}
+                    onChange={(e) => setReviewBeforeSubmission(e.target.checked)}
+                    className="rounded border-slate-300 text-blue-600 w-4 h-4"
+                  />
+                  <span>Review final package before portal submission</span>
+                </label>
+              </div>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
@@ -1430,7 +1720,7 @@ export default function AutoApplyPage() {
                 onClick={handleSaveDefaults}
                 className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs"
               >
-                {isSavingSetup ? "Saving..." : "Save Defaults"}
+                {isSavingSetup ? "Saving..." : "Save Settings"}
               </button>
             </div>
           </div>

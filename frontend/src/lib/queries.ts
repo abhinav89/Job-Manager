@@ -231,6 +231,8 @@ export type AutoApplyDefaults = {
   location_mode: "filter" | "prioritize";
   unattended_include_lower_ranked: boolean;
   auto_queue_future_matches: boolean;
+  review_tailored_cv?: boolean;
+  review_before_portal_submission?: boolean;
   updated_at?: string;
 };
 
@@ -315,6 +317,30 @@ export type AutoApplyAnswersSnapshot = {
   fields: Record<string, AutoApplyFilledField>;
 };
 
+export type WordingChange = {
+  section: string;
+  original: string;
+  tailored: string;
+  change_type: string;
+  rationale?: string;
+};
+
+export type AutoApplyTailoredCV = {
+  skipped: boolean;
+  source_type: string;
+  version_id: string;
+  template_id: string;
+  page_count: number;
+  overflow_status: "passed" | "overflow_exceeded";
+  max_allowed_pages: number;
+  wording_changes: WordingChange[];
+  tailored_at: string;
+  preview_summary?: string;
+  preview_pdf_url?: string;
+  policy?: string;
+  preview_text?: string;
+};
+
 export type AutoApplyQueueItem = {
   queue_item_id: string;
   job_id: string;
@@ -328,9 +354,22 @@ export type AutoApplyQueueItem = {
   why_it_qualified: string;
   has_ambiguity: boolean;
   ambiguity_flags: string[];
-  status: "queued" | "in_progress" | "paused" | "needs_input" | "needs_answer" | "ready_for_review" | "dismissed";
+  status:
+    | "queued"
+    | "in_progress"
+    | "paused"
+    | "needs_input"
+    | "needs_answer"
+    | "waiting_cv_review"
+    | "waiting_submission_review"
+    | "approved_for_submission"
+    | "ready_for_review"
+    | "dismissed";
   pending_question?: AutoApplyPendingQuestion | null;
   answers_snapshot?: AutoApplyAnswersSnapshot | null;
+  tailored_cv?: AutoApplyTailoredCV | null;
+  cv_approved?: boolean;
+  submission_approved?: boolean;
   queued_at: string;
 };
 

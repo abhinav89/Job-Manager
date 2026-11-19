@@ -28,6 +28,11 @@ from cv_tailor.services.auto_apply_service import (
     process_queue_form_filling,
     answer_pending_question,
     get_application_form_review,
+    tailor_cv_for_job,
+    process_queue_with_approvals,
+    approve_tailored_cv,
+    approve_portal_submission,
+    get_tailored_cv_preview,
 )
 
 logger = logging.getLogger("auto-apply-routes")
@@ -46,6 +51,8 @@ class AutoApplySetupUpdate(BaseModel):
     location_mode: Optional[str] = "prioritize"
     unattended_include_lower_ranked: Optional[bool] = False
     auto_queue_future_matches: Optional[bool] = False
+    review_tailored_cv: Optional[bool] = True
+    review_before_portal_submission: Optional[bool] = True
 
 
 class PreviewRequest(BaseModel):
@@ -77,6 +84,7 @@ class AnswerQuestionRequest(BaseModel):
 
 class ProcessQueueRequest(BaseModel):
     mock_form_catalog: Optional[Dict[str, List[Dict[str, Any]]]] = None
+    rule_overrides: Optional[Dict[str, bool]] = None
 
 
 # --- Endpoints ---
@@ -117,6 +125,10 @@ def update_setup(payload: AutoApplySetupUpdate, request: Request):
         current["unattended_include_lower_ranked"] = payload.unattended_include_lower_ranked
     if payload.auto_queue_future_matches is not None:
         current["auto_queue_future_matches"] = payload.auto_queue_future_matches
+    if payload.review_tailored_cv is not None:
+        current["review_tailored_cv"] = payload.review_tailored_cv
+    if payload.review_before_portal_submission is not None:
+        current["review_before_portal_submission"] = payload.review_before_portal_submission
 
     save_auto_apply_defaults(user_id, current)
     return {
@@ -233,13 +245,46 @@ def update_user_answer_bank(payload: AnswerBankUpdateRequest, request: Request):
 @router.post("/queue/process")
 def process_queue_fill(payload: Optional[ProcessQueueRequest] = None, request: Request = None):
     """
-    Executes a form-filling cycle across active queued jobs.
-    Pauses any job encountering unfamiliar required questions ('needs_answer')
-    while allowing other eligible jobs in the queue to continue to 'ready_for_review'.
+    Executes an application cycle across active queued jobs (Phase 2 & Phase 3):
+    1. Tailors separate CV for LinkedIn/Portals/Email (skips for iimjobs/Naukri).
+    2. Checkpoint 1 (Review Tailored CV): pauses at 'waiting_cv_review' if ON; auto-advances if OFF.
+    3. Form Filling with Answer Bank: pauses at 'needs_answer' if unfamiliar required questions.
+    4. Checkpoint 2 (Review Before Submission): pauses at 'waiting_submission_review' if ON; auto-advances if OFF.
     """
     user_id = _resolve_user_id(request)
     mock_catalog = payload.mock_form_catalog if payload else None
-    return process_queue_form_filling(user_id, mock_catalog)
+    rule_overrides = payload.rule_overrides if payload else None
+    return process_queue_with_approvals(user_id, mock_catalog, rule_overrides)
+
+
+@router.post("/queue/{item_id}/approve-cv")
+def approve_cv(item_id: str, request: Request):
+    """Candidate approves tailored CV at Checkpoint 1 and advances job."""
+    user_id = _resolve_user_id(request)
+    try:
+        return approve_tailored_cv(user_id, item_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/queue/{item_id}/approve-submission")
+def approve_submission(item_id: str, request: Request):
+    """Candidate approves final application package at Checkpoint 2."""
+    user_id = _resolve_user_id(request)
+    try:
+        return approve_portal_submission(user_id, item_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/queue/{item_id}/cv-preview")
+def get_cv_preview(item_id: str, request: Request):
+    """Returns tailored CV wording diff, page count, overflow status, and version."""
+    user_id = _resolve_user_id(request)
+    try:
+        return get_tailored_cv_preview(user_id, item_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.post("/queue/{item_id}/answer")
