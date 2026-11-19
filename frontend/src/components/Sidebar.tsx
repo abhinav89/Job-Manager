@@ -122,7 +122,7 @@ export default function Sidebar() {
     { label: "Tailor Resume", href: "/generate?tab=tailored", icon: <Wand2 className="w-4 h-4" /> },
     { label: "Cover Letter", href: "/generate?tab=cover_letter", icon: <Mail className="w-4 h-4" /> },
     { label: "Career Profile", href: "/profile", icon: <User className="w-4 h-4" /> },
-    { label: "Auto Apply Queue", href: "/auto-apply", icon: <Bot className="w-4 h-4 text-blue-600" />, badge: "Phase 1" },
+    { label: "Auto Apply Queue", href: "/auto-apply", icon: <Bot className="w-4 h-4 text-blue-600" />, badge: "Phase 4" },
     { label: "Interview Prep", href: "#", icon: <MessageSquare className="w-4 h-4" />, badge: "Upcoming", isFuture: true },
     { label: "Pricing & Plans", href: "/pricing", icon: <CreditCard className="w-4 h-4" /> },
     { label: "Settings", href: "/settings", icon: <Settings className="w-4 h-4" /> },

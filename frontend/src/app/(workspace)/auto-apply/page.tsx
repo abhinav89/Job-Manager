@@ -64,9 +64,12 @@ export default function AutoApplyPage() {
   const [selectedLocations, setSelectedLocations] = useState<string[]>(["Hyderabad"]);
   const [unattendedLowerRanked, setUnattendedLowerRanked] = useState<boolean>(false);
 
-  // Phase 3: Independent Approvals Settings (per rule/run)
+  // Phase 3 & 4: Approval & Portal Automation Settings
   const [reviewTailoredCv, setReviewTailoredCv] = useState<boolean>(true);
   const [reviewBeforeSubmission, setReviewBeforeSubmission] = useState<boolean>(true);
+  const [allowUnattendedSubmission, setAllowUnattendedSubmission] = useState<boolean>(false);
+  const [dailySubmissionLimit, setDailySubmissionLimit] = useState<number>(5);
+  const [allowWorkdayAccountCreation, setAllowWorkdayAccountCreation] = useState<boolean>(false);
 
   // Setup modal state
   const [isEditingSetup, setIsEditingSetup] = useState(false);
@@ -85,7 +88,17 @@ export default function AutoApplyPage() {
 
   // Queue state & tabs
   const [queueTab, setQueueTab] = useState<
-    "all" | "queued" | "waiting_cv_review" | "needs_answer" | "waiting_submission_review" | "approved_for_submission" | "needs_input"
+    | "all"
+    | "approved_for_submission"
+    | "paused_for_human_checkpoint"
+    | "submission_unclear"
+    | "handoff_ready"
+    | "applied"
+    | "waiting_cv_review"
+    | "waiting_submission_review"
+    | "needs_answer"
+    | "queued"
+    | "needs_input"
   >("all");
   const [isProcessingQueue, setIsProcessingQueue] = useState(false);
 
@@ -107,6 +120,17 @@ export default function AutoApplyPage() {
   // Phase 3: Submission Review Modal State
   const [reviewingItem, setReviewingItem] = useState<AutoApplyQueueItem | null>(null);
 
+  // Phase 4: Report Manual Submission Modal State
+  const [reportModalItem, setReportModalItem] = useState<AutoApplyQueueItem | null>(null);
+  const [reportConfirmationRef, setReportConfirmationRef] = useState("");
+  const [reportNotes, setReportNotes] = useState("");
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+
+  // Phase 4: Action In-Flight States
+  const [resumingCheckpointId, setResumingCheckpointId] = useState<string | null>(null);
+  const [verifyingUnclearId, setVerifyingUnclearId] = useState<string | null>(null);
+  const [submittingPortalId, setSubmittingPortalId] = useState<string | null>(null);
+
   // Sync initial setup values
   useEffect(() => {
     if (setupQuery.data?.defaults) {
@@ -121,6 +145,9 @@ export default function AutoApplyPage() {
       setUnattendedLowerRanked(defs.unattended_include_lower_ranked || false);
       setReviewTailoredCv(defs.review_tailored_cv ?? true);
       setReviewBeforeSubmission(defs.review_before_portal_submission ?? true);
+      setAllowUnattendedSubmission(defs.allow_unattended_submission ?? false);
+      setDailySubmissionLimit(defs.daily_submission_limit ?? 5);
+      setAllowWorkdayAccountCreation(defs.allow_workday_account_creation ?? false);
     }
   }, [setupQuery.data]);
 
@@ -192,10 +219,13 @@ export default function AutoApplyPage() {
           unattended_include_lower_ranked: unattendedLowerRanked,
           review_tailored_cv: reviewTailoredCv,
           review_before_portal_submission: reviewBeforeSubmission,
+          allow_unattended_submission: allowUnattendedSubmission,
+          daily_submission_limit: dailySubmissionLimit,
+          allow_workday_account_creation: allowWorkdayAccountCreation,
         }),
       });
       if (res.ok) {
-        toast.success("Saved role themes, experience bounds & approval settings!");
+        toast.success("Saved role themes, limits & portal automation settings!");
         setIsEditingSetup(false);
         queryClient.invalidateQueries({ queryKey: queryKeys.autoApplySetup });
         handleFetchPreview();
@@ -358,6 +388,134 @@ export default function AutoApplyPage() {
     }
   };
 
+  // Phase 4: Submit to Company Portal
+  const handleSubmitToPortal = async (itemId: string) => {
+    setSubmittingPortalId(itemId);
+    try {
+      const res = await fetch(`${API_URL}/auto-apply/queue/${itemId}/submit-portal`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        if (data.status === "applied") {
+          toast.success(`Submission confirmed! Ref: ${data.confirmation_ref}`);
+        } else if (data.status === "paused_for_human_checkpoint") {
+          toast.warning(`Interactive action needed (${data.checkpoint_type}). Please check instructions.`);
+        } else if (data.status === "submission_unclear") {
+          toast.warning(`Submission outcome unclear. Awaiting verification.`);
+        } else {
+          toast.info(data.message || "Submitted to portal.");
+        }
+        queryClient.invalidateQueries({ queryKey: queryKeys.autoApplyQueue });
+      } else {
+        toast.error(data.detail || "Portal submission failed.");
+      }
+    } catch {
+      toast.error("Network error during portal submission.");
+    } finally {
+      setSubmittingPortalId(null);
+    }
+  };
+
+  // Phase 4: Resume Human Checkpoint (Workday MFA/CAPTCHA)
+  const handleResumeCheckpoint = async (itemId: string) => {
+    setResumingCheckpointId(itemId);
+    try {
+      const res = await fetch(`${API_URL}/auto-apply/queue/${itemId}/resume-checkpoint`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ checkpoint_resolved: true }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(`Checkpoint resolved! Confirmed applied: ${data.confirmation_ref}`);
+        queryClient.invalidateQueries({ queryKey: queryKeys.autoApplyQueue });
+      } else {
+        toast.error(data.detail || "Could not resume checkpoint.");
+      }
+    } catch {
+      toast.error("Network error resuming checkpoint.");
+    } finally {
+      setResumingCheckpointId(null);
+    }
+  };
+
+  // Phase 4: Verify Ambiguous/Unclear Submission
+  const handleVerifyUnclear = async (itemId: string, confirmed: boolean) => {
+    setVerifyingUnclearId(itemId);
+    try {
+      const res = await fetch(`${API_URL}/auto-apply/queue/${itemId}/verify-unclear`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmed }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(data.message);
+        queryClient.invalidateQueries({ queryKey: queryKeys.autoApplyQueue });
+      } else {
+        toast.error(data.detail || "Could not verify unclear submission.");
+      }
+    } catch {
+      toast.error("Network error verifying submission.");
+    } finally {
+      setVerifyingUnclearId(null);
+    }
+  };
+
+  // Phase 4: Prepare Portal Handoff Package (Naukri / iimjobs / LinkedIn)
+  const handlePrepareHandoff = async (itemId: string) => {
+    try {
+      const res = await fetch(`${API_URL}/auto-apply/queue/${itemId}/handoff`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(`Handoff package prepared for ${data.portal}!`);
+        queryClient.invalidateQueries({ queryKey: queryKeys.autoApplyQueue });
+      } else {
+        toast.error(data.detail || "Could not prepare handoff package.");
+      }
+    } catch {
+      toast.error("Network error preparing handoff package.");
+    }
+  };
+
+  // Phase 4: Open Report Applied Modal
+  const handleOpenReportModal = (item: AutoApplyQueueItem) => {
+    setReportModalItem(item);
+    setReportConfirmationRef("");
+    setReportNotes("");
+  };
+
+  // Phase 4: Report Candidate Manual Submission
+  const handleReportApplied = async () => {
+    if (!reportModalItem) return;
+    setIsSubmittingReport(true);
+    try {
+      const res = await fetch(`${API_URL}/auto-apply/queue/${reportModalItem.queue_item_id}/report-applied`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          confirmation_ref: reportConfirmationRef.trim() || undefined,
+          notes: reportNotes.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(data.message || "Manual application recorded and synced to tracker!");
+        setReportModalItem(null);
+        queryClient.invalidateQueries({ queryKey: queryKeys.autoApplyQueue });
+      } else {
+        toast.error(data.detail || "Could not report applied.");
+      }
+    } catch {
+      toast.error("Network error reporting application.");
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
+
   // Phase 2: Save Answer Bank Updates
   const handleSaveAnswerBank = async () => {
     setIsSavingBank(true);
@@ -435,6 +593,10 @@ export default function AutoApplyPage() {
   const needsAnswerCount = queueItems.filter((i) => i.status === "needs_answer").length;
   const waitingSubCount = queueItems.filter((i) => i.status === "waiting_submission_review").length;
   const approvedCount = queueItems.filter((i) => i.status === "approved_for_submission" || i.status === "ready_for_review").length;
+  const checkpointCount = queueItems.filter((i) => i.status === "paused_for_human_checkpoint").length;
+  const unclearCount = queueItems.filter((i) => i.status === "submission_unclear").length;
+  const handoffCount = queueItems.filter((i) => i.status === "handoff_ready").length;
+  const appliedCount = queueItems.filter((i) => i.status === "applied").length;
   const needsInputCount = queueItems.filter((i) => i.status === "needs_input").length;
 
   const filteredQueueItems = queueItems.filter((item) => {
@@ -443,6 +605,10 @@ export default function AutoApplyPage() {
     if (queueTab === "needs_answer") return item.status === "needs_answer";
     if (queueTab === "waiting_submission_review") return item.status === "waiting_submission_review";
     if (queueTab === "approved_for_submission") return item.status === "approved_for_submission" || item.status === "ready_for_review";
+    if (queueTab === "paused_for_human_checkpoint") return item.status === "paused_for_human_checkpoint";
+    if (queueTab === "submission_unclear") return item.status === "submission_unclear";
+    if (queueTab === "handoff_ready") return item.status === "handoff_ready";
+    if (queueTab === "applied") return item.status === "applied";
     if (queueTab === "needs_input") return item.status === "needs_input";
     return true;
   });
@@ -457,14 +623,15 @@ export default function AutoApplyPage() {
           <div className="space-y-1.5">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold border border-blue-200">
               <Bot className="w-3.5 h-3.5" />
-              Phase 3 · Job-Specific CVs &amp; Independent Approvals
+              Phase 4 · Portal Automation, Workday Accounts &amp; Adapter Handoffs
             </div>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
               Auto Apply Agent &amp; Application Queue
             </h1>
             <p className="text-xs text-slate-500 max-w-2xl leading-relaxed">
-              Tailors a separate CV for LinkedIn, career portals, and email applications with verified facts and wording diffs,
-              while using the single profile CV for iimjobs and Naukri. Supports independent CV and final submission approvals.
+              Automates multi-step company portal submissions (Greenhouse, Lever, Workday) with confirmation tracking,
+              pauses for interactive human checkpoints (MFA/CAPTCHA), prepares dedicated handoff packages for Naukri &amp; iimjobs,
+              and strictly records confirmed applications in your Job Tracker.
             </p>
           </div>
 
@@ -902,6 +1069,71 @@ export default function AutoApplyPage() {
               </button>
               <button
                 type="button"
+                onClick={() => setQueueTab("approved_for_submission")}
+                className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1 ${
+                  queueTab === "approved_for_submission"
+                    ? "bg-white text-emerald-700 shadow-2xs font-extrabold"
+                    : approvedCount > 0
+                    ? "text-emerald-600 font-extrabold"
+                    : "text-slate-600"
+                }`}
+              >
+                Ready ({approvedCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setQueueTab("paused_for_human_checkpoint")}
+                className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1 ${
+                  queueTab === "paused_for_human_checkpoint"
+                    ? "bg-white text-amber-700 shadow-2xs font-extrabold"
+                    : checkpointCount > 0
+                    ? "text-amber-600 font-extrabold"
+                    : "text-slate-600"
+                }`}
+              >
+                Checkpoints ({checkpointCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setQueueTab("submission_unclear")}
+                className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1 ${
+                  queueTab === "submission_unclear"
+                    ? "bg-white text-orange-700 shadow-2xs font-extrabold"
+                    : unclearCount > 0
+                    ? "text-orange-600 font-extrabold"
+                    : "text-slate-600"
+                }`}
+              >
+                Unclear ({unclearCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setQueueTab("handoff_ready")}
+                className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1 ${
+                  queueTab === "handoff_ready"
+                    ? "bg-white text-blue-700 shadow-2xs font-extrabold"
+                    : handoffCount > 0
+                    ? "text-blue-600 font-extrabold"
+                    : "text-slate-600"
+                }`}
+              >
+                Handoffs ({handoffCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setQueueTab("applied")}
+                className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1 ${
+                  queueTab === "applied"
+                    ? "bg-white text-emerald-700 shadow-2xs font-extrabold"
+                    : appliedCount > 0
+                    ? "text-emerald-600 font-extrabold"
+                    : "text-slate-600"
+                }`}
+              >
+                Applied ({appliedCount})
+              </button>
+              <button
+                type="button"
                 onClick={() => setQueueTab("waiting_cv_review")}
                 className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1 ${
                   queueTab === "waiting_cv_review"
@@ -925,19 +1157,6 @@ export default function AutoApplyPage() {
                 }`}
               >
                 Submit Review ({waitingSubCount})
-              </button>
-              <button
-                type="button"
-                onClick={() => setQueueTab("approved_for_submission")}
-                className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1 ${
-                  queueTab === "approved_for_submission"
-                    ? "bg-white text-emerald-700 shadow-2xs font-extrabold"
-                    : approvedCount > 0
-                    ? "text-emerald-600 font-extrabold"
-                    : "text-slate-600"
-                }`}
-              >
-                Ready ({approvedCount})
               </button>
               <button
                 type="button"
@@ -974,6 +1193,10 @@ export default function AutoApplyPage() {
                 const isWaitingCv = item.status === "waiting_cv_review";
                 const isWaitingSub = item.status === "waiting_submission_review";
                 const isApprovedSub = item.status === "approved_for_submission" || item.status === "ready_for_review";
+                const isCheckpoint = item.status === "paused_for_human_checkpoint";
+                const isUnclear = item.status === "submission_unclear";
+                const isHandoff = item.status === "handoff_ready";
+                const isApplied = item.status === "applied";
                 const isNeedsAnswer = item.status === "needs_answer";
                 const isNeedsInput = item.status === "needs_input";
 
@@ -981,7 +1204,15 @@ export default function AutoApplyPage() {
                   <div
                     key={item.queue_item_id}
                     className={`p-4 sm:p-5 rounded-2xl border transition-all space-y-3 ${
-                      isWaitingCv
+                      isApplied
+                        ? "border-emerald-300 bg-emerald-50/20"
+                        : isCheckpoint
+                        ? "border-amber-400 bg-amber-50/30"
+                        : isUnclear
+                        ? "border-orange-400 bg-orange-50/30"
+                        : isHandoff
+                        ? "border-blue-400 bg-blue-50/30"
+                        : isWaitingCv
                         ? "border-violet-300 bg-violet-50/30"
                         : isWaitingSub
                         ? "border-indigo-300 bg-indigo-50/30"
@@ -1017,7 +1248,96 @@ export default function AutoApplyPage() {
 
                       {/* Status Badges & Quick Action Controls */}
                       <div className="flex items-center gap-2 shrink-0">
-                        {isWaitingCv ? (
+                        {isApplied ? (
+                          <div className="flex items-center gap-2">
+                            <span className="px-2.5 py-1 rounded-xl bg-emerald-100 text-emerald-800 text-xs font-black uppercase tracking-wider flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              Applied
+                            </span>
+                            <Link
+                              href="/tracker"
+                              className="px-3 py-1.5 rounded-xl border border-emerald-200 bg-white hover:bg-emerald-50 text-emerald-700 font-extrabold text-xs shadow-2xs inline-flex items-center gap-1"
+                            >
+                              <span>Tracker</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </Link>
+                          </div>
+                        ) : isCheckpoint ? (
+                          <div className="flex items-center gap-2">
+                            <span className="px-2.5 py-1 rounded-xl bg-amber-100 text-amber-800 text-xs font-black uppercase tracking-wider flex items-center gap-1">
+                              <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
+                              Human Checkpoint
+                            </span>
+                            {item.job_url && (
+                              <a
+                                href={item.job_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-3 py-1.5 rounded-xl border border-amber-300 bg-white hover:bg-amber-50 text-amber-800 font-extrabold text-xs shadow-2xs inline-flex items-center gap-1"
+                              >
+                                <span>Open Portal</span>
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
+                            <button
+                              type="button"
+                              disabled={resumingCheckpointId === item.queue_item_id}
+                              onClick={() => handleResumeCheckpoint(item.queue_item_id)}
+                              className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs shadow-2xs inline-flex items-center gap-1.5"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>{resumingCheckpointId === item.queue_item_id ? "Resuming..." : "Resume Checkpoint"}</span>
+                            </button>
+                          </div>
+                        ) : isUnclear ? (
+                          <div className="flex items-center gap-2">
+                            <span className="px-2.5 py-1 rounded-xl bg-orange-100 text-orange-800 text-xs font-black uppercase tracking-wider flex items-center gap-1">
+                              <AlertTriangle className="w-3.5 h-3.5 text-orange-600" />
+                              Status Unclear
+                            </span>
+                            <button
+                              type="button"
+                              disabled={verifyingUnclearId === item.queue_item_id}
+                              onClick={() => handleVerifyUnclear(item.queue_item_id, true)}
+                              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-2xs"
+                            >
+                              Verify Acknowledged
+                            </button>
+                            <button
+                              type="button"
+                              disabled={verifyingUnclearId === item.queue_item_id}
+                              onClick={() => handleVerifyUnclear(item.queue_item_id, false)}
+                              className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-extrabold text-xs shadow-2xs"
+                            >
+                              Reset for Retry
+                            </button>
+                          </div>
+                        ) : isHandoff ? (
+                          <div className="flex items-center gap-2">
+                            <span className="px-2.5 py-1 rounded-xl bg-blue-100 text-blue-800 text-xs font-black uppercase tracking-wider flex items-center gap-1">
+                              <Bot className="w-3.5 h-3.5 text-blue-600" />
+                              Handoff Ready
+                            </span>
+                            {item.job_url && (
+                              <a
+                                href={item.job_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shadow-2xs inline-flex items-center gap-1"
+                              >
+                                <span>Open {item.handoff_package?.portal || item.source}</span>
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenReportModal(item)}
+                              className="px-3.5 py-1.5 rounded-xl border border-blue-200 bg-white hover:bg-blue-50 text-blue-700 font-extrabold text-xs shadow-2xs"
+                            >
+                              Report Applied
+                            </button>
+                          </div>
+                        ) : isWaitingCv ? (
                           <div className="flex items-center gap-2">
                             <span className="px-2.5 py-1 rounded-xl bg-violet-100 text-violet-800 text-xs font-black uppercase tracking-wider flex items-center gap-1">
                               <FileCheck2 className="w-3.5 h-3.5" />
@@ -1065,12 +1385,31 @@ export default function AutoApplyPage() {
                               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                               Ready to Submit
                             </span>
+                            {((item.source || "").toLowerCase().includes("naukri") || (item.source || "").toLowerCase().includes("iimjobs")) ? (
+                              <button
+                                type="button"
+                                onClick={() => handlePrepareHandoff(item.queue_item_id)}
+                                className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shadow-2xs"
+                              >
+                                Prepare Handoff
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={submittingPortalId === item.queue_item_id}
+                                onClick={() => handleSubmitToPortal(item.queue_item_id)}
+                                className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-2xs inline-flex items-center gap-1.5"
+                              >
+                                <SendHorizontal className="w-3.5 h-3.5" />
+                                <span>{submittingPortalId === item.queue_item_id ? "Submitting..." : "Submit to Portal"}</span>
+                              </button>
+                            )}
                             {item.job_url && (
                               <a
                                 href={item.job_url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-2xs inline-flex items-center gap-1"
+                                className="px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-bold shadow-2xs inline-flex items-center gap-1"
                               >
                                 <span>Portal</span>
                                 <ExternalLink className="w-3 h-3" />
@@ -1115,6 +1454,68 @@ export default function AutoApplyPage() {
                         )}
                       </div>
                     </div>
+
+                    {/* Applied Details Snippet */}
+                    {isApplied && (
+                      <div className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-100 flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <div className="flex items-center gap-2 text-emerald-900 font-bold">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          <span>Confirmation ID: <strong className="font-mono text-emerald-800">{item.confirmation_ref || "Recorded"}</strong></span>
+                          {item.date_applied && <span className="text-[11px] text-emerald-600 font-normal">· Date Applied: {item.date_applied}</span>}
+                        </div>
+                        <span className="text-[10px] font-mono font-bold bg-white px-2 py-0.5 rounded-md border border-emerald-200 text-emerald-800">
+                          Synced to DealOS Job Tracker
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Human Checkpoint Alert Snippet */}
+                    {isCheckpoint && (
+                      <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs space-y-2">
+                        <div className="flex items-center gap-2 font-black text-amber-900 uppercase text-[11px]">
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                          Checkpoint Type: {item.checkpoint_type || "Interactive MFA / CAPTCHA"}
+                        </div>
+                        <p className="text-amber-800 text-xs leading-relaxed font-medium">
+                          {item.checkpoint_instructions || "Action required in portal browser. Complete the check, then click 'Resume Checkpoint'."}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Ambiguous Submission Alert Snippet */}
+                    {isUnclear && (
+                      <div className="p-3.5 rounded-xl bg-orange-50 border border-orange-200 text-xs space-y-2">
+                        <div className="flex items-center gap-2 font-black text-orange-900 text-[11px]">
+                          <AlertTriangle className="w-3.5 h-3.5 text-orange-600" />
+                          Submission Policy Hold
+                        </div>
+                        <p className="text-orange-800 text-xs leading-relaxed font-medium">
+                          {item.unclear_reason || "Portal response timed out or returned ambiguous acknowledgment. Verify receipt before retrying."}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Handoff Package Details Snippet */}
+                    {isHandoff && item.handoff_package && (
+                      <div className="p-3.5 rounded-xl bg-blue-50/80 border border-blue-200 text-xs space-y-2">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-extrabold text-blue-900 uppercase">
+                            {item.handoff_package.portal?.toUpperCase()} Handoff Package
+                          </span>
+                          <span className="text-blue-700 font-bold">
+                            CV: {item.handoff_package.attached_cv_type || "Single Profile CV"}
+                          </span>
+                        </div>
+                        <p className="text-blue-800 text-xs leading-relaxed font-medium">
+                          {item.handoff_package.portal_instructions}
+                        </p>
+                        {item.handoff_package.prepared_pitch && (
+                          <div className="p-2 rounded-lg bg-white border border-blue-100 text-slate-700 text-xs italic">
+                            "{item.handoff_package.prepared_pitch}"
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Wording Diff Snippet (If waiting CV review) */}
                     {isWaitingCv && item.tailored_cv?.wording_changes && item.tailored_cv.wording_changes.length > 0 && (
@@ -1580,6 +1981,75 @@ export default function AutoApplyPage() {
         </div>
       )}
 
+      {/* ── Phase 4: Report Manual Submission Modal ── */}
+      {reportModalItem && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">Report Manual Application</h3>
+                <p className="text-xs text-slate-500">
+                  {reportModalItem.job_title} at {reportModalItem.company_name}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReportModalItem(null)}
+                className="text-slate-400 hover:text-slate-600 text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 leading-relaxed font-medium">
+                Enter your confirmation reference or application notes. Submitting this will record your application as strictly <strong>Applied</strong> in your persistent Job Tracker.
+              </div>
+
+              <div>
+                <label className="text-xs font-extrabold text-slate-700 block mb-1">Confirmation Reference / Application ID</label>
+                <input
+                  type="text"
+                  value={reportConfirmationRef}
+                  onChange={(e) => setReportConfirmationRef(e.target.value)}
+                  placeholder="e.g. NK-APP-88412 or GH-CONF-1234"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs outline-none focus:border-blue-600 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-extrabold text-slate-700 block mb-1">Notes (Optional)</label>
+                <textarea
+                  value={reportNotes}
+                  onChange={(e) => setReportNotes(e.target.value)}
+                  placeholder="e.g. Applied via Naukri quick-apply using profile CV."
+                  rows={2}
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs outline-none focus:border-blue-600 resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setReportModalItem(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSubmittingReport}
+                onClick={handleReportApplied}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shadow-xs"
+              >
+                {isSubmittingReport ? "Recording..." : "Confirm & Sync to Tracker"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Edit Setup Defaults Modal ── */}
       {isEditingSetup && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
@@ -1703,6 +2173,45 @@ export default function AutoApplyPage() {
                   />
                   <span>Review final package before portal submission</span>
                 </label>
+              </div>
+
+              {/* Phase 4 Automation & Limits */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                <label className="text-xs font-extrabold text-slate-900 block">Portal Automation &amp; Limits:</label>
+                
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={allowWorkdayAccountCreation}
+                    onChange={(e) => setAllowWorkdayAccountCreation(e.target.checked)}
+                    className="rounded border-slate-300 text-blue-600 w-4 h-4"
+                  />
+                  <span>Allow automated Workday account creation if not existing</span>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={allowUnattendedSubmission}
+                    onChange={(e) => setAllowUnattendedSubmission(e.target.checked)}
+                    className="rounded border-slate-300 text-blue-600 w-4 h-4"
+                  />
+                  <span>Allow unattended automated submission under daily limit</span>
+                </label>
+
+                {allowUnattendedSubmission && (
+                  <div className="pl-6 pt-1">
+                    <label className="text-[11px] font-bold text-slate-600 block mb-1">Daily Automated Submission Limit:</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={dailySubmissionLimit}
+                      onChange={(e) => setDailySubmissionLimit(Number(e.target.value))}
+                      className="w-24 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-mono outline-none focus:border-blue-600"
+                    />
+                  </div>
+                )}
               </div>
             </div>
 

@@ -233,6 +233,9 @@ export type AutoApplyDefaults = {
   auto_queue_future_matches: boolean;
   review_tailored_cv?: boolean;
   review_before_portal_submission?: boolean;
+  allow_unattended_submission?: boolean;
+  daily_submission_limit?: number;
+  allow_workday_account_creation?: boolean;
   updated_at?: string;
 };
 
@@ -363,6 +366,10 @@ export type AutoApplyQueueItem = {
     | "waiting_cv_review"
     | "waiting_submission_review"
     | "approved_for_submission"
+    | "submission_unclear"
+    | "paused_for_human_checkpoint"
+    | "handoff_ready"
+    | "applied"
     | "ready_for_review"
     | "dismissed";
   pending_question?: AutoApplyPendingQuestion | null;
@@ -370,6 +377,12 @@ export type AutoApplyQueueItem = {
   tailored_cv?: AutoApplyTailoredCV | null;
   cv_approved?: boolean;
   submission_approved?: boolean;
+  confirmation_ref?: string | null;
+  date_applied?: string | null;
+  checkpoint_type?: string | null;
+  checkpoint_instructions?: string | null;
+  handoff_package?: any | null;
+  unclear_reason?: string | null;
   queued_at: string;
 };
 

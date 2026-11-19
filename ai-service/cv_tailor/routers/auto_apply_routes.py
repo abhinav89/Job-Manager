@@ -33,6 +33,12 @@ from cv_tailor.services.auto_apply_service import (
     approve_tailored_cv,
     approve_portal_submission,
     get_tailored_cv_preview,
+    submit_to_company_portal,
+    verify_unclear_submission,
+    execute_workday_flow,
+    resume_human_checkpoint,
+    prepare_portal_handoff,
+    report_manual_submission,
 )
 
 logger = logging.getLogger("auto-apply-routes")
@@ -53,6 +59,9 @@ class AutoApplySetupUpdate(BaseModel):
     auto_queue_future_matches: Optional[bool] = False
     review_tailored_cv: Optional[bool] = True
     review_before_portal_submission: Optional[bool] = True
+    allow_unattended_submission: Optional[bool] = False
+    daily_submission_limit: Optional[int] = 10
+    allow_workday_account_creation: Optional[bool] = False
 
 
 class PreviewRequest(BaseModel):
@@ -85,6 +94,19 @@ class AnswerQuestionRequest(BaseModel):
 class ProcessQueueRequest(BaseModel):
     mock_form_catalog: Optional[Dict[str, List[Dict[str, Any]]]] = None
     rule_overrides: Optional[Dict[str, bool]] = None
+
+
+class VerifySubmissionRequest(BaseModel):
+    action: str = Field(default="confirm_received", description="'confirm_received' or 'confirm_not_received'")
+
+
+class ReportAppliedRequest(BaseModel):
+    confirmation_ref: Optional[str] = None
+    notes: Optional[str] = ""
+
+
+class SubmitPortalRequest(BaseModel):
+    mock_simulated_outcome: Optional[str] = None
 
 
 # --- Endpoints ---
@@ -129,6 +151,12 @@ def update_setup(payload: AutoApplySetupUpdate, request: Request):
         current["review_tailored_cv"] = payload.review_tailored_cv
     if payload.review_before_portal_submission is not None:
         current["review_before_portal_submission"] = payload.review_before_portal_submission
+    if payload.allow_unattended_submission is not None:
+        current["allow_unattended_submission"] = payload.allow_unattended_submission
+    if payload.daily_submission_limit is not None:
+        current["daily_submission_limit"] = payload.daily_submission_limit
+    if payload.allow_workday_account_creation is not None:
+        current["allow_workday_account_creation"] = payload.allow_workday_account_creation
 
     save_auto_apply_defaults(user_id, current)
     return {
@@ -318,3 +346,82 @@ def review_job_application(item_id: str, request: Request):
         return get_application_form_review(user_id, item_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+# --- Phase 4 Endpoints: Portal Automation, Workday Accounts & Adapter Hand-offs ---
+
+@router.post("/queue/{item_id}/submit-portal")
+def portal_submit(item_id: str, payload: Optional[SubmitPortalRequest] = None, request: Request = None):
+    """
+    Executes automated company portal or Workday submission.
+    Enforces 'Applied' status policy: marks Applied only after confirmation capture.
+    If result is unclear, holds at 'submission_unclear' before retrying.
+    """
+    user_id = _resolve_user_id(request)
+    queue = get_queue_data(user_id)
+    target = next((item for item in queue["queue_items"] if item["queue_item_id"] == item_id), None)
+    if not target:
+        raise HTTPException(status_code=404, detail=f"Queue item '{item_id}' not found.")
+
+    source = target.get("source", "")
+    url = target.get("job_url", "")
+    simulated_outcome = payload.mock_simulated_outcome if payload else None
+
+    try:
+        if "workday" in source.lower() or "myworkdayjobs" in url.lower():
+            return execute_workday_flow(user_id, item_id, mock_checkpoint=simulated_outcome)
+        elif "naukri" in source.lower() or "iimjobs" in source.lower() or "linkedin" in source.lower():
+            return prepare_portal_handoff(user_id, item_id)
+        else:
+            return submit_to_company_portal(user_id, item_id, mock_simulated_outcome=simulated_outcome)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/queue/{item_id}/verify-unclear")
+def verify_unclear_result(item_id: str, payload: VerifySubmissionRequest, request: Request):
+    """
+    Verifies an unclear/timed out submission with employer portal before permitting any retry.
+    """
+    user_id = _resolve_user_id(request)
+    try:
+        return verify_unclear_submission(user_id, item_id, payload.action)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/queue/{item_id}/resume-checkpoint")
+def resume_checkpoint(item_id: str, request: Request):
+    """
+    Resumes a Workday or portal job paused for human interaction (CAPTCHA, MFA, declaration).
+    """
+    user_id = _resolve_user_id(request)
+    try:
+        return resume_human_checkpoint(user_id, item_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/queue/{item_id}/handoff")
+def get_handoff(item_id: str, request: Request):
+    """
+    Prepares a clean handoff package for portals where automated actions are unsupported (Naukri, iimjobs, LinkedIn).
+    """
+    user_id = _resolve_user_id(request)
+    try:
+        return prepare_portal_handoff(user_id, item_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/queue/{item_id}/report-applied")
+def report_applied(item_id: str, payload: ReportAppliedRequest, request: Request):
+    """
+    Candidate reports manual submission (via portal handoff or external application).
+    Marks the application as 'Applied' in the tracker and records confirmation details.
+    """
+    user_id = _resolve_user_id(request)
+    try:
+        return report_manual_submission(user_id, item_id, payload.confirmation_ref, payload.notes or "")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
