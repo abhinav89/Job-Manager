@@ -236,6 +236,10 @@ export type AutoApplyDefaults = {
   allow_unattended_submission?: boolean;
   daily_submission_limit?: number;
   allow_workday_account_creation?: boolean;
+  review_before_email_send?: boolean;
+  gmail_connected?: boolean;
+  gmail_account_email?: string | null;
+  gmail_scopes_granted?: string[];
   updated_at?: string;
 };
 
@@ -365,6 +369,7 @@ export type AutoApplyQueueItem = {
     | "needs_answer"
     | "waiting_cv_review"
     | "waiting_submission_review"
+    | "waiting_email_review"
     | "approved_for_submission"
     | "submission_unclear"
     | "paused_for_human_checkpoint"
@@ -382,6 +387,22 @@ export type AutoApplyQueueItem = {
   checkpoint_type?: string | null;
   checkpoint_instructions?: string | null;
   handoff_package?: any | null;
+  email_package?: {
+    recipient_email: string;
+    recipient_type: string;
+    recipient_source: string;
+    subject: string;
+    body: string;
+    attached_cv_version: string;
+    attached_cv_filename: string;
+    attached_pdf_filename?: string;
+    page_count?: number;
+    overflow_status?: string;
+    is_hiring_manager_outreach: boolean;
+    hiring_manager_connection_verified: boolean;
+    drafted_at: string;
+  } | null;
+  intake_metadata?: any | null;
   unclear_reason?: string | null;
   queued_at: string;
 };

@@ -36,6 +36,9 @@ import {
   Split,
   FileCheck2,
   SendHorizontal,
+  Mail,
+  Inbox,
+  Share2,
 } from "lucide-react";
 
 import { API_URL } from "@/lib/api";
@@ -96,6 +99,7 @@ export default function AutoApplyPage() {
     | "applied"
     | "waiting_cv_review"
     | "waiting_submission_review"
+    | "waiting_email_review"
     | "needs_answer"
     | "queued"
     | "needs_input"
@@ -131,6 +135,28 @@ export default function AutoApplyPage() {
   const [verifyingUnclearId, setVerifyingUnclearId] = useState<string | null>(null);
   const [submittingPortalId, setSubmittingPortalId] = useState<string | null>(null);
 
+  // Phase 5: Email Review & Gmail Settings
+  const [reviewBeforeEmailSend, setReviewBeforeEmailSend] = useState<boolean>(true);
+  const [gmailConnected, setGmailConnected] = useState<boolean>(false);
+  const [gmailAccountEmail, setGmailAccountEmail] = useState<string | null>(null);
+  const [gmailScopes, setGmailScopes] = useState<string[]>([]);
+  const [isGmailModalOpen, setIsGmailModalOpen] = useState(false);
+  const [enableInboxScope, setEnableInboxScope] = useState(false);
+  const [isConnectingGmail, setIsConnectingGmail] = useState(false);
+
+  // Phase 5: Multi-Channel Intake Modal State
+  const [isIntakeModalOpen, setIsIntakeModalOpen] = useState(false);
+  const [intakeText, setIntakeText] = useState("");
+  const [intakeSource, setIntakeSource] = useState<"whatsapp" | "linkedin_post" | "gmail_alert" | "social_post">("whatsapp");
+  const [isSubmittingIntake, setIsSubmittingIntake] = useState(false);
+
+  // Phase 5: Email Application Review Modal State
+  const [reviewingEmailItem, setReviewingEmailItem] = useState<AutoApplyQueueItem | null>(null);
+  const [emailSubjectInput, setEmailSubjectInput] = useState("");
+  const [emailBodyInput, setEmailBodyInput] = useState("");
+  const [emailRecipientInput, setEmailRecipientInput] = useState("");
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+
   // Sync initial setup values
   useEffect(() => {
     if (setupQuery.data?.defaults) {
@@ -148,6 +174,10 @@ export default function AutoApplyPage() {
       setAllowUnattendedSubmission(defs.allow_unattended_submission ?? false);
       setDailySubmissionLimit(defs.daily_submission_limit ?? 5);
       setAllowWorkdayAccountCreation(defs.allow_workday_account_creation ?? false);
+      setReviewBeforeEmailSend(defs.review_before_email_send ?? true);
+      setGmailConnected(defs.gmail_connected ?? false);
+      setGmailAccountEmail(defs.gmail_account_email ?? null);
+      setGmailScopes(defs.gmail_scopes_granted ?? []);
     }
   }, [setupQuery.data]);
 
@@ -222,10 +252,11 @@ export default function AutoApplyPage() {
           allow_unattended_submission: allowUnattendedSubmission,
           daily_submission_limit: dailySubmissionLimit,
           allow_workday_account_creation: allowWorkdayAccountCreation,
+          review_before_email_send: reviewBeforeEmailSend,
         }),
       });
       if (res.ok) {
-        toast.success("Saved role themes, limits & portal automation settings!");
+        toast.success("Saved role themes, limits & email automation settings!");
         setIsEditingSetup(false);
         queryClient.invalidateQueries({ queryKey: queryKeys.autoApplySetup });
         handleFetchPreview();
@@ -516,6 +547,121 @@ export default function AutoApplyPage() {
     }
   };
 
+  // Phase 5: Connect Gmail Account
+  const handleConnectGmail = async () => {
+    setIsConnectingGmail(true);
+    try {
+      const res = await fetch(`${API_URL}/auto-apply/gmail/connect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enable_inbox_access: enableInboxScope }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(data.message || "Connected Gmail account successfully!");
+        setGmailConnected(true);
+        setGmailAccountEmail(data.gmail_account_email);
+        setGmailScopes(data.gmail_scopes_granted || []);
+        setIsGmailModalOpen(false);
+        queryClient.invalidateQueries({ queryKey: queryKeys.autoApplySetup });
+        queryClient.invalidateQueries({ queryKey: queryKeys.autoApplyQueue });
+      } else {
+        toast.error(data.detail || "Failed to connect Gmail.");
+      }
+    } catch {
+      toast.error("Network error connecting Gmail.");
+    } finally {
+      setIsConnectingGmail(false);
+    }
+  };
+
+  // Phase 5: Disconnect Gmail
+  const handleDisconnectGmail = async () => {
+    try {
+      const res = await fetch(`${API_URL}/auto-apply/gmail/disconnect`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        toast.info(data.message || "Gmail account disconnected.");
+        setGmailConnected(false);
+        setGmailAccountEmail(null);
+        setGmailScopes([]);
+        queryClient.invalidateQueries({ queryKey: queryKeys.autoApplySetup });
+      }
+    } catch {
+      toast.error("Could not disconnect Gmail.");
+    }
+  };
+
+  // Phase 5: Submit Multi-Channel Intake Message
+  const handleSubmitIntake = async () => {
+    if (!intakeText.trim()) {
+      toast.error("Please paste the message or post text.");
+      return;
+    }
+    setIsSubmittingIntake(true);
+    try {
+      const res = await fetch(`${API_URL}/auto-apply/intake/message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ raw_text: intakeText, source: intakeSource }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        if (data.initial_status === "needs_input") {
+          toast.warning(`Opportunity ingested into 'Needs Input': ${data.ambiguity_flags?.join("; ")}`);
+        } else {
+          toast.success(`Opportunity for '${data.queue_item?.job_title}' at ${data.queue_item?.company_name} queued!`);
+        }
+        setIntakeText("");
+        setIsIntakeModalOpen(false);
+        queryClient.invalidateQueries({ queryKey: queryKeys.autoApplyQueue });
+      } else {
+        toast.error(data.detail || "Could not ingest message.");
+      }
+    } catch {
+      toast.error("Network error submitting intake message.");
+    } finally {
+      setIsSubmittingIntake(false);
+    }
+  };
+
+  // Phase 5: Open Email Review Modal
+  const handleOpenEmailReview = (item: AutoApplyQueueItem) => {
+    setReviewingEmailItem(item);
+    setEmailSubjectInput(item.email_package?.subject || `Application for ${item.job_title}`);
+    setEmailBodyInput(item.email_package?.body || "");
+    setEmailRecipientInput(item.email_package?.recipient_email || "");
+  };
+
+  // Phase 5: Approve & Send Email Application
+  const handleApproveSendEmail = async () => {
+    if (!reviewingEmailItem) return;
+    setIsSendingEmail(true);
+    try {
+      const res = await fetch(`${API_URL}/auto-apply/queue/${reviewingEmailItem.queue_item_id}/approve-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipient_email: emailRecipientInput.trim(),
+          subject: emailSubjectInput.trim(),
+          body: emailBodyInput.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(data.message || `Email application sent! Ref: ${data.confirmation_ref}`);
+        setReviewingEmailItem(null);
+        queryClient.invalidateQueries({ queryKey: queryKeys.autoApplyQueue });
+      } else {
+        toast.error(data.detail || "Could not send email application.");
+      }
+    } catch {
+      toast.error("Network error sending email application.");
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
   // Phase 2: Save Answer Bank Updates
   const handleSaveAnswerBank = async () => {
     setIsSavingBank(true);
@@ -596,6 +742,7 @@ export default function AutoApplyPage() {
   const checkpointCount = queueItems.filter((i) => i.status === "paused_for_human_checkpoint").length;
   const unclearCount = queueItems.filter((i) => i.status === "submission_unclear").length;
   const handoffCount = queueItems.filter((i) => i.status === "handoff_ready").length;
+  const waitingEmailCount = queueItems.filter((i) => i.status === "waiting_email_review").length;
   const appliedCount = queueItems.filter((i) => i.status === "applied").length;
   const needsInputCount = queueItems.filter((i) => i.status === "needs_input").length;
 
@@ -604,6 +751,7 @@ export default function AutoApplyPage() {
     if (queueTab === "waiting_cv_review") return item.status === "waiting_cv_review";
     if (queueTab === "needs_answer") return item.status === "needs_answer";
     if (queueTab === "waiting_submission_review") return item.status === "waiting_submission_review";
+    if (queueTab === "waiting_email_review") return item.status === "waiting_email_review";
     if (queueTab === "approved_for_submission") return item.status === "approved_for_submission" || item.status === "ready_for_review";
     if (queueTab === "paused_for_human_checkpoint") return item.status === "paused_for_human_checkpoint";
     if (queueTab === "submission_unclear") return item.status === "submission_unclear";
@@ -621,21 +769,44 @@ export default function AutoApplyPage() {
       <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1.5">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold border border-blue-200">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-50 text-purple-700 text-xs font-bold border border-purple-200">
               <Bot className="w-3.5 h-3.5" />
-              Phase 4 · Portal Automation, Workday Accounts &amp; Adapter Handoffs
+              Phase 5 · Hiring Alerts, Social/WhatsApp Intake, Gmail OAuth &amp; Email Applications
             </div>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
               Auto Apply Agent &amp; Application Queue
             </h1>
             <p className="text-xs text-slate-500 max-w-2xl leading-relaxed">
-              Automates multi-step company portal submissions (Greenhouse, Lever, Workday) with confirmation tracking,
-              pauses for interactive human checkpoints (MFA/CAPTCHA), prepares dedicated handoff packages for Naukri &amp; iimjobs,
-              and strictly records confirmed applications in your Job Tracker.
+              Multi-channel intake for WhatsApp, LinkedIn, and Gmail alerts, automated portal submissions (Workday, Greenhouse, Lever),
+              email application drafting with tailored CV attachments, and independent review controls.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
+            {/* Connect Gmail Button */}
+            <button
+              type="button"
+              onClick={() => setIsGmailModalOpen(true)}
+              className={`px-3.5 py-2.5 rounded-xl border text-xs font-extrabold inline-flex items-center gap-2 shadow-2xs transition-all ${
+                gmailConnected
+                  ? "bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100/70"
+                  : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              <Mail className={`w-4 h-4 ${gmailConnected ? "text-emerald-600" : "text-slate-400"}`} />
+              <span>{gmailConnected ? "Gmail Connected" : "Connect Gmail"}</span>
+            </button>
+
+            {/* Intake Alert / Post Button */}
+            <button
+              type="button"
+              onClick={() => setIsIntakeModalOpen(true)}
+              className="px-3.5 py-2.5 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-800 font-extrabold text-xs inline-flex items-center gap-2 shadow-2xs transition-all"
+            >
+              <Inbox className="w-4 h-4 text-purple-600" />
+              <span>Intake Post / Alert</span>
+            </button>
+
             {/* Answer Bank Button */}
             <button
               type="button"
@@ -709,7 +880,7 @@ export default function AutoApplyPage() {
               <span className="text-slate-300">|</span>
 
               {/* Independent Review Pills */}
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold border ${
                   reviewTailoredCv
                     ? "bg-violet-50 text-violet-700 border-violet-200"
@@ -723,6 +894,20 @@ export default function AutoApplyPage() {
                     : "bg-slate-100 text-slate-500 border-slate-200"
                 }`}>
                   Submit Review: <strong>{reviewBeforeSubmission ? "ON (Waits)" : "OFF (Auto)"}</strong>
+                </span>
+                <span className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold border ${
+                  reviewBeforeEmailSend
+                    ? "bg-purple-50 text-purple-700 border-purple-200"
+                    : "bg-slate-100 text-slate-500 border-slate-200"
+                }`}>
+                  Email Review: <strong>{reviewBeforeEmailSend ? "ON (Waits)" : "OFF (Auto)"}</strong>
+                </span>
+                <span className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold border ${
+                  gmailConnected
+                    ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                    : "bg-slate-100 text-slate-500 border-slate-200"
+                }`}>
+                  Gmail: <strong>{gmailConnected ? "Linked" : "Not Linked"}</strong>
                 </span>
               </div>
             </div>
@@ -1192,6 +1377,7 @@ export default function AutoApplyPage() {
               {filteredQueueItems.map((item) => {
                 const isWaitingCv = item.status === "waiting_cv_review";
                 const isWaitingSub = item.status === "waiting_submission_review";
+                const isWaitingEmail = item.status === "waiting_email_review";
                 const isApprovedSub = item.status === "approved_for_submission" || item.status === "ready_for_review";
                 const isCheckpoint = item.status === "paused_for_human_checkpoint";
                 const isUnclear = item.status === "submission_unclear";
@@ -1206,6 +1392,8 @@ export default function AutoApplyPage() {
                     className={`p-4 sm:p-5 rounded-2xl border transition-all space-y-3 ${
                       isApplied
                         ? "border-emerald-300 bg-emerald-50/20"
+                        : isWaitingEmail
+                        ? "border-purple-300 bg-purple-50/30"
                         : isCheckpoint
                         ? "border-amber-400 bg-amber-50/30"
                         : isUnclear
@@ -1416,6 +1604,21 @@ export default function AutoApplyPage() {
                               </a>
                             )}
                           </div>
+                        ) : isWaitingEmail ? (
+                          <div className="flex items-center gap-2">
+                            <span className="px-2.5 py-1 rounded-xl bg-purple-100 text-purple-800 text-xs font-black uppercase tracking-wider flex items-center gap-1">
+                              <Mail className="w-3.5 h-3.5 text-purple-600" />
+                              Email Review
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEmailReview(item)}
+                              className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-2xs inline-flex items-center gap-1.5"
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                              Review & Send
+                            </button>
+                          </div>
                         ) : isNeedsAnswer ? (
                           <div className="flex items-center gap-2">
                             <span className="px-2.5 py-1 rounded-xl bg-rose-100 text-rose-800 text-xs font-black uppercase tracking-wider flex items-center gap-1">
@@ -1530,6 +1733,35 @@ export default function AutoApplyPage() {
                         </div>
                         <div className="text-xs text-slate-700 line-clamp-2 italic bg-slate-50 p-2 rounded-lg border border-slate-100">
                           "{item.tailored_cv.wording_changes[0].tailored}"
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Phase 5: Email Application Package Snippet */}
+                    {(isWaitingEmail || item.email_package) && item.email_package && (
+                      <div className="p-3.5 rounded-xl bg-purple-50/70 border border-purple-200 text-xs space-y-2">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-extrabold text-purple-900 uppercase flex items-center gap-1.5">
+                            <Mail className="w-3.5 h-3.5 text-purple-600" />
+                            Email Application ({item.email_package.recipient_type === "hiring_manager" ? "Hiring Manager Outreach" : "Careers Inbox"})
+                          </span>
+                          <span className="font-mono text-purple-700 font-bold">
+                            To: {item.email_package.recipient_email}
+                          </span>
+                        </div>
+                        {item.email_package.recipient_type === "hiring_manager" && (
+                          <div className="px-2.5 py-1 rounded-lg bg-amber-100/80 border border-amber-300 text-amber-900 text-[11px] font-semibold flex items-center gap-1.5">
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                            <span>Individual work email detected. Review required before outreach.</span>
+                          </div>
+                        )}
+                        <div className="p-2.5 rounded-lg bg-white border border-purple-100 text-slate-800 text-xs space-y-1">
+                          <div className="font-bold text-slate-900">Subject: {item.email_package.subject}</div>
+                          <p className="line-clamp-2 text-slate-600 italic">"{item.email_package.body}"</p>
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-purple-700">
+                          <span>Attached CV: {item.email_package.attached_pdf_filename || item.email_package.attached_cv_filename || "Tailored CV (PDF)"} ({item.email_package.page_count || 2} pages)</span>
+                          <span className="font-semibold">Overflow: {item.email_package.overflow_status || "within_budget"}</span>
                         </div>
                       </div>
                     )}
@@ -2213,6 +2445,20 @@ export default function AutoApplyPage() {
                   </div>
                 )}
               </div>
+
+              {/* Phase 5 Email Applications */}
+              <div className="p-3.5 rounded-2xl bg-purple-50/50 border border-purple-200 space-y-2">
+                <label className="text-xs font-extrabold text-purple-950 block">Email Applications:</label>
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-purple-900">
+                  <input
+                    type="checkbox"
+                    checked={reviewBeforeEmailSend}
+                    onChange={(e) => setReviewBeforeEmailSend(e.target.checked)}
+                    className="rounded border-purple-300 text-purple-600 w-4 h-4"
+                  />
+                  <span>Review email application and tailored CV before sending</span>
+                </label>
+              </div>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
@@ -2230,6 +2476,290 @@ export default function AutoApplyPage() {
                 className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs"
               >
                 {isSavingSetup ? "Saving..." : "Save Settings"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Phase 5: Multi-Channel Intake Modal ── */}
+      {isIntakeModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-lg w-full p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Inbox className="w-5 h-5 text-purple-600" />
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900">Intake Post / Hiring Alert</h3>
+                  <p className="text-xs text-slate-500">
+                    Parse WhatsApp forwards, LinkedIn posts, or email alerts
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsIntakeModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-extrabold text-slate-700 block">Intake Source Channel:</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: "whatsapp", label: "WhatsApp Message" },
+                    { id: "linkedin_post", label: "LinkedIn Post" },
+                    { id: "gmail_alert", label: "Gmail Job Alert" },
+                    { id: "social_post", label: "Social Post / Other" },
+                  ].map((src) => (
+                    <button
+                      key={src.id}
+                      type="button"
+                      onClick={() => setIntakeSource(src.id as any)}
+                      className={`p-2 rounded-xl border text-xs font-bold transition-all text-left ${
+                        intakeSource === src.id
+                          ? "border-purple-600 bg-purple-50 text-purple-900 ring-2 ring-purple-500/20"
+                          : "border-slate-200 hover:bg-slate-50 text-slate-600"
+                      }`}
+                    >
+                      {src.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-extrabold text-slate-700 block">Paste Raw Content:</label>
+                <textarea
+                  value={intakeText}
+                  onChange={(e) => setIntakeText(e.target.value)}
+                  placeholder="Paste the hiring message or email alert text here (e.g. 'We are hiring a VP of FP&A in Bengaluru. Send CV to careers@company.com with subject...')"
+                  rows={6}
+                  className="w-full px-3.5 py-3 rounded-2xl border border-slate-200 text-xs outline-none focus:border-purple-600 resize-none font-sans leading-relaxed"
+                />
+              </div>
+
+              <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-xl text-xs text-purple-900 leading-relaxed font-medium space-y-1">
+                <p>The parser will extract role, employer, recipient email, location, and instructions.</p>
+                <p className="text-[11px] text-purple-700">If required qualifications or details are ambiguous, the opportunity will be queued into <strong>Needs Input</strong> for your review.</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsIntakeModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSubmittingIntake}
+                onClick={handleSubmitIntake}
+                className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-xs"
+              >
+                {isSubmittingIntake ? "Parsing & Ingesting..." : "Ingest Opportunity"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Phase 5: Email Application Review Modal ── */}
+      {reviewingEmailItem && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-lg w-full p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Mail className="w-5 h-5 text-purple-600" />
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900">Review Email Application</h3>
+                  <p className="text-xs text-slate-500">
+                    {reviewingEmailItem.job_title} at {reviewingEmailItem.company_name}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReviewingEmailItem(null)}
+                className="text-slate-400 hover:text-slate-600 text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {reviewingEmailItem.email_package?.recipient_type === "hiring_manager" && (
+                <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 leading-relaxed font-semibold flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block">Hiring Manager Outreach:</span>
+                    Individual work email detected. Review the recipient and message before sending.
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="text-xs font-extrabold text-slate-700 block mb-1">Recipient Email:</label>
+                <input
+                  type="email"
+                  value={emailRecipientInput}
+                  onChange={(e) => setEmailRecipientInput(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-mono outline-none focus:border-purple-600"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-extrabold text-slate-700 block mb-1">Subject Line:</label>
+                <input
+                  type="text"
+                  value={emailSubjectInput}
+                  onChange={(e) => setEmailSubjectInput(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs outline-none focus:border-purple-600"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-extrabold text-slate-700 block mb-1">Message Body:</label>
+                <textarea
+                  value={emailBodyInput}
+                  onChange={(e) => setEmailBodyInput(e.target.value)}
+                  rows={6}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs outline-none focus:border-purple-600 font-sans leading-relaxed resize-none"
+                />
+              </div>
+
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2 text-slate-700 font-medium">
+                  <FileText className="w-4 h-4 text-purple-600" />
+                  <span>
+                    Attached: <strong>{reviewingEmailItem.email_package?.attached_pdf_filename || reviewingEmailItem.email_package?.attached_cv_filename || "Tailored CV (PDF)"}</strong>
+                  </span>
+                </div>
+                <span className="text-[10px] font-mono text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200 font-bold">
+                  {reviewingEmailItem.email_package?.page_count || 2} Pages · {reviewingEmailItem.email_package?.overflow_status || "within_budget"}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setReviewingEmailItem(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSendingEmail}
+                onClick={handleApproveSendEmail}
+                className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-xs inline-flex items-center gap-1.5"
+              >
+                <SendHorizontal className="w-3.5 h-3.5" />
+                <span>{isSendingEmail ? "Sending via Gmail..." : "Send Application via Gmail"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Phase 5: Google OAuth / Gmail Settings Modal ── */}
+      {isGmailModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Mail className="w-5 h-5 text-red-500" />
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900">Google OAuth / Gmail</h3>
+                  <p className="text-xs text-slate-500">Email application sending &amp; alert intake</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsGmailModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {gmailConnected ? (
+                <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-emerald-900">Connected Account</span>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-800 text-[10px] font-black uppercase">Active</span>
+                  </div>
+                  <div className="font-mono text-emerald-800 font-bold">{gmailAccountEmail}</div>
+                  <div className="text-[10px] text-emerald-700 space-y-0.5 pt-1">
+                    <span className="font-bold block">Granted Scopes:</span>
+                    {gmailScopes.map((sc) => (
+                      <div key={sc} className="truncate font-mono">{sc}</div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs space-y-2 text-slate-700 leading-relaxed">
+                  <p className="font-medium">
+                    Connect your Google account to enable drafting and sending tailored email applications directly from your inbox.
+                  </p>
+                  <div className="text-[11px] text-slate-600 space-y-1 pt-1">
+                    <span className="font-bold text-slate-800 block">Default Sending Scopes:</span>
+                    <div className="font-mono text-[10px] text-slate-500">• gmail.send (Send approved applications)</div>
+                    <div className="font-mono text-[10px] text-slate-500">• gmail.compose (Draft messages with PDF CVs)</div>
+                  </div>
+                </div>
+              )}
+
+              <div className="p-3 bg-purple-50/60 border border-purple-200 rounded-2xl space-y-2">
+                <label className="flex items-start gap-2.5 cursor-pointer text-xs text-purple-900">
+                  <input
+                    type="checkbox"
+                    checked={enableInboxScope}
+                    onChange={(e) => setEnableInboxScope(e.target.checked)}
+                    className="mt-0.5 rounded border-purple-300 text-purple-600 w-4 h-4"
+                  />
+                  <div>
+                    <span className="font-extrabold block">Separate Inbox Read Scope</span>
+                    <span className="text-[11px] text-purple-700 leading-relaxed block">
+                      Grant <code className="font-mono text-[10px] bg-purple-100 px-1 rounded">gmail.readonly</code> to enable automatic intake of hiring alerts and Workday verification emails.
+                    </span>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              {gmailConnected && (
+                <button
+                  type="button"
+                  onClick={handleDisconnectGmail}
+                  className="px-3.5 py-2 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold mr-auto"
+                >
+                  Disconnect
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setIsGmailModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isConnectingGmail}
+                onClick={handleConnectGmail}
+                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs shadow-xs inline-flex items-center gap-1.5"
+              >
+                <Mail className="w-3.5 h-3.5 text-red-400" />
+                <span>{isConnectingGmail ? "Connecting..." : gmailConnected ? "Re-Authenticate" : "Connect Google Account"}</span>
               </button>
             </div>
           </div>

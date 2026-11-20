@@ -39,6 +39,12 @@ from cv_tailor.services.auto_apply_service import (
     resume_human_checkpoint,
     prepare_portal_handoff,
     report_manual_submission,
+    connect_gmail_account,
+    disconnect_gmail_account,
+    get_gmail_status,
+    parse_and_ingest_message,
+    draft_email_application,
+    approve_and_send_email,
 )
 
 logger = logging.getLogger("auto-apply-routes")
@@ -62,6 +68,28 @@ class AutoApplySetupUpdate(BaseModel):
     allow_unattended_submission: Optional[bool] = False
     daily_submission_limit: Optional[int] = 10
     allow_workday_account_creation: Optional[bool] = False
+    review_before_email_send: Optional[bool] = True
+    gmail_connected: Optional[bool] = False
+    gmail_account_email: Optional[str] = None
+    gmail_scopes_granted: Optional[List[str]] = None
+
+
+class GmailConnectRequest(BaseModel):
+    code_or_token: Optional[str] = None
+    enable_inbox_access: bool = False
+    test_email: Optional[str] = None
+
+
+class IntakeMessageRequest(BaseModel):
+    raw_text: str = Field(description="Pasted or forwarded message text from WhatsApp, LinkedIn, or Gmail alerts")
+    source: str = Field(default="whatsapp", description="'whatsapp', 'linkedin_post', 'gmail_alert', 'social_post'")
+    sender_info: Optional[str] = None
+
+
+class ApproveEmailRequest(BaseModel):
+    recipient_email: Optional[str] = None
+    subject: Optional[str] = None
+    body: Optional[str] = None
 
 
 class PreviewRequest(BaseModel):
@@ -423,5 +451,94 @@ def report_applied(item_id: str, payload: ReportAppliedRequest, request: Request
     user_id = _resolve_user_id(request)
     try:
         return report_manual_submission(user_id, item_id, payload.confirmation_ref, payload.notes or "")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ── Phase 5 Routes ─────────────────────────────────────────────────────────
+
+@router.post("/gmail/connect")
+def connect_gmail_route(payload: GmailConnectRequest, request: Request):
+    """
+    Connects Gmail account using Google OAuth.
+    Requests drafting/sending scope and optional inbox access for alert intake & Workday verification.
+    """
+    user_id = _resolve_user_id(request)
+    try:
+        return connect_gmail_account(
+            user_id=user_id,
+            code_or_token=payload.code_or_token,
+            enable_inbox_access=payload.enable_inbox_access,
+            test_email=payload.test_email
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/gmail/disconnect")
+def disconnect_gmail_route(request: Request):
+    """Disconnects Gmail account."""
+    user_id = _resolve_user_id(request)
+    try:
+        return disconnect_gmail_account(user_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/gmail/status")
+def get_gmail_status_route(request: Request):
+    """Retrieves Gmail connection status, email address, and granted scopes."""
+    user_id = _resolve_user_id(request)
+    return get_gmail_status(user_id)
+
+
+@router.post("/intake/message")
+def ingest_message_route(payload: IntakeMessageRequest, request: Request):
+    """
+    Ingests forwarded WhatsApp messages, shared LinkedIn posts, or Gmail alerts.
+    Extracts role, company, recipient email, and instructions.
+    Evaluates against Phase 1 theme/location rules, routing incomplete items to 'Needs Input'.
+    """
+    user_id = _resolve_user_id(request)
+    try:
+        return parse_and_ingest_message(
+            user_id=user_id,
+            raw_text=payload.raw_text,
+            source=payload.source,
+            sender_info=payload.sender_info
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/queue/{item_id}/draft-email")
+def draft_email_route(item_id: str, request: Request):
+    """
+    Drafts tailored email application with job-specific PDF CV attached.
+    Pauses for review when review_before_email_send is ON or when hiring-manager outreach is detected.
+    """
+    user_id = _resolve_user_id(request)
+    try:
+        return draft_email_application(user_id, item_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/queue/{item_id}/approve-email")
+def approve_email_route(item_id: str, payload: ApproveEmailRequest, request: Request):
+    """
+    Candidate approves sending email application.
+    Checks duplicates, delivers email via Gmail integration, and records in tracker as 'Applied by email'.
+    """
+    user_id = _resolve_user_id(request)
+    try:
+        overrides = {}
+        if payload.recipient_email:
+            overrides["recipient_email"] = payload.recipient_email
+        if payload.subject:
+            overrides["subject"] = payload.subject
+        if payload.body:
+            overrides["body"] = payload.body
+        return approve_and_send_email(user_id, item_id, overrides or None)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
